@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_stand_background"
+    android:clickable="true"
+    android:contentDescription="@string/app_name"
+    android:focusable="true"
+    android:padding="8dp">
+
+    <ImageView
+        android:id="@+id/widget_glyph"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_gravity="center"
+        android:importantForAccessibility="no"
+        android:scaleType="centerInside"
+        android:src="@drawable/widget_stand_glyph" />
+
+</FrameLayout>
