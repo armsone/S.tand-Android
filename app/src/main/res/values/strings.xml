@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="radio_share_target_name">S.tand 라디오</string>
     <string name="app_name">S.tand</string>
     <string name="stand_widget_description">S.tand 빠른 실행</string>
 </resources>

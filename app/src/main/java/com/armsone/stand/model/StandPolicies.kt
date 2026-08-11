@@ -18,7 +18,7 @@ object SimplifiedBrightnessModePolicy {
     const val MATE_UPPER_BOUND = 0.4f
     const val MATE_TAP_LEVEL = 0.35f
     const val OBJECT_TAP_LEVEL = 0.8f
-    const val VERTICAL_DRAG_TRAVEL_RATIO = 0.5f
+    const val VERTICAL_DRAG_TRAVEL_RATIO = 0.25f
     const val ENDPOINT_LOCK_DELAY_MILLIS = 1_000L
     const val OBJECT_LOCK_RELEASE_LEVEL = 0.95f
     const val MATE_LOCK_RELEASE_LEVEL = 0.05f

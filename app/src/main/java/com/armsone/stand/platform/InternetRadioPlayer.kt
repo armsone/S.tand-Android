@@ -28,7 +28,11 @@ sealed interface InternetRadioState {
         val attempt: Int,
         val delaySeconds: Int,
     ) : InternetRadioState
-    data class Failed(val message: String) : InternetRadioState
+    data class Failed(
+        val channelID: String?,
+        val displayName: String?,
+        val message: String,
+    ) : InternetRadioState
 }
 
 class InternetRadioPlayer(context: Context) : Closeable {
@@ -60,7 +64,7 @@ class InternetRadioPlayer(context: Context) : Closeable {
 
     fun play(configuration: InternetRadioConfiguration) {
         val radio = configuration.normalizedOrNull() ?: run {
-            fail("라디오 주소를 확인해 주세요.")
+            fail("라디오 주소를 확인해 주세요.", configuration)
             return
         }
         handler.removeCallbacks(retry)
@@ -73,7 +77,7 @@ class InternetRadioPlayer(context: Context) : Closeable {
     private fun startConnection(radio: InternetRadioConfiguration) {
         releasePlayer(abandonFocus = false)
         if (audioManager.requestAudioFocus(focusRequest) != AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
-            fail("다른 오디오가 사용 중입니다.")
+            fail("다른 오디오가 사용 중입니다.", radio)
             return
         }
         mutableState.value = InternetRadioState.Loading(radio.id, radio.displayName)
@@ -117,7 +121,7 @@ class InternetRadioPlayer(context: Context) : Closeable {
         val radio = currentConfiguration ?: return
         releasePlayer(abandonFocus = false)
         val delaySeconds = InternetRadioReconnectPolicy.delaySeconds(retryAttempt) ?: run {
-            fail("라디오 연결을 복구하지 못했습니다.")
+            fail("라디오 연결을 복구하지 못했습니다.", radio)
             return
         }
         retryAttempt += 1
@@ -130,12 +134,19 @@ class InternetRadioPlayer(context: Context) : Closeable {
         handler.postDelayed(retry, delaySeconds * 1_000L)
     }
 
-    private fun fail(message: String) {
+    private fun fail(
+        message: String,
+        configuration: InternetRadioConfiguration? = currentConfiguration,
+    ) {
         explicitlyStopped = true
         currentConfiguration = null
         handler.removeCallbacks(retry)
         releasePlayer(abandonFocus = true)
-        mutableState.value = InternetRadioState.Failed(message)
+        mutableState.value = InternetRadioState.Failed(
+            channelID = configuration?.id,
+            displayName = configuration?.displayName,
+            message = message,
+        )
     }
 
     private fun releasePlayer(abandonFocus: Boolean) {

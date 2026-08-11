@@ -63,6 +63,18 @@
         </receiver>
 
         <activity
+            android:name=".RadioShareReceiverActivity"
+            android:exported="true"
+            android:label="@string/radio_share_target_name"
+            android:theme="@style/Theme.STand">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity>
+
+        <activity
             android:name=".MainActivity"
             android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"
             android:exported="true">

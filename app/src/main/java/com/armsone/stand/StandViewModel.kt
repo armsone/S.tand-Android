@@ -16,6 +16,7 @@ import com.armsone.stand.model.EnvironmentDisplayMode
 import com.armsone.stand.model.FaceDownLightingPolicy
 import com.armsone.stand.model.LampPhase
 import com.armsone.stand.model.LampTorchLightingPolicy
+import com.armsone.stand.model.InternetRadioMutationPolicy
 import com.armsone.stand.model.OrientationPreference
 import com.armsone.stand.model.SimplifiedBrightnessModePolicy
 import com.armsone.stand.model.StandDisplayTheme
@@ -600,6 +601,24 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
             displayName,
             streamUrl,
         ).normalizedOrNull() ?: return "라디오 주소를 확인해 주세요."
+        val currentSettings = mutableUiState.value.settings
+        val existing = currentSettings.internetRadioChannels.firstOrNull { it.id == channelID }
+        if (existing == null &&
+            currentSettings.internetRadioChannels.size >=
+            AppSettings.MAXIMUM_INTERNET_RADIO_CHANNEL_COUNT
+        ) {
+            return "라디오 채널은 최대 2개까지 저장할 수 있습니다."
+        }
+        val savedConfiguration = existing?.let { configuration.copy(id = it.id) } ?: configuration
+        if (
+            InternetRadioMutationPolicy.shouldStopForSave(
+                activeChannelID = activeInternetRadioChannelID(internetRadioPlayer.state.value),
+                previous = existing,
+                updated = savedConfiguration,
+            )
+        ) {
+            internetRadioPlayer.stop()
+        }
         settingsRepository.update { current ->
             val existingIndex = current.internetRadioChannels.indexOfFirst { it.id == channelID }
             if (existingIndex < 0 &&
@@ -608,11 +627,7 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
             ) {
                 return@update current
             }
-            val saved = if (existingIndex >= 0) {
-                configuration.copy(id = current.internetRadioChannels[existingIndex].id)
-            } else {
-                configuration
-            }
+            val saved = if (existingIndex >= 0) savedConfiguration else configuration
             val channels = current.internetRadioChannels.toMutableList().apply {
                 if (existingIndex >= 0) {
                     set(existingIndex, saved)
@@ -620,10 +635,16 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
                     add(saved)
                 }
             }
+            val selectedID = InternetRadioMutationPolicy.selectedChannelIDAfterSave(
+                currentSelectedChannelID = current.selectedInternetRadioId,
+                editedChannelID = channelID,
+                savedChannelID = saved.id,
+            )
+            val selected = channels.firstOrNull { it.id == selectedID } ?: saved
             current.copy(
-                internetRadio = saved,
+                internetRadio = selected,
                 internetRadioChannels = channels,
-                selectedInternetRadioId = saved.id,
+                selectedInternetRadioId = selected.id,
             )
         }
         return null
@@ -634,7 +655,14 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun deleteInternetRadioChannel(channelID: String) {
-        internetRadioPlayer.stop()
+        if (
+            InternetRadioMutationPolicy.shouldStopForDelete(
+                activeChannelID = activeInternetRadioChannelID(internetRadioPlayer.state.value),
+                deletedChannelID = channelID,
+            )
+        ) {
+            internetRadioPlayer.stop()
+        }
         settingsRepository.update { current ->
             val remaining = current.internetRadioChannels.filterNot {
                 it.id == channelID
@@ -655,6 +683,14 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
                 ?: return@update current
             current.copy(internetRadio = selected, selectedInternetRadioId = selected.id)
         }
+    }
+
+    private fun activeInternetRadioChannelID(state: InternetRadioState): String? = when (state) {
+        is InternetRadioState.Loading -> state.channelID
+        is InternetRadioState.Playing -> state.channelID
+        is InternetRadioState.Reconnecting -> state.channelID
+        is InternetRadioState.Failed -> state.channelID
+        InternetRadioState.Idle -> null
     }
 
     fun setCameraAmbientSensingEnabled(enabled: Boolean) {

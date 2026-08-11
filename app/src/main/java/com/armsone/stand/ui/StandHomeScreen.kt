@@ -1,4 +1,5 @@
 @file:OptIn(
+    androidx.compose.foundation.ExperimentalFoundationApi::class,
     androidx.compose.foundation.layout.ExperimentalLayoutApi::class,
     androidx.compose.ui.ExperimentalComposeUiApi::class,
 )
@@ -7,12 +8,12 @@ package com.armsone.stand.ui
 
 import android.view.GestureDetector
 import android.view.MotionEvent
-import android.view.ViewConfiguration
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -70,6 +71,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInteropFilter
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
@@ -79,7 +82,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import com.armsone.stand.R
 import com.armsone.stand.model.EnvironmentDisplayMode
 import com.armsone.stand.model.InternetRadioConfiguration
@@ -120,7 +126,6 @@ fun StandHomeScreen(
     onOpenRecordings: () -> Unit,
     onOpenAiShot: () -> Unit,
     onOpenSettings: () -> Unit,
-    onOpenRadioSettings: () -> Unit,
     onToggleRadio: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -159,21 +164,9 @@ fun StandHomeScreen(
         }
         val gradientColors = lampGradientColors(state.settings.displayTheme, visibleIntensity)
 
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.radialGradient(
-                        colors = gradientColors,
-                        radius = backgroundRadiusPx,
-                    ),
-                ),
-        )
-
         HomeGestureLayer(
             state = state,
             onScreenTap = onScreenTap,
-            onToggleTheme = onToggleTheme,
             onOpenEditor = onOpenEditor,
             onBrightnessAdjustmentStarted = onBrightnessAdjustmentStarted,
             onBrightnessLevelChanged = { value ->
@@ -185,7 +178,17 @@ fun StandHomeScreen(
             },
             onBrightnessAdjustmentFinished = onBrightnessAdjustmentFinished,
             modifier = Modifier.fillMaxSize(),
-        )
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.radialGradient(
+                            colors = gradientColors,
+                            radius = backgroundRadiusPx,
+                        ),
+                    ),
+            )
 
         if (!state.isFaceDown) {
             DashboardCanvas(
@@ -194,8 +197,9 @@ fun StandHomeScreen(
                 contentAlpha = contentAlpha,
                 burnInOffset = burnInOffset,
                 isExpanded = isExpanded,
-                onOpenRadioSettings = onOpenRadioSettings,
                 onToggleRadio = onToggleRadio,
+                onClockTap = onScreenTap,
+                onClockDoubleTap = onToggleTheme,
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(WindowInsets.safeDrawing.asPaddingValues())
@@ -250,11 +254,12 @@ fun StandHomeScreen(
                 )
         }
 
-        adjustmentFeedback?.let { feedback ->
-            HomeAdjustmentFeedbackPanel(
-                feedback = feedback,
-                modifier = Modifier.align(Alignment.Center),
-            )
+            adjustmentFeedback?.let { feedback ->
+                HomeAdjustmentFeedbackPanel(
+                    feedback = feedback,
+                    modifier = Modifier.align(Alignment.Center),
+                )
+            }
         }
     }
 }
@@ -327,31 +332,26 @@ private fun HomeAdjustmentFeedbackPanel(
 private fun HomeGestureLayer(
     state: StandUiState,
     onScreenTap: () -> Unit,
-    onToggleTheme: () -> Unit,
     onOpenEditor: () -> Unit,
     onBrightnessAdjustmentStarted: () -> Unit,
     onBrightnessLevelChanged: (Float) -> Unit,
     onBrightnessAdjustmentFinished: () -> Unit,
     modifier: Modifier = Modifier,
+    content: @Composable BoxScope.() -> Unit,
 ) {
     val context = LocalContext.current
     val latestState = rememberUpdatedState(state)
     val latestOnScreenTap = rememberUpdatedState(onScreenTap)
-    val latestOnToggleTheme = rememberUpdatedState(onToggleTheme)
     val latestOnOpenEditor = rememberUpdatedState(onOpenEditor)
     val latestOnBrightnessAdjustmentStarted = rememberUpdatedState(onBrightnessAdjustmentStarted)
     val latestOnBrightnessLevelChanged = rememberUpdatedState(onBrightnessLevelChanged)
     val latestOnBrightnessAdjustmentFinished = rememberUpdatedState(
         onBrightnessAdjustmentFinished,
     )
-    val session = remember { HomeGestureSession() }
     var layerHeightPx by remember { mutableStateOf(0f) }
     val bottomGestureExclusionPx = with(LocalDensity.current) { 104.dp.toPx() }
-    val touchSlop = remember(context) {
-        ViewConfiguration.get(context).scaledTouchSlop.toFloat()
-    }
 
-    val gestureDetector = remember(context, touchSlop) {
+    val gestureDetector = remember(context) {
         GestureDetector(
             context,
             object : GestureDetector.SimpleOnGestureListener() {
@@ -362,52 +362,10 @@ private fun HomeGestureLayer(
                     return true
                 }
 
-                override fun onDoubleTap(event: MotionEvent): Boolean {
-                    latestOnToggleTheme.value()
-                    return true
-                }
+                override fun onDoubleTap(event: MotionEvent): Boolean = false
 
                 override fun onLongPress(event: MotionEvent) {
                     latestOnOpenEditor.value()
-                }
-
-                override fun onScroll(
-                    first: MotionEvent?,
-                    current: MotionEvent,
-                    distanceX: Float,
-                    distanceY: Float,
-                ): Boolean {
-                    if (session.multiTouch) return false
-                    val start = first ?: return false
-                    val dragX = current.x - start.x
-                    val dragY = current.y - start.y
-                    if (session.axis == null && maxOf(abs(dragX), abs(dragY)) >= touchSlop) {
-                        session.axis = if (abs(dragY) > abs(dragX)) {
-                            ScreenAdjustmentAxis.VERTICAL
-                        } else {
-                            ScreenAdjustmentAxis.HORIZONTAL
-                        }
-                        if (session.axis == ScreenAdjustmentAxis.VERTICAL) {
-                            latestOnBrightnessAdjustmentStarted.value()
-                        }
-                    }
-
-                    when (session.axis) {
-                        ScreenAdjustmentAxis.VERTICAL -> {
-                            latestOnBrightnessLevelChanged.value(
-                                SimplifiedBrightnessModePolicy.level(
-                                    startingAt = session.brightnessStart,
-                                    verticalTranslationPx = dragY,
-                                    viewportHeightPx = layerHeightPx,
-                                ),
-                            )
-                        }
-
-                        ScreenAdjustmentAxis.HORIZONTAL -> Unit
-
-                        null -> Unit
-                    }
-                    return session.axis != null
                 }
             },
         )
@@ -415,58 +373,60 @@ private fun HomeGestureLayer(
     Box(
         modifier = modifier
             .onSizeChanged { layerHeightPx = it.height.toFloat() }
-            .pointerInteropFilter { event ->
-            if (event.actionMasked == MotionEvent.ACTION_DOWN) {
-                session.ignore = event.y >= layerHeightPx - bottomGestureExclusionPx
-            }
-            if (session.ignore) {
-                if (
-                    event.actionMasked == MotionEvent.ACTION_UP ||
-                    event.actionMasked == MotionEvent.ACTION_CANCEL
-                ) {
-                    session.reset()
-                }
-                return@pointerInteropFilter false
-            }
-            when (event.actionMasked) {
-                MotionEvent.ACTION_DOWN -> session.begin(latestState.value)
-                MotionEvent.ACTION_POINTER_DOWN -> session.multiTouch = true
-            }
-
-            gestureDetector.onTouchEvent(event)
-
-            when (event.actionMasked) {
-                MotionEvent.ACTION_UP -> {
-                    if (!session.multiTouch && session.axis == ScreenAdjustmentAxis.VERTICAL) {
-                        latestOnBrightnessAdjustmentFinished.value()
+            .pointerInput(bottomGestureExclusionPx) {
+                var startingLevel = 0f
+                var cumulativeDrag = 0f
+                var ignoreDrag = false
+                detectVerticalDragGestures(
+                    onDragStart = { offset ->
+                        ignoreDrag = offset.y >= layerHeightPx - bottomGestureExclusionPx
+                        if (!ignoreDrag) {
+                            val current = latestState.value
+                            startingLevel = current.lampIntensity.takeIf { current.isSessionActive }
+                                ?: current.settings.lampIntensity
+                            cumulativeDrag = 0f
+                            latestOnBrightnessAdjustmentStarted.value()
+                        }
+                    },
+                    onDragEnd = {
+                        if (!ignoreDrag) {
+                            latestOnBrightnessAdjustmentFinished.value()
+                        }
+                    },
+                    onDragCancel = {
+                        if (!ignoreDrag) {
+                            latestOnBrightnessAdjustmentFinished.value()
+                        }
+                    },
+                ) { change, dragAmount ->
+                    if (!ignoreDrag) {
+                        change.consume()
+                        cumulativeDrag += dragAmount
+                        latestOnBrightnessLevelChanged.value(
+                            SimplifiedBrightnessModePolicy.level(
+                                startingAt = startingLevel,
+                                verticalTranslationPx = cumulativeDrag,
+                                viewportHeightPx = layerHeightPx,
+                            ),
+                        )
                     }
-                    session.reset()
                 }
-
-                MotionEvent.ACTION_CANCEL -> session.reset()
-            }
-            true
-        },
-    )
-}
-
-private class HomeGestureSession {
-    var brightnessStart: Float = 0.72f
-    var axis: ScreenAdjustmentAxis? = null
-    var multiTouch: Boolean = false
-    var ignore: Boolean = false
-
-    fun begin(state: StandUiState) {
-        brightnessStart = state.lampIntensity.takeIf { state.isSessionActive }
-            ?: state.settings.lampIntensity
-        axis = null
-        multiTouch = false
-    }
-
-    fun reset() {
-        axis = null
-        multiTouch = false
-        ignore = false
+            },
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInteropFilter { event ->
+                    if (event.actionMasked == MotionEvent.ACTION_DOWN &&
+                        event.y >= layerHeightPx - bottomGestureExclusionPx
+                    ) {
+                        return@pointerInteropFilter false
+                    }
+                    gestureDetector.onTouchEvent(event)
+                    true
+                },
+        )
+        content()
     }
 }
 
@@ -555,8 +515,9 @@ private fun DashboardCanvas(
     contentAlpha: Float,
     burnInOffset: com.armsone.stand.ui.components.BurnInOffset,
     isExpanded: Boolean,
-    onOpenRadioSettings: () -> Unit,
     onToggleRadio: (String) -> Unit,
+    onClockTap: () -> Unit,
+    onClockDoubleTap: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val layout = if (isPortrait) {
@@ -585,6 +546,10 @@ private fun DashboardCanvas(
                 contentAlpha = contentAlpha,
                 modifier = Modifier
                     .align(Alignment.Center)
+                    .combinedClickable(
+                        onClick = onClockTap,
+                        onDoubleClick = onClockDoubleTap,
+                    )
                     .panelTransform(layout.clock, canvasWidth.value, canvasHeight.value),
             )
 
@@ -670,16 +635,6 @@ private fun DashboardCanvas(
                         .align(Alignment.Center)
                         .panelTransform(layout.radio, canvasWidth.value, canvasHeight.value),
                 )
-            } else if (radioConfigurations.isEmpty()) {
-                RadioPanel(
-                    state = state,
-                    configuration = null,
-                    contentAlpha = contentAlpha,
-                    onClick = onOpenRadioSettings,
-                    modifier = Modifier
-                        .align(Alignment.Center)
-                        .panelTransform(layout.radio, canvasWidth.value, canvasHeight.value),
-                )
             } else {
                 radioConfigurations.forEachIndexed { index, configuration ->
                     val transform = if (index == 0) layout.radio else layout.secondaryRadio
@@ -708,34 +663,50 @@ internal fun RadioPanel(
     modifier: Modifier = Modifier,
 ) {
     val isActive = configuration?.id == activeRadioChannelID(state.internetRadioState)
-    val (title, detail) = when (val radioState = state.internetRadioState) {
-        InternetRadioState.Idle -> if (configuration == null) {
-            "라디오 설정" to "탭하여 스트림 추가"
-        } else {
-            configuration.displayName to "탭하여 재생"
-        }
+    val (title, detail) = if (configuration == null) {
+        "인터넷 라디오" to "HTTPS 주소 등록"
+    } else when (val radioState = state.internetRadioState) {
+        InternetRadioState.Idle -> configuration.displayName to "대기"
         is InternetRadioState.Loading -> if (isActive) {
-            configuration?.displayName.orEmpty() to "연결 중"
+            configuration.displayName to "연결 중"
         } else {
-            configuration?.displayName.orEmpty() to "탭하여 재생"
+            configuration.displayName to "대기"
         }
         is InternetRadioState.Playing -> if (isActive) {
-            configuration?.displayName.orEmpty() to "탭하여 끄기"
+            configuration.displayName to "재생"
         } else {
-            configuration?.displayName.orEmpty() to "탭하여 전환"
+            configuration.displayName to "대기"
         }
         is InternetRadioState.Reconnecting -> if (isActive) {
-            configuration?.displayName.orEmpty() to "${radioState.delaySeconds}초 뒤 재연결"
+            configuration.displayName to "다시 연결 중"
         } else {
-            configuration?.displayName.orEmpty() to "탭하여 전환"
+            configuration.displayName to "대기"
         }
-        is InternetRadioState.Failed -> configuration?.displayName.orEmpty() to "다시 듣기"
+        is InternetRadioState.Failed -> if (isActive) {
+            configuration.displayName to "연결 실패"
+        } else {
+            configuration.displayName to "대기"
+        }
+    }
+    val accessibilityHint = when {
+        isActive && state.internetRadioState is InternetRadioState.Loading ->
+            "인터넷 라디오 연결을 취소합니다."
+        isActive && state.internetRadioState is InternetRadioState.Reconnecting ->
+            "인터넷 라디오 연결을 취소합니다."
+        isActive && state.internetRadioState is InternetRadioState.Playing ->
+            "인터넷 라디오를 끄고 소리 감지와 녹음을 다시 시작합니다."
+        else -> "등록한 인터넷 라디오를 재생합니다."
     }
     Surface(
         onClick = onClick,
         modifier = modifier
             .width(144.dp)
             .height(60.dp)
+            .semantics(mergeDescendants = true) {
+                contentDescription = "$title, $detail. $accessibilityHint"
+                stateDescription = detail
+                role = Role.Button
+            }
             .then(
                 if (drawsSurface) {
                     Modifier.standPanelSurface(
@@ -818,9 +789,8 @@ private fun activeRadioChannelID(state: InternetRadioState): String? = when (sta
     is InternetRadioState.Loading -> state.channelID
     is InternetRadioState.Playing -> state.channelID
     is InternetRadioState.Reconnecting -> state.channelID
-    InternetRadioState.Idle,
-    is InternetRadioState.Failed,
-    -> null
+    is InternetRadioState.Failed -> state.channelID
+    InternetRadioState.Idle -> null
 }
 
 internal fun clockSecondsOverlapsClock(
@@ -1229,5 +1199,3 @@ private fun weatherSummary(code: Int): String = when (code) {
     95, 96, 99 -> "뇌우"
     else -> "날씨 정보"
 }
-
-private enum class ScreenAdjustmentAxis { VERTICAL, HORIZONTAL }

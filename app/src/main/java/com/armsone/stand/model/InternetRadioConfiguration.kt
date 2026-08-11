@@ -47,3 +47,31 @@ object InternetRadioReconnectPolicy {
 
     fun delaySeconds(attempt: Int): Int? = DelaySeconds.getOrNull(attempt.coerceAtLeast(0))
 }
+
+object InternetRadioMutationPolicy {
+    fun shouldStopForSave(
+        activeChannelID: String?,
+        previous: InternetRadioConfiguration?,
+        updated: InternetRadioConfiguration,
+    ): Boolean = previous != null &&
+        activeChannelID == previous.id &&
+        previous.streamUrl != updated.streamUrl
+
+    fun shouldStopForDelete(activeChannelID: String?, deletedChannelID: String): Boolean =
+        activeChannelID == deletedChannelID
+
+    fun selectedChannelIDAfterSave(
+        currentSelectedChannelID: String?,
+        editedChannelID: String?,
+        savedChannelID: String,
+    ): String = if (editedChannelID == null) savedChannelID else currentSelectedChannelID ?: savedChannelID
+}
+
+object RadioShareImportPolicy {
+    fun validatedUrlOrNull(sharedText: String?): String? {
+        val value = sharedText?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        return InternetRadioConfiguration("인터넷 라디오", value)
+            .normalizedOrNull()
+            ?.streamUrl
+    }
+}

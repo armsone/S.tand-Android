@@ -40,7 +40,7 @@ class SettingsRepository(context: Context) {
 
     private fun loadAndMigrate(): AppSettings {
         val loaded = load()
-        if (preferences.getBoolean(CURRENT_EXPERIENCE_MIGRATION_KEY, false)) return loaded
+        if (booleanValue(CURRENT_EXPERIENCE_MIGRATION_KEY, false)) return loaded
 
         return CurrentExperienceMigration.apply(loaded).also { migrated ->
             persist(migrated)
@@ -51,9 +51,9 @@ class SettingsRepository(context: Context) {
     private fun load(): AppSettings {
         val radioSnapshot = loadInternetRadios()
         return AppSettings(
-        lampIntensity = preferences.getFloat("lampIntensity", 0.72f),
-        silhouetteIntensity = preferences.getFloat("silhouetteIntensity", 0.05f),
-        clockScale = preferences.getFloat("clockScale", AppSettings.DEFAULT_CLOCK_SCALE),
+        lampIntensity = floatValue("lampIntensity", 0.72f),
+        silhouetteIntensity = floatValue("silhouetteIntensity", 0.05f),
+        clockScale = floatValue("clockScale", AppSettings.DEFAULT_CLOCK_SCALE),
         clockFont = enumValue("clockFont", ClockFontChoice.TENADA),
         clockHourMode = enumValue("clockHourMode", ClockHourMode.TWELVE),
         displayTheme = enumValue("displayTheme", StandDisplayTheme.COLOR),
@@ -65,26 +65,26 @@ class SettingsRepository(context: Context) {
             encoded = stringValue(LANDSCAPE_LAYOUT_KEY),
             fallback = StandScreenLayout.Landscape,
         ),
-        brightnessModeThreshold = preferences.getFloat("brightnessModeThreshold", 0.4f),
-        holdDurationSeconds = preferences.getFloat("holdDurationSeconds", 5f),
-        fadeDurationSeconds = preferences.getFloat("fadeDurationSeconds", 30f),
-        automaticDimmingEnabled = preferences.getBoolean("automaticDimmingEnabled", false),
-        soundThresholdDB = preferences.getFloat("soundThresholdDB", -36f),
-        recordingEnabled = preferences.getBoolean("recordingEnabled", true),
+        brightnessModeThreshold = floatValue("brightnessModeThreshold", 0.4f),
+        holdDurationSeconds = floatValue("holdDurationSeconds", 5f),
+        fadeDurationSeconds = floatValue("fadeDurationSeconds", 30f),
+        automaticDimmingEnabled = booleanValue("automaticDimmingEnabled", false),
+        soundThresholdDB = floatValue("soundThresholdDB", -36f),
+        recordingEnabled = booleanValue("recordingEnabled", true),
         orientationPreference = enumValue(
             "orientationPreference",
             OrientationPreference.AUTOMATIC,
         ),
-        torchEnabled = preferences.getBoolean("torchEnabled", true),
-        multiStimulusWakeEnabled = preferences.getBoolean("multiStimulusWakeEnabled", true),
+        torchEnabled = booleanValue("torchEnabled", true),
+        multiStimulusWakeEnabled = booleanValue("multiStimulusWakeEnabled", true),
         modePreference = enumValue("modePreference", StandModePreference.AUTOMATIC),
-        ambientSensingEnabled = preferences.getBoolean("ambientSensingEnabled", true),
-        cameraAmbientSensingEnabled = preferences.getBoolean(
+        ambientSensingEnabled = booleanValue("ambientSensingEnabled", true),
+        cameraAmbientSensingEnabled = booleanValue(
             "cameraAmbientSensingEnabled",
             false,
         ),
-        soundSensingEnabled = preferences.getBoolean("soundSensingEnabled", true),
-        weatherLocationEnabled = preferences.getBoolean("weatherLocationEnabled", true),
+        soundSensingEnabled = booleanValue("soundSensingEnabled", true),
+        weatherLocationEnabled = booleanValue("weatherLocationEnabled", true),
             internetRadio = radioSnapshot.selected,
             internetRadioChannels = radioSnapshot.channels,
             selectedInternetRadioId = radioSnapshot.selected?.id,
@@ -92,9 +92,21 @@ class SettingsRepository(context: Context) {
     }
 
     private inline fun <reified T : Enum<T>> enumValue(key: String, fallback: T): T =
-        preferences.getString(key, null)
+        stringValue(key)
             ?.let { saved -> enumValues<T>().firstOrNull { it.name == saved } }
             ?: fallback
+
+    private fun floatValue(key: String, fallback: Float): Float = try {
+        preferences.getFloat(key, fallback).takeIf(Float::isFinite) ?: fallback
+    } catch (_: ClassCastException) {
+        fallback
+    }
+
+    private fun booleanValue(key: String, fallback: Boolean): Boolean = try {
+        preferences.getBoolean(key, fallback)
+    } catch (_: ClassCastException) {
+        fallback
+    }
 
     private fun stringValue(key: String): String? = try {
         preferences.getString(key, null)

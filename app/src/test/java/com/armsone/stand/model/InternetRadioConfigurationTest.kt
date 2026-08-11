@@ -37,4 +37,29 @@ class InternetRadioConfigurationTest {
         assertEquals("two", normalized.internetRadio?.id)
         assertTrue(normalized.internetRadioChannels.size <= 2)
     }
+
+    @Test fun radioMutationsOnlyStopPlaybackWhenTheActiveStreamChanges() {
+        val first = InternetRadioConfiguration("첫째", "https://one.example/live", "one")
+        val renamed = first.copy(displayName = "이름만 변경")
+        val changedUrl = first.copy(streamUrl = "https://one.example/alternate")
+
+        assertTrue(!InternetRadioMutationPolicy.shouldStopForSave("one", first, renamed))
+        assertTrue(InternetRadioMutationPolicy.shouldStopForSave("one", first, changedUrl))
+        assertTrue(!InternetRadioMutationPolicy.shouldStopForDelete("one", "two"))
+        assertTrue(InternetRadioMutationPolicy.shouldStopForDelete("one", "one"))
+        assertEquals(
+            "one",
+            InternetRadioMutationPolicy.selectedChannelIDAfterSave("one", "two", "two"),
+        )
+    }
+
+    @Test fun sharedRadioImportAcceptsOnlyOneValidatedHttpsUrl() {
+        assertEquals(
+            "https://radio.example/live",
+            RadioShareImportPolicy.validatedUrlOrNull("  https://radio.example/live  "),
+        )
+        assertNull(RadioShareImportPolicy.validatedUrlOrNull("http://radio.example/live"))
+        assertNull(RadioShareImportPolicy.validatedUrlOrNull("https://id:pw@radio.example/live"))
+        assertNull(RadioShareImportPolicy.validatedUrlOrNull("설명 https://radio.example/live"))
+    }
 }

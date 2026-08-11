@@ -38,6 +38,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.armsone.stand.model.EnvironmentDisplayMode
 import com.armsone.stand.model.LampPhase
 import com.armsone.stand.model.OrientationPreference
+import com.armsone.stand.model.RadioShareImportPolicy
 import com.armsone.stand.model.StandExperienceMode
 import com.armsone.stand.model.ScreenLayoutCodec
 import com.armsone.stand.model.ClockFontChoice
@@ -50,9 +51,11 @@ import com.armsone.stand.ui.InternetRadioScreen
 import com.armsone.stand.ui.StandHomeScreen
 import com.armsone.stand.ui.StandUiState
 import com.armsone.stand.ui.theme.STandTheme
+import kotlinx.coroutines.flow.MutableStateFlow
 
 class MainActivity : ComponentActivity() {
     private val standViewModel: StandViewModel by viewModels()
+    private val pendingRadioShareUrl = MutableStateFlow<String?>(null)
 
     private var initialPermissionSequenceStarted = false
     private var cameraPermissionAttempted = false
@@ -103,10 +106,17 @@ class MainActivity : ComponentActivity() {
         pendingPermissionContinuesInitialSequence = savedInstanceState
             ?.getBoolean(STATE_PENDING_PERMISSION_CONTINUES_INITIAL_SEQUENCE)
             ?: false
+        acceptRadioShareDraft(intent)
 
         setContent {
             STandApp()
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        acceptRadioShareDraft(intent)
     }
 
     override fun onStart() {
@@ -161,6 +171,7 @@ class MainActivity : ComponentActivity() {
         val recordings by standViewModel.recordings.collectAsStateWithLifecycle()
         val recordingSessionGroups by
             standViewModel.recordingSessionGroups.collectAsStateWithLifecycle()
+        val sharedRadioUrl by pendingRadioShareUrl.collectAsStateWithLifecycle()
         var destination by rememberSaveable { mutableStateOf(AppDestination.HOME) }
         var secondaryReturnDestination by rememberSaveable {
             mutableStateOf(AppDestination.HOME)
@@ -169,6 +180,13 @@ class MainActivity : ComponentActivity() {
         var editorDraftEncoded by rememberSaveable { mutableStateOf<String?>(null) }
         var editorClockFontName by rememberSaveable { mutableStateOf<String?>(null) }
         var editorClockHourModeName by rememberSaveable { mutableStateOf<String?>(null) }
+
+        LaunchedEffect(sharedRadioUrl) {
+            if (sharedRadioUrl != null) {
+                secondaryReturnDestination = AppDestination.HOME
+                destination = AppDestination.RADIO
+            }
+        }
 
         fun openScreenEditor() {
             editorIsPortrait = resources.configuration.orientation !=
@@ -188,6 +206,7 @@ class MainActivity : ComponentActivity() {
             editorDraftEncoded = null
             editorClockFontName = null
             editorClockHourModeName = null
+            if (destination == AppDestination.RADIO) pendingRadioShareUrl.value = null
             destination = when (destination) {
                 AppDestination.RECORDINGS,
                 AppDestination.RADIO,
@@ -233,10 +252,6 @@ class MainActivity : ComponentActivity() {
                     },
                     onOpenAiShot = ::openAiShot,
                     onOpenSettings = { destination = AppDestination.SETTINGS },
-                    onOpenRadioSettings = {
-                        secondaryReturnDestination = AppDestination.HOME
-                        destination = AppDestination.RADIO
-                    },
                     onToggleRadio = standViewModel::toggleInternetRadio,
                 )
 
@@ -295,10 +310,20 @@ class MainActivity : ComponentActivity() {
                 }
 
                 AppDestination.RADIO -> InternetRadioScreen(
-                    configuration = state.settings.internetRadio,
-                    onSave = standViewModel::saveInternetRadio,
+                    configuration = if (sharedRadioUrl == null) state.settings.internetRadio else null,
+                    initialUrl = sharedRadioUrl,
+                    onSave = { name, url ->
+                        if (sharedRadioUrl == null) {
+                            standViewModel.saveInternetRadio(name, url)
+                        } else {
+                            standViewModel.saveInternetRadioChannel(null, name, url)
+                        }
+                    },
                     onDelete = standViewModel::deleteInternetRadio,
-                    onBack = { destination = secondaryReturnDestination },
+                    onBack = {
+                        pendingRadioShareUrl.value = null
+                        destination = secondaryReturnDestination
+                    },
                 )
 
                 AppDestination.EDITOR -> {
@@ -568,6 +593,12 @@ class MainActivity : ComponentActivity() {
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
     }
 
+    private fun acceptRadioShareDraft(intent: Intent?) {
+        pendingRadioShareUrl.value = RadioShareImportPolicy.validatedUrlOrNull(
+            intent?.getStringExtra(EXTRA_RADIO_SHARE_URL),
+        )
+    }
+
     private fun openAppSettings() {
         val intent = Intent(
             Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
@@ -589,6 +620,7 @@ class MainActivity : ComponentActivity() {
     private enum class PermissionRequest { MICROPHONE, LOCATION, CAMERA }
 
     companion object {
+        const val EXTRA_RADIO_SHARE_URL = "com.armsone.stand.extra.RADIO_SHARE_URL"
         private const val AI_SHOT_URI = "hanclip://aishot"
         private const val DEFAULT_AUDIO_MIME_TYPE = "audio/*"
         private const val STATE_INITIAL_PERMISSIONS_STARTED = "initial_permissions_started"

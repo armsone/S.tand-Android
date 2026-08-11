@@ -33,14 +33,19 @@ import com.armsone.stand.model.InternetRadioConfiguration
 @Composable
 fun InternetRadioScreen(
     configuration: InternetRadioConfiguration?,
+    initialUrl: String? = null,
     onSave: (String, String) -> String?,
     onDelete: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var name by remember(configuration) { mutableStateOf(configuration?.displayName.orEmpty()) }
-    var url by remember(configuration) { mutableStateOf(configuration?.streamUrl.orEmpty()) }
-    var error by remember(configuration) { mutableStateOf<String?>(null) }
+    var name by remember(configuration, initialUrl) {
+        mutableStateOf(configuration?.displayName.orEmpty())
+    }
+    var url by remember(configuration, initialUrl) {
+        mutableStateOf(initialUrl ?: configuration?.streamUrl.orEmpty())
+    }
+    var error by remember(configuration, initialUrl) { mutableStateOf<String?>(null) }
     Scaffold(
         modifier = modifier.fillMaxSize(),
         topBar = {
