@@ -16,6 +16,7 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.os.SystemClock
 import androidx.core.content.ContextCompat
+import com.armsone.stand.model.EnvironmentDisplayMode
 import java.io.Closeable
 import java.util.concurrent.Executor
 import kotlin.math.max
@@ -44,7 +45,8 @@ data class AmbientCameraReading(
 
 object AmbientCameraPolicy {
     const val DarkThreshold = 0.16f
-    const val MaximumReadingAgeNanos = 90_000_000_000L
+    const val BrightThreshold = 0.28f
+    const val MaximumReadingAgeNanos = 20_000_000_000L
 
     fun adjustedBrightness(
         averageLuma: Float,
@@ -73,6 +75,27 @@ object AmbientCameraPolicy {
     }
 
     private const val DEFAULT_EXPOSURE_NANOS = 16_666_667L
+}
+
+object AmbientCameraModePolicy {
+    fun targetMode(
+        current: EnvironmentDisplayMode,
+        fallback: EnvironmentDisplayMode,
+        reading: AmbientCameraReading?,
+        nowNanos: Long,
+    ): EnvironmentDisplayMode {
+        if (!AmbientCameraPolicy.isFresh(reading, nowNanos)) return fallback
+        val value = reading?.value ?: return fallback
+        return when {
+            value >= AmbientCameraPolicy.BrightThreshold -> EnvironmentDisplayMode.OBJECT
+            value <= AmbientCameraPolicy.DarkThreshold -> EnvironmentDisplayMode.MATE
+            else -> current
+        }
+    }
+
+    fun isRecentlyDark(reading: AmbientCameraReading?, nowNanos: Long): Boolean =
+        AmbientCameraPolicy.isFresh(reading, nowNanos) &&
+            (reading?.value ?: Float.POSITIVE_INFINITY) <= AmbientCameraPolicy.DarkThreshold
 }
 
 /**

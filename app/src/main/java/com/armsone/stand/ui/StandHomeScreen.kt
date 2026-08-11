@@ -7,12 +7,12 @@ package com.armsone.stand.ui
 
 import android.view.GestureDetector
 import android.view.MotionEvent
-import android.view.ScaleGestureDetector
 import android.view.ViewConfiguration
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -78,27 +78,26 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.onClick
-import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.setProgress
 import com.armsone.stand.R
 import com.armsone.stand.model.EnvironmentDisplayMode
-import com.armsone.stand.model.HoldDurationAdjustment
+import com.armsone.stand.model.InternetRadioConfiguration
 import com.armsone.stand.model.LampPhase
 import com.armsone.stand.model.OrientationPreference
 import com.armsone.stand.model.PanelTransform
 import com.armsone.stand.model.StandDisplayTheme
 import com.armsone.stand.model.StandControlKind
 import com.armsone.stand.model.StandScreenLayout
+import com.armsone.stand.model.SimplifiedBrightnessModePolicy
 import com.armsone.stand.model.WeatherPiece
 import com.armsone.stand.platform.InternetRadioState
 import com.armsone.stand.ui.components.ClockDateAndSeconds
+import com.armsone.stand.ui.components.ClockSeconds
 import com.armsone.stand.ui.components.FlipClock
 import com.armsone.stand.ui.components.standPanelSurface
 import com.armsone.stand.ui.components.rememberBurnInOffset
+import com.armsone.stand.ui.theme.lampGradientColors
 import kotlinx.coroutines.delay
 import kotlin.math.abs
 import kotlin.math.hypot
@@ -111,21 +110,18 @@ fun StandHomeScreen(
     onRevealControls: () -> Unit,
     onToggleTheme: () -> Unit,
     onOpenEditor: () -> Unit,
-    onLampIntensityChanged: (Float) -> Unit,
-    onSilhouetteIntensityChanged: (Float) -> Unit,
-    onHoldDurationChanged: (Float) -> Unit,
-    onAdjustmentFinished: () -> Unit,
-    onClockScaleChanged: (Float) -> Unit,
+    onBrightnessAdjustmentStarted: () -> Unit,
+    onBrightnessLevelChanged: (Float) -> Unit,
+    onBrightnessAdjustmentFinished: () -> Unit,
     onToggleTorch: () -> Unit,
     onCycleMode: () -> Unit,
     onToggleSession: () -> Unit,
-    onSoundThresholdChanged: (Float) -> Unit,
     onToggleOrientation: () -> Unit,
     onOpenRecordings: () -> Unit,
     onOpenAiShot: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenRadioSettings: () -> Unit,
-    onToggleRadio: () -> Unit,
+    onToggleRadio: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val burnInOffset = rememberBurnInOffset()
@@ -145,39 +141,30 @@ fun StandHomeScreen(
     ) {
         val isPortrait = maxHeight > maxWidth
         val isExpanded = maxWidth >= 600.dp
-        val visibleIntensity = if (state.lampPhase == LampPhase.OFF) 0f else state.lampIntensity
+        val visibleIntensity = if (state.isFaceDown || state.lampPhase == LampPhase.OFF) {
+            0f
+        } else {
+            state.lampIntensity
+        }
         val density = LocalDensity.current
         val backgroundRadiusPx = with(density) {
             // The iOS reference uses a 700 pt radius on an approximately 930 pt diagonal.
             // Keeping that 75% diagonal ratio makes the glow cover phones and tablets alike.
             hypot(maxWidth.toPx(), maxHeight.toPx()) * 0.75f
         }
-        val contentAlpha = if (state.isDisplayDark) {
+        val contentAlpha = if (state.isFaceDown || state.isDisplayDark) {
             state.settings.silhouetteIntensity.coerceIn(0.005f, 0.2f)
         } else {
             (0.28f + visibleIntensity * 0.72f).coerceIn(0.28f, 1f)
         }
-        val innerLampColor = if (state.settings.displayTheme == StandDisplayTheme.GRAYSCALE) {
-            Color(0xFFADADAD)
-        } else {
-            Color(0xFFFF9E47)
-        }
-        val middleLampColor = if (state.settings.displayTheme == StandDisplayTheme.GRAYSCALE) {
-            Color(0xFF696969)
-        } else {
-            Color(0xFFF2450F)
-        }
+        val gradientColors = lampGradientColors(state.settings.displayTheme, visibleIntensity)
 
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(
                     Brush.radialGradient(
-                        colors = listOf(
-                            innerLampColor.copy(alpha = visibleIntensity),
-                            middleLampColor.copy(alpha = visibleIntensity * 0.72f),
-                            Color.Black.copy(alpha = 1f - visibleIntensity * 0.22f),
-                        ),
+                        colors = gradientColors,
                         radius = backgroundRadiusPx,
                     ),
                 ),
@@ -188,35 +175,15 @@ fun StandHomeScreen(
             onScreenTap = onScreenTap,
             onToggleTheme = onToggleTheme,
             onOpenEditor = onOpenEditor,
-            onLampIntensityChanged = { value ->
-                onLampIntensityChanged(value)
+            onBrightnessAdjustmentStarted = onBrightnessAdjustmentStarted,
+            onBrightnessLevelChanged = { value ->
+                onBrightnessLevelChanged(value)
                 adjustmentFeedback = HomeAdjustmentFeedback(
-                    title = "조명 밝기",
+                    title = "앱 밝기",
                     value = "${(value * 100f).roundToInt()}%",
                 )
             },
-            onSilhouetteIntensityChanged = { value ->
-                onSilhouetteIntensityChanged(value)
-                adjustmentFeedback = HomeAdjustmentFeedback(
-                    title = "실루엣 밝기",
-                    value = "${(value * 100f).roundToInt()}%",
-                )
-            },
-            onHoldDurationChanged = { value ->
-                onHoldDurationChanged(value)
-                adjustmentFeedback = HomeAdjustmentFeedback(
-                    title = "점등 유지",
-                    value = "${value.roundToInt()}초",
-                )
-            },
-            onAdjustmentFinished = onAdjustmentFinished,
-            onClockScaleChanged = { value ->
-                onClockScaleChanged(value)
-                adjustmentFeedback = HomeAdjustmentFeedback(
-                    title = "시계 크기",
-                    value = "${(value * 100f).roundToInt()}%",
-                )
-            },
+            onBrightnessAdjustmentFinished = onBrightnessAdjustmentFinished,
             modifier = Modifier.fillMaxSize(),
         )
 
@@ -253,7 +220,6 @@ fun StandHomeScreen(
                         onToggleTorch = onToggleTorch,
                         onCycleMode = onCycleMode,
                         onToggleSession = onToggleSession,
-                        onSoundThresholdChanged = onSoundThresholdChanged,
                         onToggleOrientation = onToggleOrientation,
                         onOpenRecordings = onOpenRecordings,
                         onOpenAiShot = onOpenAiShot,
@@ -363,11 +329,9 @@ private fun HomeGestureLayer(
     onScreenTap: () -> Unit,
     onToggleTheme: () -> Unit,
     onOpenEditor: () -> Unit,
-    onLampIntensityChanged: (Float) -> Unit,
-    onSilhouetteIntensityChanged: (Float) -> Unit,
-    onHoldDurationChanged: (Float) -> Unit,
-    onAdjustmentFinished: () -> Unit,
-    onClockScaleChanged: (Float) -> Unit,
+    onBrightnessAdjustmentStarted: () -> Unit,
+    onBrightnessLevelChanged: (Float) -> Unit,
+    onBrightnessAdjustmentFinished: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -375,11 +339,11 @@ private fun HomeGestureLayer(
     val latestOnScreenTap = rememberUpdatedState(onScreenTap)
     val latestOnToggleTheme = rememberUpdatedState(onToggleTheme)
     val latestOnOpenEditor = rememberUpdatedState(onOpenEditor)
-    val latestOnLampIntensityChanged = rememberUpdatedState(onLampIntensityChanged)
-    val latestOnSilhouetteIntensityChanged = rememberUpdatedState(onSilhouetteIntensityChanged)
-    val latestOnHoldDurationChanged = rememberUpdatedState(onHoldDurationChanged)
-    val latestOnAdjustmentFinished = rememberUpdatedState(onAdjustmentFinished)
-    val latestOnClockScaleChanged = rememberUpdatedState(onClockScaleChanged)
+    val latestOnBrightnessAdjustmentStarted = rememberUpdatedState(onBrightnessAdjustmentStarted)
+    val latestOnBrightnessLevelChanged = rememberUpdatedState(onBrightnessLevelChanged)
+    val latestOnBrightnessAdjustmentFinished = rememberUpdatedState(
+        onBrightnessAdjustmentFinished,
+    )
     val session = remember { HomeGestureSession() }
     var layerHeightPx by remember { mutableStateOf(0f) }
     val bottomGestureExclusionPx = with(LocalDensity.current) { 104.dp.toPx() }
@@ -423,30 +387,23 @@ private fun HomeGestureLayer(
                         } else {
                             ScreenAdjustmentAxis.HORIZONTAL
                         }
+                        if (session.axis == ScreenAdjustmentAxis.VERTICAL) {
+                            latestOnBrightnessAdjustmentStarted.value()
+                        }
                     }
 
                     when (session.axis) {
                         ScreenAdjustmentAxis.VERTICAL -> {
-                            if (latestState.value.isDisplayDark) {
-                                latestOnSilhouetteIntensityChanged.value(
-                                    (session.silhouetteStart - dragY / 280f * 0.2f)
-                                        .coerceIn(0.005f, 0.2f),
-                                )
-                            } else {
-                                latestOnLampIntensityChanged.value(
-                                    (session.lampStart - dragY / 280f).coerceIn(0.15f, 1f),
-                                )
-                            }
-                        }
-
-                        ScreenAdjustmentAxis.HORIZONTAL -> {
-                            latestOnHoldDurationChanged.value(
-                                HoldDurationAdjustment.value(
-                                    startingAt = session.holdStart,
-                                    horizontalTranslationPx = dragX,
+                            latestOnBrightnessLevelChanged.value(
+                                SimplifiedBrightnessModePolicy.level(
+                                    startingAt = session.brightnessStart,
+                                    verticalTranslationPx = dragY,
+                                    viewportHeightPx = layerHeightPx,
                                 ),
                             )
                         }
+
+                        ScreenAdjustmentAxis.HORIZONTAL -> Unit
 
                         null -> Unit
                     }
@@ -455,32 +412,6 @@ private fun HomeGestureLayer(
             },
         )
     }
-    val scaleDetector = remember(context) {
-        ScaleGestureDetector(
-            context,
-            object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
-                override fun onScaleBegin(detector: ScaleGestureDetector): Boolean {
-                    session.multiTouch = true
-                    session.clockScale = latestState.value.settings.clockScale
-                    return true
-                }
-
-                override fun onScale(detector: ScaleGestureDetector): Boolean {
-                    val factor = detector.scaleFactor
-                    if (factor.isFinite() && factor > 0f) {
-                        session.clockScale = (session.clockScale * factor).coerceIn(0.7f, 1.35f)
-                        latestOnClockScaleChanged.value(session.clockScale)
-                    }
-                    return true
-                }
-            },
-        ).apply {
-            // Keep the iOS contract: clock scaling requires two fingers. Android's optional
-            // double-tap-and-drag quick scale would otherwise compete with the theme gesture.
-            isQuickScaleEnabled = false
-        }
-    }
-
     Box(
         modifier = modifier
             .onSizeChanged { layerHeightPx = it.height.toFloat() }
@@ -502,13 +433,12 @@ private fun HomeGestureLayer(
                 MotionEvent.ACTION_POINTER_DOWN -> session.multiTouch = true
             }
 
-            scaleDetector.onTouchEvent(event)
             gestureDetector.onTouchEvent(event)
 
             when (event.actionMasked) {
                 MotionEvent.ACTION_UP -> {
-                    if (!session.multiTouch && session.axis == ScreenAdjustmentAxis.HORIZONTAL) {
-                        latestOnAdjustmentFinished.value()
+                    if (!session.multiTouch && session.axis == ScreenAdjustmentAxis.VERTICAL) {
+                        latestOnBrightnessAdjustmentFinished.value()
                     }
                     session.reset()
                 }
@@ -521,19 +451,14 @@ private fun HomeGestureLayer(
 }
 
 private class HomeGestureSession {
-    var lampStart: Float = 0.72f
-    var silhouetteStart: Float = 0.05f
-    var holdStart: Float = 5f
-    var clockScale: Float = 1f
+    var brightnessStart: Float = 0.72f
     var axis: ScreenAdjustmentAxis? = null
     var multiTouch: Boolean = false
     var ignore: Boolean = false
 
     fun begin(state: StandUiState) {
-        lampStart = state.settings.lampIntensity
-        silhouetteStart = state.settings.silhouetteIntensity
-        holdStart = state.settings.holdDurationSeconds
-        clockScale = state.settings.clockScale
+        brightnessStart = state.lampIntensity.takeIf { state.isSessionActive }
+            ?: state.settings.lampIntensity
         axis = null
         multiTouch = false
     }
@@ -547,69 +472,79 @@ private class HomeGestureSession {
 
 @Composable
 private fun Header(state: StandUiState, contentAlpha: Float) {
-    Row(
+    Box(
         modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(9.dp),
     ) {
-        Image(
-            painter = painterResource(R.drawable.stand_brand_icon),
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .size(30.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .graphicsLayer { alpha = contentAlpha },
-        )
-        Text(
-            text = "S.tand",
-            color = Color.White.copy(alpha = contentAlpha * 0.9f),
-            fontWeight = FontWeight.SemiBold,
-        )
-        if (state.isSessionActive) {
-            Surface(
-                color = MaterialTheme.colorScheme.surface,
-                shape = CircleShape,
-                border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.12f)),
-                shadowElevation = 2.dp,
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(5.dp),
-                ) {
-                    Icon(
-                        imageVector = if (state.audioRunning) Icons.Default.GraphicEq else Icons.Default.Bedtime,
-                        contentDescription = null,
-                        tint = if (state.isWritingClip) Color(0xFFFF6B6B) else Color.White.copy(alpha = contentAlpha),
-                        modifier = Modifier.size(14.dp),
-                    )
-                    Text(
-                        text = if (state.environmentMode == EnvironmentDisplayMode.OBJECT) {
-                            "조용히 대기"
-                        } else if (state.audioRunning) {
-                            "감지 중"
-                        } else {
-                            "감지 안 됨"
-                        },
-                        color = Color.White.copy(alpha = contentAlpha * 0.72f),
-                        style = MaterialTheme.typography.labelSmall,
-                    )
-                }
-            }
+        Row(
+            modifier = Modifier.align(Alignment.CenterStart),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
+            Icon(
+                imageVector = if (!state.isSessionActive) {
+                    Icons.Default.StopCircle
+                } else if (state.settings.modePreference == com.armsone.stand.model.StandModePreference.OBJECT) {
+                    Icons.Default.Lock
+                } else {
+                    Icons.Default.Bedtime
+                },
+                contentDescription = null,
+                tint = Color.White.copy(alpha = contentAlpha * 0.62f),
+                modifier = Modifier.size(14.dp),
+            )
+            Text(
+                text = when {
+                    !state.isSessionActive -> "자동 기능 꺼짐"
+                    state.settings.modePreference == com.armsone.stand.model.StandModePreference.OBJECT ->
+                        "오브제 모드 잠금"
+                    else -> state.experienceMode.title
+                },
+                color = Color.White.copy(alpha = contentAlpha * 0.62f),
+                style = MaterialTheme.typography.labelSmall,
+                maxLines = 1,
+            )
         }
-        Spacer(Modifier.weight(1f))
-        Icon(
-            imageVector = if (state.isCharging) Icons.Default.BatteryChargingFull else Icons.Default.AutoAwesome,
-            contentDescription = null,
-            tint = Color.White.copy(alpha = contentAlpha * 0.7f),
-            modifier = Modifier.size(16.dp),
-        )
-        Text(
-            text = state.batteryText,
-            color = Color.White.copy(alpha = contentAlpha * 0.7f),
-            style = MaterialTheme.typography.labelMedium,
-        )
+        Row(
+            modifier = Modifier.align(Alignment.Center),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Image(
+                painter = painterResource(R.drawable.stand_brand_icon),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .graphicsLayer { alpha = contentAlpha },
+            )
+            Text(
+                text = "S.tand",
+                color = Color.White.copy(alpha = contentAlpha * 0.82f),
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+        Row(
+            modifier = Modifier.align(Alignment.CenterEnd),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Icon(
+                imageVector = if (state.isCharging) {
+                    Icons.Default.BatteryChargingFull
+                } else {
+                    Icons.Default.AutoAwesome
+                },
+                contentDescription = null,
+                tint = Color.White.copy(alpha = contentAlpha * 0.62f),
+                modifier = Modifier.size(16.dp),
+            )
+            Text(
+                text = state.batteryText,
+                color = Color.White.copy(alpha = contentAlpha * 0.62f),
+                style = MaterialTheme.typography.labelMedium,
+            )
+        }
     }
 }
 
@@ -621,7 +556,7 @@ private fun DashboardCanvas(
     burnInOffset: com.armsone.stand.ui.components.BurnInOffset,
     isExpanded: Boolean,
     onOpenRadioSettings: () -> Unit,
-    onToggleRadio: () -> Unit,
+    onToggleRadio: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val layout = if (isPortrait) {
@@ -653,23 +588,27 @@ private fun DashboardCanvas(
                     .panelTransform(layout.clock, canvasWidth.value, canvasHeight.value),
             )
 
+            ClockSeconds(
+                clockFont = state.settings.clockFont,
+                isPortrait = isPortrait,
+                contentAlpha = contentAlpha,
+                showsBackground = !clockSecondsOverlapsClock(
+                    layout = layout,
+                    canvasWidthDp = canvasWidth.value,
+                    canvasHeightDp = canvasHeight.value,
+                    isPortrait = isPortrait,
+                ),
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .panelTransform(layout.seconds, canvasWidth.value, canvasHeight.value),
+            )
+
             ClockDateAndSeconds(
                 hourMode = state.settings.clockHourMode,
                 contentAlpha = contentAlpha,
                 modifier = Modifier
                     .align(Alignment.Center)
                     .panelTransform(layout.date, canvasWidth.value, canvasHeight.value),
-            )
-
-            Text(
-                text = "현재 상태 · ${state.experienceMode.title}",
-                color = Color.White.copy(alpha = contentAlpha * 0.74f),
-                style = MaterialTheme.typography.labelLarge,
-                maxLines = 1,
-                textAlign = TextAlign.Center,
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .panelTransform(layout.status, canvasWidth.value, canvasHeight.value),
             )
 
             if (state.isDisplayDark) {
@@ -720,18 +659,41 @@ private fun DashboardCanvas(
                 canvasHeightDp = canvasHeight.value,
             )
 
-            RadioPanel(
-                state = state,
-                contentAlpha = contentAlpha,
-                onClick = if (state.settings.internetRadio == null) {
-                    onOpenRadioSettings
-                } else {
-                    onToggleRadio
-                },
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .panelTransform(layout.radio, canvasWidth.value, canvasHeight.value),
-            )
+            val radioConfigurations = state.settings.internetRadioChannels.take(2)
+            if (radioConfigurations.size == 2 && layout.radiosGrouped) {
+                GroupedRadioPanel(
+                    state = state,
+                    configurations = radioConfigurations,
+                    contentAlpha = contentAlpha,
+                    onClick = onToggleRadio,
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .panelTransform(layout.radio, canvasWidth.value, canvasHeight.value),
+                )
+            } else if (radioConfigurations.isEmpty()) {
+                RadioPanel(
+                    state = state,
+                    configuration = null,
+                    contentAlpha = contentAlpha,
+                    onClick = onOpenRadioSettings,
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .panelTransform(layout.radio, canvasWidth.value, canvasHeight.value),
+                )
+            } else {
+                radioConfigurations.forEachIndexed { index, configuration ->
+                    val transform = if (index == 0) layout.radio else layout.secondaryRadio
+                    RadioPanel(
+                        state = state,
+                        configuration = configuration,
+                        contentAlpha = contentAlpha,
+                        onClick = { onToggleRadio(configuration.id) },
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .panelTransform(transform, canvasWidth.value, canvasHeight.value),
+                    )
+                }
+            }
         }
     }
 }
@@ -739,33 +701,54 @@ private fun DashboardCanvas(
 @Composable
 internal fun RadioPanel(
     state: StandUiState,
+    configuration: InternetRadioConfiguration?,
     contentAlpha: Float,
     onClick: () -> Unit,
+    drawsSurface: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
-    val configured = state.settings.internetRadio
+    val isActive = configuration?.id == activeRadioChannelID(state.internetRadioState)
     val (title, detail) = when (val radioState = state.internetRadioState) {
-        InternetRadioState.Idle -> if (configured == null) {
+        InternetRadioState.Idle -> if (configuration == null) {
             "라디오 설정" to "탭하여 스트림 추가"
         } else {
-            "라디오 재생" to configured.displayName
+            configuration.displayName to "탭하여 재생"
         }
-        InternetRadioState.Loading -> "연결 취소" to "연결 중"
-        is InternetRadioState.Playing -> "라디오 끄기" to "감지·녹음 중지"
-        is InternetRadioState.Failed -> "다시 듣기" to "연결 실패"
+        is InternetRadioState.Loading -> if (isActive) {
+            configuration?.displayName.orEmpty() to "연결 중"
+        } else {
+            configuration?.displayName.orEmpty() to "탭하여 재생"
+        }
+        is InternetRadioState.Playing -> if (isActive) {
+            configuration?.displayName.orEmpty() to "탭하여 끄기"
+        } else {
+            configuration?.displayName.orEmpty() to "탭하여 전환"
+        }
+        is InternetRadioState.Reconnecting -> if (isActive) {
+            configuration?.displayName.orEmpty() to "${radioState.delaySeconds}초 뒤 재연결"
+        } else {
+            configuration?.displayName.orEmpty() to "탭하여 전환"
+        }
+        is InternetRadioState.Failed -> configuration?.displayName.orEmpty() to "다시 듣기"
     }
     Surface(
         onClick = onClick,
         modifier = modifier
-            .width(180.dp)
-            .height(66.dp)
-            .standPanelSurface(
-                isDimmed = contentAlpha <= 0.2f,
-                cornerRadius = 16.dp,
-                splitGap = 2.dp,
+            .width(144.dp)
+            .height(60.dp)
+            .then(
+                if (drawsSurface) {
+                    Modifier.standPanelSurface(
+                        isDimmed = contentAlpha <= 0.2f,
+                        cornerRadius = 13.dp,
+                        splitGap = 2.dp,
+                    )
+                } else {
+                    Modifier
+                },
             ),
         color = Color.Transparent,
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(13.dp),
         shadowElevation = 0.dp,
     ) {
         Row(
@@ -774,7 +757,7 @@ internal fun RadioPanel(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Icon(
-                imageVector = if (state.internetRadioState is InternetRadioState.Playing) {
+                imageVector = if (isActive && state.internetRadioState is InternetRadioState.Playing) {
                     Icons.Default.StopCircle
                 } else {
                     Icons.Default.GraphicEq
@@ -799,6 +782,61 @@ internal fun RadioPanel(
             }
         }
     }
+}
+
+@Composable
+internal fun GroupedRadioPanel(
+    state: StandUiState,
+    configurations: List<InternetRadioConfiguration>,
+    contentAlpha: Float,
+    onClick: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .width(288.dp)
+            .height(60.dp)
+            .standPanelSurface(
+                isDimmed = contentAlpha <= 0.2f,
+                cornerRadius = 13.dp,
+                splitGap = 2.dp,
+            ),
+    ) {
+        configurations.take(2).forEach { configuration ->
+            RadioPanel(
+                state = state,
+                configuration = configuration,
+                contentAlpha = contentAlpha,
+                onClick = { onClick(configuration.id) },
+                drawsSurface = false,
+            )
+        }
+    }
+}
+
+private fun activeRadioChannelID(state: InternetRadioState): String? = when (state) {
+    is InternetRadioState.Loading -> state.channelID
+    is InternetRadioState.Playing -> state.channelID
+    is InternetRadioState.Reconnecting -> state.channelID
+    InternetRadioState.Idle,
+    is InternetRadioState.Failed,
+    -> null
+}
+
+internal fun clockSecondsOverlapsClock(
+    layout: StandScreenLayout,
+    canvasWidthDp: Float,
+    canvasHeightDp: Float,
+    isPortrait: Boolean,
+): Boolean {
+    if (!canvasWidthDp.isFinite() || !canvasHeightDp.isFinite()) return false
+    val clockWidth = if (isPortrait) 288f else 374f
+    val clockHeight = if (isPortrait) 92f else 116f
+    val relativeX = (layout.seconds.x - layout.clock.x) * canvasWidthDp
+    val relativeY = (layout.seconds.y - layout.clock.y) * canvasHeightDp
+    val halfWidth = clockWidth * layout.clock.scale / 2f + 8f
+    val halfHeight = clockHeight * layout.clock.scale / 2f + 8f
+    return abs(relativeX) <= halfWidth && abs(relativeY) <= halfHeight
 }
 
 private fun Modifier.panelTransform(
@@ -964,7 +1002,6 @@ private fun HomeControls(
     onToggleTorch: () -> Unit,
     onCycleMode: () -> Unit,
     onToggleSession: () -> Unit,
-    onSoundThresholdChanged: (Float) -> Unit,
     onToggleOrientation: () -> Unit,
     onOpenRecordings: () -> Unit,
     onOpenAiShot: () -> Unit,
@@ -986,7 +1023,6 @@ private fun HomeControls(
                 AutomaticRecordingControl(
                     state = state,
                     onToggleSession = onToggleSession,
-                    onSoundThresholdChanged = onSoundThresholdChanged,
                 )
                 return@forEach
             }
@@ -1011,22 +1047,10 @@ private const val MaximumSoundThresholdDb = -18f
 private fun AutomaticRecordingControl(
     state: StandUiState,
     onToggleSession: () -> Unit,
-    onSoundThresholdChanged: (Float) -> Unit,
 ) {
-    val density = LocalDensity.current
-    val viewConfiguration = ViewConfiguration.get(LocalContext.current)
-    val thresholdFraction = soundThresholdFraction(state.settings.soundThresholdDB)
+    val thresholdFraction = soundThresholdFraction(state.effectiveSoundThresholdDB)
     val currentLevel = state.audioLevel.coerceIn(0f, 1f)
-    var downX by remember { mutableStateOf(0f) }
-    var downY by remember { mutableStateOf(0f) }
-    var draggingTrack by remember { mutableStateOf(false) }
-    var interactionDecided by remember { mutableStateOf(false) }
-    var controlWidthPx by remember { mutableStateOf(1f) }
-    val trackTopPx = with(density) { 23.dp.toPx() }
-    val trackBottomPx = with(density) { 49.dp.toPx() }
-    val trackHorizontalInsetPx = with(density) { 10.dp.toPx() }
     val currentToggleSession by rememberUpdatedState(onToggleSession)
-    val currentThresholdChanged by rememberUpdatedState(onSoundThresholdChanged)
 
     Box(
         modifier = Modifier
@@ -1036,83 +1060,11 @@ private fun AutomaticRecordingControl(
                 cornerRadius = 14.dp,
                 splitGap = 2.dp,
             )
-            .onSizeChanged { controlWidthPx = it.width.coerceAtLeast(1).toFloat() }
+            .clickable(onClick = currentToggleSession)
             .semantics(mergeDescendants = true) {
                 contentDescription =
                     "자동 녹음, 현재 레벨 ${(currentLevel * 100).roundToInt()}퍼센트, " +
-                    "기준 ${(thresholdFraction * 100).roundToInt()}퍼센트"
-                progressBarRangeInfo = ProgressBarRangeInfo(
-                    current = thresholdFraction,
-                    range = 0f..1f,
-                    steps = 36,
-                )
-                onClick(label = if (state.isSessionActive) "자동 녹음 끄기" else "자동 녹음 시작") {
-                    currentToggleSession()
-                    true
-                }
-                setProgress { value ->
-                    currentThresholdChanged(soundThresholdDb(value))
-                    true
-                }
-            }
-            .pointerInteropFilter { event ->
-                when (event.actionMasked) {
-                    MotionEvent.ACTION_DOWN -> {
-                        downX = event.x
-                        downY = event.y
-                        draggingTrack = false
-                        interactionDecided = false
-                        true
-                    }
-
-                    MotionEvent.ACTION_MOVE -> {
-                        val dx = event.x - downX
-                        val dy = event.y - downY
-                        if (!interactionDecided && hypot(dx, dy) >= viewConfiguration.scaledTouchSlop) {
-                            interactionDecided = true
-                            draggingTrack = abs(dx) > abs(dy) && downY in trackTopPx..trackBottomPx
-                        }
-                        if (draggingTrack) {
-                            currentThresholdChanged(
-                                soundThresholdDb(
-                                    trackFraction(
-                                        x = event.x,
-                                        width = controlWidthPx,
-                                        horizontalInset = trackHorizontalInsetPx,
-                                    ),
-                                ),
-                            )
-                        }
-                        true
-                    }
-
-                    MotionEvent.ACTION_UP -> {
-                        if (draggingTrack) {
-                            currentThresholdChanged(
-                                soundThresholdDb(
-                                    trackFraction(
-                                        x = event.x,
-                                        width = controlWidthPx,
-                                        horizontalInset = trackHorizontalInsetPx,
-                                    ),
-                                ),
-                            )
-                        } else if (!interactionDecided) {
-                            currentToggleSession()
-                        }
-                        draggingTrack = false
-                        interactionDecided = false
-                        true
-                    }
-
-                    MotionEvent.ACTION_CANCEL -> {
-                        draggingTrack = false
-                        interactionDecided = false
-                        true
-                    }
-
-                    else -> true
-                }
+                    "자동 기준 ${(thresholdFraction * 100).roundToInt()}퍼센트"
             },
     ) {
         AutomaticRecordingControlContent(state = state, showReorderHandle = false)
@@ -1124,7 +1076,7 @@ internal fun AutomaticRecordingControlContent(
     state: StandUiState,
     showReorderHandle: Boolean,
 ) {
-    val thresholdFraction = soundThresholdFraction(state.settings.soundThresholdDB)
+    val thresholdFraction = soundThresholdFraction(state.effectiveSoundThresholdDB)
     val currentLevel = state.audioLevel.coerceIn(0f, 1f)
     Box(modifier = Modifier.fillMaxSize()) {
         Row(
@@ -1189,8 +1141,13 @@ internal fun AutomaticRecordingControlContent(
         }
 
         Text(
-            text = "현재 ${(currentLevel * 100).roundToInt()} · 기준 ${(thresholdFraction * 100).roundToInt()} " +
-                "(${state.settings.soundThresholdDB.roundToInt()} dB)",
+            text = if (state.audioRunning && state.noiseCalibrationProgress < 1f) {
+                "현재 ${(currentLevel * 100).roundToInt()} · 주변 소리 학습 " +
+                    "${(state.noiseCalibrationProgress.coerceIn(0f, 1f) * 100).roundToInt()}%"
+            } else {
+                "현재 ${(currentLevel * 100).roundToInt()} · 자동 기준 " +
+                    "${(thresholdFraction * 100).roundToInt()}"
+            },
             color = Color.White.copy(alpha = 0.52f),
             style = MaterialTheme.typography.labelSmall,
             fontWeight = FontWeight.Medium,
@@ -1214,16 +1171,6 @@ internal fun AutomaticRecordingControlContent(
 private fun soundThresholdFraction(soundThresholdDb: Float): Float =
     ((soundThresholdDb.coerceIn(MinimumSoundThresholdDb, MaximumSoundThresholdDb) + 70f) / 55f)
         .coerceIn(0f, 1f)
-
-private fun soundThresholdDb(fraction: Float): Float =
-    (fraction.coerceIn(0f, 1f) * 55f - 70f)
-        .coerceIn(MinimumSoundThresholdDb, MaximumSoundThresholdDb)
-
-private fun trackFraction(x: Float, width: Float, horizontalInset: Float): Float {
-    val safeInset = horizontalInset.coerceAtLeast(0f)
-    val trackWidth = (width - safeInset * 2f).coerceAtLeast(1f)
-    return ((x - safeInset) / trackWidth).coerceIn(0f, 1f)
-}
 
 @Composable
 private fun HomeControl(

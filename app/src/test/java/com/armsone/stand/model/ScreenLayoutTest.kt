@@ -9,22 +9,30 @@ class ScreenLayoutTest {
     @Test
     fun portraitAndLandscapeDefaultsMatchIosCoordinatesAndOrders() {
         val portrait = StandScreenLayout.Portrait
-        assertEquals(PanelTransform(0f, 0f, 1f), portrait.clock)
+        assertEquals(PanelTransform(0f, 0f, 1.291905f), portrait.clock)
+        assertEquals(PanelTransform(0.3355058f, 0.0578509f, 1f), portrait.seconds)
         assertEquals(
-            PanelTransform(0f, -0.22811054f, 0.8692272f),
+            PanelTransform(0f, -0.2049743f, 0.8692272f),
             portrait.weatherIcon,
         )
         assertEquals(portrait.weatherIcon, portrait.weatherTemperature)
         assertEquals(portrait.weatherIcon, portrait.weatherCondition)
-        assertEquals(PanelTransform(0f, 0.10f, 1f), portrait.date)
+        assertEquals(PanelTransform(0f, 0.11799486f, 1f), portrait.date)
         assertEquals(PanelTransform(0f, 0.15f, 1f), portrait.status)
         assertEquals(PanelTransform(0f, 0.21f, 1f), portrait.brightnessRule)
         assertEquals(PanelTransform(0f, 0.20698372f, 1f), portrait.battery)
+        assertEquals(PanelTransform(0f, -0.31070694f, 1.047652f), portrait.radio)
+        assertEquals(
+            PanelTransform(-0.17436153f, 0.31097257f, 0.75f),
+            portrait.secondaryRadio,
+        )
+        assertTrue(portrait.radiosGrouped)
         assertEquals(listOf(1, 1, 1), portrait.weatherGroupIds)
         assertEquals(StandControlKind.DefaultOrder, portrait.controlOrder)
 
         val landscape = StandScreenLayout.Landscape
         assertEquals(PanelTransform(0f, 0.07155323f, 1.2810187f), landscape.clock)
+        assertEquals(PanelTransform(0.25088888f, 0.21401048f, 1f), landscape.seconds)
         assertEquals(
             PanelTransform(0f, -0.25582024f, 0.68640333f),
             landscape.weatherIcon,
@@ -32,30 +40,21 @@ class ScreenLayoutTest {
         assertEquals(PanelTransform(-0.176f, -0.0826527f, 1f), landscape.date)
         assertEquals(PanelTransform(0f, 0.4646597f, 1f), landscape.status)
         assertEquals(PanelTransform(0f, 0.32f, 1f), landscape.brightnessRule)
-        assertEquals(PanelTransform(0f, 0.27773124f, 1f), landscape.battery)
-        assertEquals(listOf(1, 1, 1), landscape.weatherGroupIds)
+        assertEquals(PanelTransform(0f, 0.29780105f, 1f), landscape.battery)
+        assertEquals(PanelTransform(0.40844443f, -0.276274f, 0.75f), landscape.radio)
         assertEquals(
-            listOf(
-                StandControlKind.FLASHLIGHT,
-                StandControlKind.STOP_DETECTION,
-                StandControlKind.BRIGHTNESS,
-                StandControlKind.RECORDINGS,
-                StandControlKind.SETTINGS,
-            ),
-            landscape.controlOrder,
+            PanelTransform(-0.40577778f, -0.276274f, 0.75f),
+            landscape.secondaryRadio,
         )
+        assertFalse(landscape.radiosGrouped)
+        assertEquals(listOf(1, 1, 1), landscape.weatherGroupIds)
+        assertEquals(StandControlKind.DefaultOrder, landscape.controlOrder)
     }
 
     @Test
     fun controlOrderNormalizationRemovesDuplicatesAndCompletesMissingKinds() {
         assertEquals(
-            listOf(
-                StandControlKind.SETTINGS,
-                StandControlKind.FLASHLIGHT,
-                StandControlKind.BRIGHTNESS,
-                StandControlKind.STOP_DETECTION,
-                StandControlKind.RECORDINGS,
-            ),
+            listOf(StandControlKind.SETTINGS, StandControlKind.RECORDINGS),
             StandControlKind.normalizedOrder(
                 listOf(
                     StandControlKind.SETTINGS,
@@ -69,13 +68,7 @@ class ScreenLayoutTest {
             StandControlKind.normalizedOrder(null),
         )
         assertEquals(
-            listOf(
-                StandControlKind.SETTINGS,
-                StandControlKind.FLASHLIGHT,
-                StandControlKind.BRIGHTNESS,
-                StandControlKind.STOP_DETECTION,
-                StandControlKind.RECORDINGS,
-            ),
+            listOf(StandControlKind.SETTINGS, StandControlKind.RECORDINGS),
             StandControlKind.normalizedRawOrder(
                 listOf(
                     "settings",
@@ -219,6 +212,32 @@ class ScreenLayoutTest {
 
         assertEquals(listOf(0, 1, 2), retained.weatherGroupIds)
         assertEquals(listOf(1, 1, 2), merged.weatherGroupIds)
+    }
+
+    @Test
+    fun radioOverlapBoundaryKeepsThirtyNinePercentMergesFortyAndSplits() {
+        val separated = StandScreenLayout.Landscape.copy(
+            radio = PanelTransform(x = -0.2f, y = 0.1f, scale = 1f),
+            secondaryRadio = PanelTransform(x = 0.2f, y = 0.1f, scale = 0.8f),
+            radiosGrouped = false,
+        )
+        val first = FloatRect(x = 0f, y = 0f, width = 100f, height = 100f)
+        val thirtyNinePercent = FloatRect(x = 61f, y = 0f, width = 100f, height = 100f)
+        val fortyPercent = FloatRect(x = 60f, y = 0f, width = 100f, height = 100f)
+
+        assertEquals(
+            separated,
+            RadioGroupPolicy.mergeIfOverlapping(separated, first, thirtyNinePercent),
+        )
+        val grouped = RadioGroupPolicy.mergeIfOverlapping(separated, first, fortyPercent)
+        assertTrue(grouped.radiosGrouped)
+        assertEquals(PanelTransform(x = 0f, y = 0.1f, scale = 0.8f), grouped.radio)
+        assertEquals(grouped.radio, grouped.secondaryRadio)
+
+        val split = RadioGroupPolicy.split(grouped)
+        assertFalse(split.radiosGrouped)
+        assertEquals(-0.11f, split.radio.x, 0.0001f)
+        assertEquals(0.11f, split.secondaryRadio.x, 0.0001f)
     }
 
     @Test

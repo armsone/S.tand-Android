@@ -7,6 +7,15 @@ import org.junit.Test
 
 class StandPoliciesTest {
     @Test
+    fun faceDownBlackoutRequiresActiveSessionAndAlwaysBlocksTorch() {
+        assertFalse(FaceDownLightingPolicy.shouldBlackout(false, true))
+        assertTrue(FaceDownLightingPolicy.shouldBlackout(true, true))
+        assertFalse(FaceDownLightingPolicy.shouldBlackout(true, false))
+        assertFalse(FaceDownLightingPolicy.allowsTorch(true))
+        assertTrue(FaceDownLightingPolicy.allowsTorch(false))
+    }
+
+    @Test
     fun screenTapDimsOnlyWhileHolding() {
         assertEquals(ScreenTapLampAction.DIM, ScreenTapPolicy.action(LampPhase.HOLDING))
         assertEquals(ScreenTapLampAction.BRIGHTEN, ScreenTapPolicy.action(LampPhase.FADING))
@@ -30,9 +39,9 @@ class StandPoliciesTest {
     }
 
     @Test
-    fun torchMatchesIosNormalAndMovementRules() {
+    fun torchIsLimitedToEnabledMateStartleEvents() {
         assertEquals(
-            1.0,
+            0.0,
             LampTorchLightingPolicy.maximumLevel(true, false, EnvironmentDisplayMode.MATE),
             0.0,
         )
@@ -42,8 +51,13 @@ class StandPoliciesTest {
             0.0,
         )
         assertEquals(
-            0.1,
+            0.0,
             LampTorchLightingPolicy.maximumLevel(false, true, EnvironmentDisplayMode.MATE),
+            0.0,
+        )
+        assertEquals(
+            1.0,
+            LampTorchLightingPolicy.maximumLevel(true, true, EnvironmentDisplayMode.MATE),
             0.0,
         )
         assertEquals(

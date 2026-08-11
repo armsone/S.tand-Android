@@ -69,6 +69,7 @@ class AudioMonitor(
     private var audioRecord: AudioRecord? = null
 
     private val detector = AudioEventDetector(detectorConfiguration.copy())
+    private val adaptiveNoiseTracker = AdaptiveNoiseFloorTracker()
     private val classifier = SleepSoundClassifier()
     private val preRoll = Pcm16PreRollBuffer(
         maximumSamples = (sampleRate * PRE_ROLL_SECONDS).toInt(),
@@ -81,6 +82,15 @@ class AudioMonitor(
 
     private val _normalizedLevel = MutableStateFlow(0.0)
     val normalizedLevel: StateFlow<Double> = _normalizedLevel.asStateFlow()
+
+    private val _adaptiveNoiseFloorDB = MutableStateFlow<Float?>(null)
+    val adaptiveNoiseFloorDB: StateFlow<Float?> = _adaptiveNoiseFloorDB.asStateFlow()
+
+    private val _effectiveSoundThresholdDB = MutableStateFlow(-50f)
+    val effectiveSoundThresholdDB: StateFlow<Float> = _effectiveSoundThresholdDB.asStateFlow()
+
+    private val _noiseCalibrationProgress = MutableStateFlow(0.0)
+    val noiseCalibrationProgress: StateFlow<Double> = _noiseCalibrationProgress.asStateFlow()
 
     private val _isWritingClip = MutableStateFlow(false)
     val isWritingClip: StateFlow<Boolean> = _isWritingClip.asStateFlow()
@@ -282,7 +292,14 @@ class AudioMonitor(
             sampleRate = sampleRate,
         )
         val nowNanos = SystemClock.elapsedRealtimeNanos()
-        detector.configuration = requestedConfiguration
+        val adaptiveState = adaptiveNoiseTracker.observe(
+            rmsDB = analysis.rmsDB,
+            duration = analysis.features.duration,
+        )
+        detector.configuration = requestedConfiguration.copy(
+            soundThresholdDB = adaptiveState.effectiveSoundThresholdDB,
+            clapPeakThresholdDB = adaptiveState.effectiveClapPeakThresholdDB,
+        )
         val detection = detector.analyze(
             rmsDB = analysis.rmsDB,
             peakDB = analysis.peakDB,
@@ -314,6 +331,9 @@ class AudioMonitor(
         ) {
             lastLevelPublicationNanos = nowNanos
             _normalizedLevel.value = analysis.normalizedLevel
+            _adaptiveNoiseFloorDB.value = adaptiveState.noiseFloorDB
+            _effectiveSoundThresholdDB.value = adaptiveState.effectiveSoundThresholdDB
+            _noiseCalibrationProgress.value = adaptiveState.calibrationProgress
         }
     }
 
@@ -544,10 +564,14 @@ class AudioMonitor(
 
     private fun resetProcessingState() {
         detector.reset()
+        adaptiveNoiseTracker.reset()
         classifier.reset()
         preRoll.clear()
         lastLevelPublicationNanos = 0L
         _normalizedLevel.value = 0.0
+        _adaptiveNoiseFloorDB.value = null
+        _effectiveSoundThresholdDB.value = AdaptiveSoundThresholdPolicy.soundThreshold(null)
+        _noiseCalibrationProgress.value = 0.0
         _isWritingClip.value = false
     }
 

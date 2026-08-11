@@ -32,9 +32,6 @@ enum class StandControlKind(val rawValue: String) {
 
     companion object {
         val DefaultOrder: List<StandControlKind> = listOf(
-            FLASHLIGHT,
-            BRIGHTNESS,
-            STOP_DETECTION,
             RECORDINGS,
             SETTINGS,
         )
@@ -64,6 +61,7 @@ enum class WeatherPiece(val index: Int) {
 
 data class StandScreenLayout(
     var clock: PanelTransform = PanelTransform.Centered,
+    var seconds: PanelTransform = PanelTransform(x = 0.27f, y = 0.036f),
     var weatherIcon: PanelTransform,
     var weatherTemperature: PanelTransform,
     var weatherCondition: PanelTransform,
@@ -72,11 +70,14 @@ data class StandScreenLayout(
     var brightnessRule: PanelTransform,
     var battery: PanelTransform = PanelTransform(x = 0f, y = 0.18f),
     var radio: PanelTransform = PanelTransform(x = 0f, y = 0.28f),
+    var secondaryRadio: PanelTransform = PanelTransform(x = -0.26f, y = 0.215f, scale = 0.75f),
+    var radiosGrouped: Boolean = false,
     var weatherGroupIds: List<Int>,
     var controlOrder: List<StandControlKind> = StandControlKind.DefaultOrder,
 ) {
     init {
         clock = clock.normalized()
+        seconds = seconds.normalized()
         weatherIcon = weatherIcon.normalized()
         weatherTemperature = weatherTemperature.normalized()
         weatherCondition = weatherCondition.normalized()
@@ -85,6 +86,7 @@ data class StandScreenLayout(
         brightnessRule = brightnessRule.normalized()
         battery = battery.normalized()
         radio = radio.normalized()
+        secondaryRadio = secondaryRadio.normalized()
         weatherGroupIds = WeatherGroupPolicy.normalizedIds(weatherGroupIds)
         controlOrder = StandControlKind.normalizedOrder(controlOrder)
     }
@@ -111,19 +113,26 @@ data class StandScreenLayout(
             get() {
                 val weather = PanelTransform(
                     x = 0f,
-                    y = -0.22811054f,
+                    y = -0.2049743f,
                     scale = 0.8692272f,
                 )
                 return StandScreenLayout(
-                    clock = PanelTransform(x = 0f, y = 0f),
+                    clock = PanelTransform(x = 0f, y = 0f, scale = 1.291905f),
+                    seconds = PanelTransform(x = 0.3355058f, y = 0.0578509f),
                     weatherIcon = weather,
                     weatherTemperature = weather,
                     weatherCondition = weather,
-                    date = PanelTransform(x = 0f, y = 0.10f),
+                    date = PanelTransform(x = 0f, y = 0.11799486f),
                     status = PanelTransform(x = 0f, y = 0.15f),
                     brightnessRule = PanelTransform(x = 0f, y = 0.21f),
                     battery = PanelTransform(x = 0f, y = 0.20698372f),
-                    radio = PanelTransform(x = 0f, y = 0.29f, scale = 0.9f),
+                    radio = PanelTransform(x = 0f, y = -0.31070694f, scale = 1.047652f),
+                    secondaryRadio = PanelTransform(
+                        x = -0.17436153f,
+                        y = 0.31097257f,
+                        scale = 0.75f,
+                    ),
+                    radiosGrouped = true,
                     weatherGroupIds = listOf(1, 1, 1),
                     controlOrder = StandControlKind.DefaultOrder,
                 )
@@ -142,22 +151,23 @@ data class StandScreenLayout(
                         y = 0.07155323f,
                         scale = 1.2810187f,
                     ),
+                    seconds = PanelTransform(x = 0.25088888f, y = 0.21401048f),
                     weatherIcon = weather,
                     weatherTemperature = weather,
                     weatherCondition = weather,
                     date = PanelTransform(x = -0.176f, y = -0.0826527f),
                     status = PanelTransform(x = 0f, y = 0.4646597f),
                     brightnessRule = PanelTransform(x = 0f, y = 0.32f),
-                    battery = PanelTransform(x = 0f, y = 0.27773124f),
-                    radio = PanelTransform(x = 0.25f, y = 0.30f, scale = 0.85f),
-                    weatherGroupIds = listOf(1, 1, 1),
-                    controlOrder = listOf(
-                        StandControlKind.FLASHLIGHT,
-                        StandControlKind.STOP_DETECTION,
-                        StandControlKind.BRIGHTNESS,
-                        StandControlKind.RECORDINGS,
-                        StandControlKind.SETTINGS,
+                    battery = PanelTransform(x = 0f, y = 0.29780105f),
+                    radio = PanelTransform(x = 0.40844443f, y = -0.276274f, scale = 0.75f),
+                    secondaryRadio = PanelTransform(
+                        x = -0.40577778f,
+                        y = -0.276274f,
+                        scale = 0.75f,
                     ),
+                    radiosGrouped = false,
+                    weatherGroupIds = listOf(1, 1, 1),
+                    controlOrder = StandControlKind.DefaultOrder,
                 )
             }
     }
@@ -209,6 +219,7 @@ data class FloatRect(
 
 object PanelEditingPolicy {
     const val WeatherMergeOverlapThreshold = 0.40f
+    const val RadioMergeOverlapThreshold = 0.40f
     const val MinimumPanelScale = 0.30f
     const val MaximumPanelScale = 2.00f
     private const val DefaultPanelScale = 1f
@@ -413,6 +424,43 @@ object PanelEditingPolicy {
         val intersectionWidth = max(0f, right - left)
         val intersectionHeight = max(0f, bottom - top)
         return ((intersectionWidth * intersectionHeight) / smallerArea).coerceIn(0f, 1f)
+    }
+}
+
+object RadioGroupPolicy {
+    private const val SplitHorizontalOffset = 0.11f
+
+    fun mergeIfOverlapping(
+        layout: StandScreenLayout,
+        firstBounds: FloatRect,
+        secondBounds: FloatRect,
+    ): StandScreenLayout {
+        if (layout.radiosGrouped ||
+            PanelEditingPolicy.overlapFraction(firstBounds, secondBounds) <
+            PanelEditingPolicy.RadioMergeOverlapThreshold
+        ) {
+            return layout
+        }
+        val merged = PanelTransform(
+            x = (layout.radio.x + layout.secondaryRadio.x) / 2f,
+            y = (layout.radio.y + layout.secondaryRadio.y) / 2f,
+            scale = min(layout.radio.scale, layout.secondaryRadio.scale),
+        ).normalized()
+        return layout.copy(
+            radio = merged,
+            secondaryRadio = merged,
+            radiosGrouped = true,
+        )
+    }
+
+    fun split(layout: StandScreenLayout): StandScreenLayout {
+        if (!layout.radiosGrouped) return layout
+        val center = layout.radio.normalized()
+        return layout.copy(
+            radio = center.copy(x = center.x - SplitHorizontalOffset),
+            secondaryRadio = center.copy(x = center.x + SplitHorizontalOffset),
+            radiosGrouped = false,
+        )
     }
 }
 

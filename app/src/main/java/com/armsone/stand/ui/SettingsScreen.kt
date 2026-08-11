@@ -30,15 +30,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.BatterySaver
-import androidx.compose.material.icons.filled.Camera
-import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.DarkMode
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.Lightbulb
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.RestartAlt
-import androidx.compose.material.icons.filled.ScreenRotation
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material3.AlertDialog
@@ -50,9 +46,10 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -85,12 +82,13 @@ import com.armsone.stand.BuildConfig
 import com.armsone.stand.R
 import com.armsone.stand.model.AppSettings
 import com.armsone.stand.model.ClockFontChoice
-import com.armsone.stand.model.ClockHourMode
 import com.armsone.stand.model.ClockVisualPolicy
-import com.armsone.stand.model.OrientationPreference
+import com.armsone.stand.model.SettingsInformationArchitecture
+import com.armsone.stand.model.SettingsSectionKind
 import com.armsone.stand.model.StandDisplayTheme
 import com.armsone.stand.model.StandModePreference
 import com.armsone.stand.platform.AmbientCameraState
+import com.armsone.stand.platform.InternetRadioState
 import com.armsone.stand.ui.components.flipTextSplitMask
 import com.armsone.stand.ui.components.standPanelSurface
 import com.armsone.stand.ui.theme.fontFamily
@@ -101,26 +99,32 @@ import kotlin.math.roundToInt
 fun SettingsScreen(
     state: StandUiState,
     onUpdate: ((AppSettings) -> AppSettings) -> Unit,
-    onRefreshWeather: () -> Unit,
     onRestoreRecommended: () -> Unit,
-    onOpenScreenEditor: () -> Unit,
+    onToggleInternetRadio: (String) -> Unit,
+    onSaveInternetRadio: (String?, String, String) -> String?,
+    onDeleteInternetRadio: (String) -> Unit,
+    onOpenRecordings: () -> Unit,
     onRequestMicrophonePermission: () -> Unit,
     onRequestApproximateLocationPermission: () -> Unit,
     onRequestCameraPermission: () -> Unit,
     onCameraAmbientSensingChanged: (Boolean) -> Unit,
-    onMeasureAmbientCameraBrightness: () -> Unit,
     onOpenAppSettings: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var showResetConfirmation by remember { mutableStateOf(false) }
     var selectedLicense by remember { mutableStateOf<ClockFontChoice?>(null) }
+    var editingRadioID by remember { mutableStateOf<String?>(null) }
+    var addingRadio by remember { mutableStateOf(false) }
+    var radioDraftName by remember { mutableStateOf("") }
+    var radioDraftURL by remember { mutableStateOf("") }
+    var radioValidationMessage by remember { mutableStateOf<String?>(null) }
     val settings = state.settings
     val missingPermissionCount = listOf(
-        state.hasMicrophonePermission,
-        state.hasApproximateLocationPermission,
-        state.hasCameraPermission,
-    ).count { granted -> !granted }
+        settings.soundSensingEnabled && !state.hasMicrophonePermission,
+        settings.weatherLocationEnabled && !state.hasApproximateLocationPermission,
+        settings.cameraAmbientSensingEnabled && !state.hasCameraPermission,
+    ).count { it }
     val cameraAmbientDetail = when (state.ambientCameraState) {
         AmbientCameraState.DISABLED -> "필요할 때 약 1초 동안 밝기만 계산"
         AmbientCameraState.PERMISSION_NEEDED -> "카메라 권한 필요"
@@ -158,361 +162,346 @@ fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item {
-                SettingsCard(
-                    title = "모드",
-                    subtitle = "자동 또는 원하는 상태를 즉시 유지합니다.",
-                    icon = Icons.Default.DarkMode,
-                ) {
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        StandModePreference.entries.forEach { preference ->
-                            FilterChip(
-                                selected = settings.modePreference == preference,
-                                onClick = { onUpdate { it.copy(modePreference = preference) } },
-                                label = { Text(preference.title) },
-                            )
-                        }
-                    }
-                    Text(
-                        text = "현재 ${state.experienceMode.title}" +
-                            (state.rawAmbientLux?.let { " · ${it.roundToInt()} lx" } ?: ""),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-            }
-
-            item {
-                SettingsCard(
-                    title = "화면과 시계",
-                    subtitle = "테마, 시간제, 크기와 글꼴을 정합니다.",
-                    icon = Icons.Default.TextFields,
-                ) {
-                    LabeledSwitch(
-                        title = "그레이스케일 테마",
-                        detail = "홈 화면을 두 번 눌러서도 바꿀 수 있어요.",
-                        checked = settings.displayTheme == StandDisplayTheme.GRAYSCALE,
-                    ) { enabled ->
-                        onUpdate {
-                            it.copy(
-                                displayTheme = if (enabled) {
-                                    StandDisplayTheme.GRAYSCALE
+                SettingsHero(
+                    state = state,
+                    onToggleMode = {
+                        onUpdate { current ->
+                            current.copy(
+                                modePreference = if (
+                                    state.experienceMode ==
+                                    com.armsone.stand.model.StandExperienceMode.OBJECT
+                                ) {
+                                    StandModePreference.MATE
                                 } else {
-                                    StandDisplayTheme.COLOR
+                                    StandModePreference.OBJECT
                                 },
                             )
                         }
-                    }
-                    SettingSlider(
-                        title = "시계 크기",
-                        valueText = "${(settings.clockScale * 100).roundToInt()}%",
-                        value = settings.clockScale,
-                        range = 0.7f..1.35f,
-                        onValueChange = { value -> onUpdate { it.copy(clockScale = value) } },
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        ClockHourMode.entries.forEach { mode ->
-                            FilterChip(
-                                selected = settings.clockHourMode == mode,
-                                onClick = { onUpdate { it.copy(clockHourMode = mode) } },
-                                label = {
-                                    Text(if (mode == ClockHourMode.TWELVE) "12시간" else "24시간")
-                                },
-                            )
-                        }
-                    }
-                    Text(
-                        text = "시계 글꼴",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Text(
-                        text = "실제 숫자 모양을 눌러 선택하세요 · ${settings.clockFont.displayName}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    ClockFontPreviewGrid(
-                        selectedFont = settings.clockFont,
-                        onFontSelected = { font ->
-                            onUpdate { it.copy(clockFont = font) }
-                        },
-                    )
-                    TextButton(
-                        onClick = onOpenScreenEditor,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Icon(Icons.Default.Edit, contentDescription = null)
-                        Text(" 현재 방향 화면 편집")
-                    }
-                }
-            }
-
-            item {
-                SettingsCard(
-                    title = "조명",
-                    subtitle = "화면 조명과 어두운 실루엣의 세기를 조절합니다.",
-                    icon = Icons.Default.Lightbulb,
-                ) {
-                    SettingSlider(
-                        title = "조명 밝기",
-                        valueText = "${(settings.lampIntensity * 100).roundToInt()}%",
-                        value = settings.lampIntensity,
-                        range = 0.15f..1f,
-                        onValueChange = { value -> onUpdate { it.copy(lampIntensity = value) } },
-                    )
-                    SettingSlider(
-                        title = "실루엣 밝기",
-                        valueText = "${(settings.silhouetteIntensity * 100).roundToInt()}%",
-                        value = settings.silhouetteIntensity,
-                        range = 0.005f..0.2f,
-                        onValueChange = { value -> onUpdate { it.copy(silhouetteIntensity = value) } },
-                    )
-                    SettingSlider(
-                        title = "점등 유지",
-                        valueText = durationText(settings.holdDurationSeconds),
-                        value = settings.holdDurationSeconds,
-                        range = 5f..300f,
-                        steps = 58,
-                        onValueChange = { value ->
-                            onUpdate { it.copy(holdDurationSeconds = (value / 5f).roundToInt() * 5f) }
-                        },
-                    )
-                    SettingSlider(
-                        title = "감광 시간",
-                        valueText = "${settings.fadeDurationSeconds.roundToInt()}초",
-                        value = settings.fadeDurationSeconds,
-                        range = 1f..120f,
-                        onValueChange = { value -> onUpdate { it.copy(fadeDurationSeconds = value) } },
-                    )
-                    LabeledSwitch(
-                        title = "매이트 자동 감광",
-                        detail = "오브제 모드는 직접 어둡게 할 때까지 밝게 유지됩니다.",
-                        checked = settings.automaticDimmingEnabled,
-                    ) { enabled -> onUpdate { it.copy(automaticDimmingEnabled = enabled) } }
-                    LabeledSwitch(
-                        title = "플래시 연동",
-                        detail = if (state.torchAvailable) {
-                            "매이트 점등에 후면 플래시를 함께 사용합니다."
-                        } else {
-                            "이 기기에는 사용할 수 있는 후면 플래시가 없습니다."
-                        },
-                        checked = settings.torchEnabled,
-                    ) { enabled -> onUpdate { it.copy(torchEnabled = enabled) } }
-                }
-            }
-
-            item {
-                SettingsCard(
-                    title = "감지와 녹음",
-                    subtitle = "매이트 모드에서만 마이크와 움직임을 살핍니다.",
-                    icon = Icons.Default.GraphicEq,
-                ) {
-                    LabeledSwitch(
-                        title = "코골이·잠꼬대 후보 저장",
-                        detail = "의료 진단이 아닌 기기 내 휴리스틱 분류입니다.",
-                        checked = settings.recordingEnabled,
-                    ) { enabled -> onUpdate { it.copy(recordingEnabled = enabled) } }
-                    LabeledSwitch(
-                        title = "소리·움직임으로 점등",
-                        detail = "박수, 뒤척임 또는 기기 움직임에 반응합니다.",
-                        checked = settings.multiStimulusWakeEnabled,
-                    ) { enabled -> onUpdate { it.copy(multiStimulusWakeEnabled = enabled) } }
-                    SettingSlider(
-                        title = "마이크 감지 기준",
-                        valueText = "${settings.soundThresholdDB.roundToInt()} dB",
-                        value = settings.soundThresholdDB,
-                        range = -55f..-18f,
-                        steps = 36,
-                        onValueChange = { value -> onUpdate { it.copy(soundThresholdDB = value) } },
-                    )
-                }
-            }
-
-            item {
-                SettingsCard(
-                    title = "주변 밝기와 날씨",
-                    subtitle = "조도 센서와 선택한 카메라 보조, 대략적 위치를 사용합니다.",
-                    icon = Icons.Default.Cloud,
-                ) {
-                    LabeledSwitch(
-                        title = "조도 센서 자동 전환",
-                        detail = "사진이나 영상을 만들지 않고 센서 값만 기기 안에서 사용합니다.",
-                        checked = settings.ambientSensingEnabled,
-                    ) { enabled -> onUpdate { it.copy(ambientSensingEnabled = enabled) } }
-                    LabeledSwitch(
-                        title = "카메라 밝기 보조",
-                        detail = cameraAmbientDetail,
-                        checked = settings.cameraAmbientSensingEnabled,
-                    ) { enabled -> onCameraAmbientSensingChanged(enabled) }
-                    if (settings.cameraAmbientSensingEnabled) {
-                        TextButton(
-                            onClick = onMeasureAmbientCameraBrightness,
-                            enabled = state.ambientCameraState != AmbientCameraState.MEASURING,
-                        ) {
-                            Icon(Icons.Default.Camera, contentDescription = null)
-                            Spacer(Modifier.width(6.dp))
-                            Text(
-                                if (state.ambientCameraState == AmbientCameraState.MEASURING) {
-                                    "확인 중"
-                                } else {
-                                    "지금 확인"
-                                },
-                            )
-                        }
-                        Text(
-                            "사진과 영상은 저장하거나 전송하지 않습니다. 조도 센서가 없는 기기의 자동 판단을 보조합니다.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    SettingSlider(
-                        title = "밝기 기준",
-                        valueText = "${(settings.brightnessModeThreshold * 100).roundToInt()}%",
-                        value = settings.brightnessModeThreshold,
-                        range = 0f..1f,
-                        onValueChange = { value ->
-                            onUpdate { it.copy(brightnessModeThreshold = value) }
-                        },
-                    )
-                    TextButton(onClick = onRefreshWeather) {
-                        Text("현재 위치 날씨 새로고침")
-                    }
-                    state.weatherMessage?.let {
-                        Text(
-                            text = it,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-            }
-
-            item {
-                SettingsCard(
-                    title = "앱 권한",
-                    subtitle = if (missingPermissionCount == 0) {
-                        "마이크, 대략적 위치, 카메라 권한이 모두 허용되었습니다."
-                    } else {
-                        "필요한 권한 ${missingPermissionCount}개가 허용되지 않았습니다."
                     },
-                    icon = Icons.Default.Security,
-                ) {
-                    PermissionStatusRow(
-                        title = "마이크",
-                        detail = "매이트 모드의 소리 감지와 기기 내 수면 소리 저장",
-                        granted = state.hasMicrophonePermission,
-                        onRequest = onRequestMicrophonePermission,
-                    )
-                    HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
-                    PermissionStatusRow(
-                        title = "대략적 위치",
-                        detail = "현재 위치의 날씨를 불러올 때만 사용",
-                        granted = state.hasApproximateLocationPermission,
-                        onRequest = onRequestApproximateLocationPermission,
-                    )
-                    HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
-                    PermissionStatusRow(
-                        title = "카메라",
-                        detail = "후면 플래시 연동과 선택한 밝기 보조 측정",
-                        granted = state.hasCameraPermission,
-                        onRequest = onRequestCameraPermission,
-                    )
-                    Text(
-                        "권한 요청 창이 다시 나타나지 않으면 시스템 앱 설정에서 직접 허용해 주세요.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    TextButton(
-                        onClick = onOpenAppSettings,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text("시스템 앱 권한 설정 열기")
-                    }
-                }
+                )
             }
 
-            item {
-                SettingsCard(
-                    title = "화면 방향과 기기",
-                    subtitle = "대화면에서는 Android 정책상 방향 고정이 제한될 수 있습니다.",
-                    icon = Icons.Default.ScreenRotation,
-                ) {
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
+            items(
+                items = SettingsInformationArchitecture.CardOrder,
+                key = { section -> section.name },
+            ) { section ->
+                when (section) {
+                    SettingsSectionKind.INTERNET_RADIO -> SettingsCard(
+                        title = "인터넷 라디오",
+                        subtitle = if (settings.internetRadioChannels.isEmpty()) {
+                            "이 화면에서 채널을 추가하고 바로 재생합니다."
+                        } else {
+                            "${settings.internetRadioChannels.size}개 채널 · 최대 2개"
+                        },
+                        icon = Icons.Default.Radio,
                     ) {
-                        OrientationPreference.entries.forEach { preference ->
-                            FilterChip(
-                                selected = settings.orientationPreference == preference,
-                                onClick = {
-                                    onUpdate { it.copy(orientationPreference = preference) }
+                        settings.internetRadioChannels.forEach { channel ->
+                            val active = when (val radioState = state.internetRadioState) {
+                                is InternetRadioState.Loading -> radioState.channelID == channel.id
+                                is InternetRadioState.Playing -> radioState.channelID == channel.id
+                                is InternetRadioState.Reconnecting -> radioState.channelID == channel.id
+                                else -> false
+                            }
+                            val status = when (val radioState = state.internetRadioState) {
+                                is InternetRadioState.Loading -> if (active) "연결 중" else "대기 중"
+                                is InternetRadioState.Playing -> if (active) "재생 중" else "대기 중"
+                                is InternetRadioState.Reconnecting -> if (active) {
+                                    "${radioState.delaySeconds}초 뒤 재연결"
+                                } else {
+                                    "대기 중"
+                                }
+                                is InternetRadioState.Failed -> radioState.message
+                                InternetRadioState.Idle -> "대기 중"
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                TextButton(
+                                    onClick = { onToggleInternetRadio(channel.id) },
+                                    modifier = Modifier.weight(1f),
+                                ) {
+                                    Column(Modifier.fillMaxWidth()) {
+                                        Text(channel.displayName, fontWeight = FontWeight.SemiBold)
+                                        Text(status, style = MaterialTheme.typography.bodySmall)
+                                    }
+                                }
+                                TextButton(onClick = {
+                                    editingRadioID = channel.id
+                                    addingRadio = false
+                                    radioDraftName = channel.displayName
+                                    radioDraftURL = channel.streamUrl
+                                    radioValidationMessage = null
+                                }) { Text("수정") }
+                            }
+                            if (editingRadioID == channel.id) {
+                                InlineRadioEditor(
+                                    name = radioDraftName,
+                                    url = radioDraftURL,
+                                    error = radioValidationMessage,
+                                    onNameChange = { radioDraftName = it.take(30) },
+                                    onUrlChange = { radioDraftURL = it.take(2_048) },
+                                    onSave = {
+                                        radioValidationMessage = onSaveInternetRadio(
+                                            channel.id,
+                                            radioDraftName,
+                                            radioDraftURL,
+                                        )
+                                        if (radioValidationMessage == null) editingRadioID = null
+                                    },
+                                    onDelete = {
+                                        onDeleteInternetRadio(channel.id)
+                                        editingRadioID = null
+                                    },
+                                    onClose = { editingRadioID = null },
+                                )
+                            }
+                        }
+                        if (addingRadio) {
+                            InlineRadioEditor(
+                                name = radioDraftName,
+                                url = radioDraftURL,
+                                error = radioValidationMessage,
+                                onNameChange = { radioDraftName = it.take(30) },
+                                onUrlChange = { radioDraftURL = it.take(2_048) },
+                                onSave = {
+                                    radioValidationMessage = onSaveInternetRadio(
+                                        null,
+                                        radioDraftName,
+                                        radioDraftURL,
+                                    )
+                                    if (radioValidationMessage == null) addingRadio = false
                                 },
-                                label = { Text(preference.title) },
+                                onDelete = null,
+                                onClose = { addingRadio = false },
                             )
+                        } else if (
+                            editingRadioID == null &&
+                            settings.internetRadioChannels.size <
+                            AppSettings.MAXIMUM_INTERNET_RADIO_CHANNEL_COUNT
+                        ) {
+                            TextButton(
+                                onClick = {
+                                    addingRadio = true
+                                    radioDraftName = ""
+                                    radioDraftURL = ""
+                                    radioValidationMessage = null
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) { Text(if (settings.internetRadioChannels.isEmpty()) "첫 채널 추가" else "채널 추가") }
                         }
+                        Text(
+                            "최대 두 채널을 저장합니다. 현재 선택 채널은 홈에서 재생할 수 있고, 연결이 끊기면 자동 재연결합니다. 재생 중에는 소리 감지와 녹음을 잠시 멈춥니다.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
+
+                    SettingsSectionKind.SCREEN_AND_CLOCK -> SettingsCard(
+                        title = "화면과 시계",
+                        subtitle = "테마와 시계 글꼴을 바꿉니다.",
+                        icon = Icons.Default.TextFields,
                     ) {
-                        Column(Modifier.weight(1f)) {
-                            Text("배터리", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "테마",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            "시계를 더블 터치하면 테마가 바뀝니다.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            StandDisplayTheme.entries.forEach { theme ->
+                                FilterChip(
+                                    selected = settings.displayTheme == theme,
+                                    onClick = { onUpdate { it.copy(displayTheme = theme) } },
+                                    label = {
+                                        Text(theme.title)
+                                    },
+                                )
+                            }
+                        }
+                        Text(
+                            "시계 글꼴",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            "실제 플립시계 모양을 눌러 선택하세요 · ${settings.clockFont.displayName}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        ClockFontPreviewGrid(
+                            selectedFont = settings.clockFont,
+                            onFontSelected = { font -> onUpdate { it.copy(clockFont = font) } },
+                        )
+                        Text(
+                            "홈 화면을 길게 누르면 시계와 날씨 같은 정보 패널을 편집할 수 있습니다.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+
+                    SettingsSectionKind.PERMISSIONS -> SettingsCard(
+                        title = "권한 설정",
+                        subtitle = "필요한 기능만 선택해서 사용합니다.",
+                        icon = Icons.Default.Security,
+                    ) {
+                        LabeledSwitch(
+                            title = "플래시 사용",
+                            detail = if (state.torchAvailable) {
+                                "화들짝 모드에서만 켜짐"
+                            } else {
+                                "이 기기에서는 사용할 수 없음"
+                            },
+                            checked = settings.torchEnabled,
+                        ) { enabled -> onUpdate { it.copy(torchEnabled = enabled) } }
+                        HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+                        LabeledSwitch(
+                            title = "카메라 사용",
+                            detail = cameraAmbientDetail,
+                            checked = settings.cameraAmbientSensingEnabled,
+                        ) { enabled -> onCameraAmbientSensingChanged(enabled) }
+                        HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+                        LabeledSwitch(
+                            title = "마이크 사용",
+                            detail = when {
+                                !settings.soundSensingEnabled -> "사용하지 않음"
+                                state.hasMicrophonePermission -> "매이트 모드의 잠꼬대·코골이 감지와 기기 내 저장"
+                                else -> "마이크 권한 필요"
+                            },
+                            checked = settings.soundSensingEnabled && state.hasMicrophonePermission,
+                        ) { enabled ->
+                            onUpdate { it.copy(soundSensingEnabled = enabled) }
+                            if (enabled && !state.hasMicrophonePermission) {
+                                onRequestMicrophonePermission()
+                            }
+                        }
+                        HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+                        LabeledSwitch(
+                            title = "위치 정보 사용",
+                            detail = when {
+                                !settings.weatherLocationEnabled -> "사용하지 않음"
+                                state.hasApproximateLocationPermission -> "현재 위치의 날씨를 표시할 때만 사용"
+                                else -> "위치 권한 필요"
+                            },
+                            checked = settings.weatherLocationEnabled &&
+                                state.hasApproximateLocationPermission,
+                        ) { enabled ->
+                            onUpdate { it.copy(weatherLocationEnabled = enabled) }
+                            if (enabled && !state.hasApproximateLocationPermission) {
+                                onRequestApproximateLocationPermission()
+                            }
+                        }
+                        if (!state.hasCameraPermission && settings.cameraAmbientSensingEnabled) {
+                            TextButton(onClick = onRequestCameraPermission) {
+                                Text("카메라 권한 다시 요청")
+                            }
+                        }
+                        if (missingPermissionCount > 0) {
+                            TextButton(
+                                onClick = onOpenAppSettings,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Text("시스템 앱 권한 설정 열기")
+                            }
+                        }
+                    }
+
+                    SettingsSectionKind.SLEEP_SOUNDS -> SettingsCard(
+                        title = "잠꼬대와 코골이",
+                        subtitle = "매이트 모드에서만 작동합니다.",
+                        icon = Icons.Default.GraphicEq,
+                    ) {
+                        val audioStatus = when {
+                            !state.isSessionActive -> "감지 멈춤"
+                            state.experienceMode ==
+                                com.armsone.stand.model.StandExperienceMode.OBJECT -> "오브제 모드"
+                            state.isWritingClip -> "소리 저장 중"
+                            state.audioRunning -> "소리 감지 중"
+                            else -> "마이크 대기"
+                        }
+                        Text(audioStatus, fontWeight = FontWeight.SemiBold)
+                        LinearProgressIndicator(
+                            progress = { state.audioLevel.coerceIn(0f, 1f) },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Text(
+                            state.audioMessage ?: "현재 레벨 ${(state.audioLevel * 100).roundToInt()}%",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        LabeledSwitch(
+                            title = "다시 밝혀주기",
+                            detail = "박수, 핑거스냅, 뒤척임과 기기 움직임에 반응",
+                            checked = settings.multiStimulusWakeEnabled,
+                        ) { enabled -> onUpdate { it.copy(multiStimulusWakeEnabled = enabled) } }
+                        LabeledSwitch(
+                            title = "코골이·잠꼬대 저장",
+                            detail = "후보 소리가 날 때 필요한 구간만 기기에 저장",
+                            checked = settings.recordingEnabled,
+                        ) { enabled -> onUpdate { it.copy(recordingEnabled = enabled) } }
+                        TextButton(
+                            onClick = onOpenRecordings,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
                             Text(
-                                "${state.batteryText}${if (state.isCharging) " · 충전 중" else ""}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                if (state.recordingCount == 0) {
+                                    "수면 소리 열기"
+                                } else {
+                                    "녹음 ${state.recordingCount}개 보기"
+                                },
                             )
                         }
-                        Icon(Icons.Default.BatterySaver, contentDescription = null)
+                        Text(
+                            "처음에는 방의 평소 소리를 익히고, 후보 녹음은 이 기기 안에서만 처리합니다.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+
+                    SettingsSectionKind.INFORMATION -> SettingsCard(
+                        title = "정보",
+                        subtitle = "개인정보, 저작권과 앱 정보를 확인합니다.",
+                        icon = Icons.Default.Info,
+                    ) {
+                        Text(
+                            "오디오는 이 기기에서 처리하고 로컬에만 저장합니다. 함께 있는 사람에게 녹음 사실을 먼저 알려 주세요.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+                        Text("S.tand ${BuildConfig.VERSION_NAME}")
+                        Text(
+                            "빌드 ${BuildConfig.BUILD_NUMBER} · versionCode ${BuildConfig.VERSION_CODE}",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Text("시스템 글꼴 + 번들 글꼴 9종", style = MaterialTheme.typography.bodySmall)
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            ClockFontChoice.entries.filterNot {
+                                it == ClockFontChoice.SYSTEM_ROUNDED
+                            }.forEach { font ->
+                                AssistChip(
+                                    onClick = { selectedLicense = font },
+                                    label = { Text(font.displayName) },
+                                )
+                            }
+                        }
+                        TextButton(
+                            onClick = { showResetConfirmation = true },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Icon(Icons.Default.RestartAlt, contentDescription = null)
+                            Text(" 추천 설정으로 초기화")
+                        }
                     }
                 }
             }
 
-            item {
-                SettingsCard(
-                    title = "개인정보와 정보",
-                    subtitle = "계정·광고·분석 SDK 없이 기기 중심으로 동작합니다.",
-                    icon = Icons.Default.Security,
-                ) {
-                    Text(
-                        "녹음은 앱 내부 저장소에만 두며 공유를 선택하기 전에는 밖으로 보내지 않습니다. " +
-                            "날씨를 새로고침하면 대략적 좌표가 Open-Meteo에 전달됩니다.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
-                    Text("S.tand ${BuildConfig.VERSION_NAME}")
-                    Text(
-                        "빌드 ${BuildConfig.BUILD_NUMBER} · versionCode ${BuildConfig.VERSION_CODE}",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    Text("시스템 글꼴 + 번들 글꼴 9종", style = MaterialTheme.typography.bodySmall)
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        ClockFontChoice.entries.filterNot {
-                            it == ClockFontChoice.SYSTEM_ROUNDED
-                        }.forEach { font ->
-                            AssistChip(
-                                onClick = { selectedLicense = font },
-                                label = { Text(font.displayName) },
-                            )
-                        }
-                    }
-                }
-            }
-
-            item {
-                TextButton(
-                    onClick = { showResetConfirmation = true },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Icon(Icons.Default.RestartAlt, contentDescription = null)
-                    Text(" 권장 설정으로 초기화")
-                }
-                Spacer(Modifier.height(18.dp))
-            }
+            item { Spacer(Modifier.height(18.dp)) }
         }
     }
 
@@ -535,6 +524,79 @@ fun SettingsScreen(
 
     selectedLicense?.let { font ->
         FontLicenseDialog(font = font, onDismiss = { selectedLicense = null })
+    }
+}
+
+@Composable
+private fun SettingsHero(
+    state: StandUiState,
+    onToggleMode: () -> Unit,
+) {
+    SettingsCard(
+        title = "S.tand",
+        subtitle = "낮에는 오브제 · 밤에는 매이트",
+        icon = Icons.Default.DarkMode,
+    ) {
+        TextButton(
+            onClick = onToggleMode,
+            enabled = state.isSessionActive,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(if (state.isSessionActive) state.experienceMode.title else "S.tand 멈춤")
+        }
+        Text(
+            "현재 모드를 누르면 홈 화면의 원터치처럼 오브제와 매이트를 전환합니다.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun InlineRadioEditor(
+    name: String,
+    url: String,
+    error: String?,
+    onNameChange: (String) -> Unit,
+    onUrlChange: (String) -> Unit,
+    onSave: () -> Unit,
+    onDelete: (() -> Unit)?,
+    onClose: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .standPanelSurface(isDimmed = false, cornerRadius = 14.dp)
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        OutlinedTextField(
+            value = name,
+            onValueChange = onNameChange,
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("표시 이름") },
+            singleLine = true,
+        )
+        OutlinedTextField(
+            value = url,
+            onValueChange = onUrlChange,
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("HTTPS 스트림 주소") },
+            singleLine = true,
+            isError = error != null,
+            supportingText = error?.let { message -> { Text(message) } },
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            onDelete?.let { delete ->
+                TextButton(onClick = delete) { Text("삭제") }
+            }
+            Spacer(Modifier.weight(1f))
+            TextButton(onClick = onClose) { Text("닫기") }
+            TextButton(onClick = onSave) { Text("저장") }
+        }
     }
 }
 
@@ -730,7 +792,11 @@ private fun LabeledSwitch(
     onCheckedChange: (Boolean) -> Unit,
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .semantics(mergeDescendants = true) {
+                contentDescription = "$title, $detail"
+            },
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -743,71 +809,6 @@ private fun LabeledSwitch(
             )
         }
         Switch(checked = checked, onCheckedChange = onCheckedChange)
-    }
-}
-
-@Composable
-private fun PermissionStatusRow(
-    title: String,
-    detail: String,
-    granted: Boolean,
-    onRequest: () -> Unit,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(title, fontWeight = FontWeight.SemiBold)
-            Text(
-                detail,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                if (granted) "허용됨" else "허용되지 않음",
-                style = MaterialTheme.typography.labelMedium,
-                color = if (granted) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.error
-                },
-            )
-        }
-        TextButton(onClick = onRequest, enabled = !granted) {
-            Text(if (granted) "완료" else "다시 요청")
-        }
-    }
-}
-
-@Composable
-private fun SettingSlider(
-    title: String,
-    valueText: String,
-    value: Float,
-    range: ClosedFloatingPointRange<Float>,
-    steps: Int = 0,
-    onValueChange: (Float) -> Unit,
-) {
-    Column {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Text(title, fontWeight = FontWeight.SemiBold)
-            Text(
-                valueText,
-                color = MaterialTheme.colorScheme.primary,
-                style = MaterialTheme.typography.labelLarge,
-            )
-        }
-        Slider(
-            value = value.coerceIn(range.start, range.endInclusive),
-            onValueChange = onValueChange,
-            valueRange = range,
-            steps = steps,
-        )
     }
 }
 
@@ -851,9 +852,4 @@ private fun ClockFontChoice.licenseResource(): Int? = when (this) {
     ClockFontChoice.PAPERLOGY_BOLD -> R.raw.paperlogy_ofl
     ClockFontChoice.NEXON_LV1_GOTHIC -> R.raw.nexon_lv1_gothic_license
     ClockFontChoice.POPPINS -> R.raw.poppins_ofl
-}
-
-private fun durationText(seconds: Float): String {
-    val value = seconds.roundToInt()
-    return if (value < 60) "${value}초" else "${value / 60}분 ${value % 60}초"
 }

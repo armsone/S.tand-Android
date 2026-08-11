@@ -41,7 +41,7 @@ class STandLaunchWidgetProvider : AppWidgetProvider() {
             setOnClickPendingIntent(R.id.widget_root, launchPendingIntent(context))
             setContentDescription(
                 R.id.widget_root,
-                "${context.getString(R.string.app_name)} 열기",
+                context.getString(R.string.stand_widget_description),
             )
         }
         appWidgetManager.updateAppWidget(appWidgetId, views)

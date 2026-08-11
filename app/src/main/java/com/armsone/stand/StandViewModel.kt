@@ -11,24 +11,28 @@ import com.armsone.stand.audio.AudioMonitorState
 import com.armsone.stand.data.SettingsRepository
 import com.armsone.stand.model.AmbientLightPolicy
 import com.armsone.stand.model.AppSettings
+import com.armsone.stand.model.BatteryProtectionPolicy
 import com.armsone.stand.model.EnvironmentDisplayMode
+import com.armsone.stand.model.FaceDownLightingPolicy
 import com.armsone.stand.model.LampPhase
 import com.armsone.stand.model.LampTorchLightingPolicy
 import com.armsone.stand.model.OrientationPreference
+import com.armsone.stand.model.SimplifiedBrightnessModePolicy
 import com.armsone.stand.model.StandDisplayTheme
 import com.armsone.stand.model.StandExperienceMode
 import com.armsone.stand.model.StandModePreference
-import com.armsone.stand.model.ScreenTapLampAction
-import com.armsone.stand.model.ScreenTapPolicy
 import com.armsone.stand.model.SleepCareMonitoringPolicy
 import com.armsone.stand.model.StandAutomaticDimmingPolicy
 import com.armsone.stand.platform.AmbientLightReading
 import com.armsone.stand.platform.AmbientCameraBrightnessService
+import com.armsone.stand.platform.AmbientCameraModePolicy
 import com.armsone.stand.platform.AmbientCameraPolicy
 import com.armsone.stand.platform.AmbientCameraState
 import com.armsone.stand.platform.BatteryMonitor
 import com.armsone.stand.platform.DeviceBatteryState
 import com.armsone.stand.platform.DeviceSensorMonitor
+import com.armsone.stand.platform.DeviceSensorMonitoringMode
+import com.armsone.stand.platform.DeviceSensorMonitoringPolicy
 import com.armsone.stand.platform.DisplayBrightnessPolicy
 import com.armsone.stand.platform.TorchController
 import com.armsone.stand.platform.InternetRadioPlayer
@@ -104,8 +108,14 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
     private var movementTriggeredLamp = false
     private var pendingModeTarget: EnvironmentDisplayMode? = null
     private var activeRecordingSessionId: UUID? = null
+    private var activeStartleEventId: UUID? = null
+    private var brightnessAdjustmentActive = false
+    private var brightnessPreference = StandModePreference.AUTOMATIC
+    private var suppressNextSettingsEnvironmentRefresh = false
 
     private var lampJob: Job? = null
+    private var brightnessTapJob: Job? = null
+    private var brightnessEndpointLockJob: Job? = null
     private var controlsJob: Job? = null
     private var modeTransitionJob: Job? = null
     private var ambientCameraSamplingJob: Job? = null
@@ -124,7 +134,7 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
                     state.environmentMode == EnvironmentDisplayMode.MATE &&
                     state.settings.multiStimulusWakeEnabled
                 ) {
-                    activateLamp(triggeredByMovement = false)
+                    activateLamp(triggeredByMovement = true)
                 }
             }
         }
@@ -188,6 +198,20 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
         }.launchIn(viewModelScope)
 
         combine(
+            audioMonitor.effectiveSoundThresholdDB,
+            audioMonitor.noiseCalibrationProgress,
+        ) { threshold, progress -> threshold to progress.toFloat() }
+            .onEach { (threshold, progress) ->
+                mutableUiState.update {
+                    it.copy(
+                        effectiveSoundThresholdDB = threshold,
+                        noiseCalibrationProgress = progress,
+                    )
+                }
+            }
+            .launchIn(viewModelScope)
+
+        combine(
             weatherService.weather,
             weatherService.locationName,
             weatherService.availability,
@@ -249,7 +273,7 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
             didAutomaticallyStart = true
             startNightSession()
         } else if (mutableUiState.value.isSessionActive) {
-            sensorMonitor.start()
+            syncDeviceSensorMonitoring()
             seedAmbientBrightnessFallback()
             refreshEnvironmentMode(immediate = true)
             syncRecordingSessionForDisplayMode()
@@ -264,12 +288,15 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
         foreground.set(false)
         internetRadioPlayer.stop()
         lampJob?.cancel()
+        brightnessTapJob?.cancel()
+        brightnessEndpointLockJob?.cancel()
         controlsJob?.cancel()
         modeTransitionJob?.cancel()
         ambientCameraSamplingJob?.cancel()
         ambientCamera.cancel()
         pendingModeTarget = null
         movementTriggeredLamp = false
+        brightnessAdjustmentActive = false
         mutableUiState.update {
             it.copy(
                 lampIntensity = 0f,
@@ -334,7 +361,7 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
             )
         }
         if (foreground.get()) {
-            sensorMonitor.start()
+            syncDeviceSensorMonitoring()
             seedAmbientBrightnessFallback()
         }
         refreshEnvironmentMode(immediate = true)
@@ -347,9 +374,12 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
 
     fun stopNightSession() {
         lampJob?.cancel()
+        brightnessTapJob?.cancel()
+        brightnessEndpointLockJob?.cancel()
         controlsJob?.cancel()
         modeTransitionJob?.cancel()
         movementTriggeredLamp = false
+        brightnessAdjustmentActive = false
         pendingModeTarget = null
         mutableUiState.update {
             it.copy(
@@ -373,19 +403,121 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun onScreenTap() {
+        toggleObjectMateMode()
+    }
+
+    fun beginBrightnessAdjustment() {
         val state = mutableUiState.value
         if (!state.isSessionActive) return
-        if (ScreenTapPolicy.action(state.lampPhase) == ScreenTapLampAction.DIM) {
-            dimLampNow()
-        } else {
-            activateLamp(triggeredByMovement = false)
-            revealControls()
+        brightnessTapJob?.cancel()
+        brightnessEndpointLockJob?.cancel()
+        lampJob?.cancel()
+        movementTriggeredLamp = false
+        finishStartleEvent()
+        brightnessAdjustmentActive = true
+        brightnessPreference = state.settings.modePreference
+        torchController.turnOff()
+    }
+
+    fun updateBrightnessLevel(requestedLevel: Float) {
+        if (!brightnessAdjustmentActive || !mutableUiState.value.isSessionActive) return
+        val adjustment = SimplifiedBrightnessModePolicy.stabilizedAdjustment(
+            requestedLevel = requestedLevel,
+            currentPreference = brightnessPreference,
+        )
+        brightnessPreference = adjustment.preference
+        applyBrightnessPreview(adjustment.level, adjustment.preference)
+
+        val endpointPreference = when (adjustment.level) {
+            0f -> StandModePreference.MATE
+            1f -> StandModePreference.OBJECT
+            else -> null
+        }
+        if (endpointPreference == null || adjustment.preference == endpointPreference) {
+            brightnessEndpointLockJob?.cancel()
+            brightnessEndpointLockJob = null
+        } else if (brightnessEndpointLockJob == null) {
+            brightnessEndpointLockJob = viewModelScope.launch {
+                delay(SimplifiedBrightnessModePolicy.ENDPOINT_LOCK_DELAY_MILLIS)
+                val currentLevel = mutableUiState.value.lampIntensity
+                val stillAtEndpoint = if (endpointPreference == StandModePreference.OBJECT) {
+                    currentLevel >= 1f
+                } else {
+                    currentLevel <= 0f
+                }
+                if (stillAtEndpoint) {
+                    brightnessPreference = endpointPreference
+                    applyBrightnessPreview(currentLevel, endpointPreference)
+                    persistBrightness(currentLevel, endpointPreference)
+                }
+                brightnessEndpointLockJob = null
+            }
         }
     }
 
-    fun activateLampFromAdjustment() {
-        if (mutableUiState.value.isSessionActive) {
-            activateLamp(triggeredByMovement = false)
+    fun endBrightnessAdjustment() {
+        if (!brightnessAdjustmentActive) return
+        brightnessAdjustmentActive = false
+        val state = mutableUiState.value
+        persistBrightness(state.lampIntensity, brightnessPreference)
+        syncRecordingSessionForDisplayMode()
+        syncSleepCareMonitoring()
+        syncAmbientCameraSampling()
+    }
+
+    private fun toggleObjectMateMode() {
+        val state = mutableUiState.value
+        if (!state.isSessionActive) return
+        brightnessTapJob?.cancel()
+        brightnessEndpointLockJob?.cancel()
+        lampJob?.cancel()
+        movementTriggeredLamp = false
+        brightnessAdjustmentActive = false
+        val start = state.lampIntensity.coerceIn(0f, 1f)
+        val target = SimplifiedBrightnessModePolicy.tapLevel(state.environmentMode)
+        brightnessTapJob = viewModelScope.launch {
+            val steps = 40
+            for (step in 1..steps) {
+                val progress = step.toFloat() / steps
+                applyBrightnessPreview(
+                    level = start + (target - start) * progress,
+                    preference = StandModePreference.AUTOMATIC,
+                )
+                delay(TAP_BRIGHTNESS_FRAME_MILLIS)
+            }
+            persistBrightness(target, StandModePreference.AUTOMATIC)
+            brightnessTapJob = null
+            syncTorch()
+            syncAmbientCameraSampling()
+        }
+    }
+
+    private fun applyBrightnessPreview(level: Float, preference: StandModePreference) {
+        val normalized = SimplifiedBrightnessModePolicy.clamped(level)
+        val mode = SimplifiedBrightnessModePolicy.mode(normalized, preference)
+        val previousMode = mutableUiState.value.environmentMode
+        mutableUiState.update { current ->
+            current.copy(
+                lampIntensity = normalized,
+                lampPhase = if (normalized <= 0f) LampPhase.OFF else LampPhase.HOLDING,
+                environmentMode = mode,
+                experienceMode = modeExperience(mode),
+            )
+        }
+        if (previousMode != mode) {
+            syncDeviceSensorMonitoring()
+            syncRecordingSessionForDisplayMode()
+            syncSleepCareMonitoring()
+        }
+    }
+
+    private fun persistBrightness(level: Float, preference: StandModePreference) {
+        suppressNextSettingsEnvironmentRefresh = true
+        settingsRepository.update { current ->
+            current.copy(
+                lampIntensity = SimplifiedBrightnessModePolicy.clamped(level),
+                modePreference = preference,
+            )
         }
     }
 
@@ -403,13 +535,7 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
 
     fun toggleTheme() {
         settingsRepository.update { current ->
-            current.copy(
-                displayTheme = if (current.displayTheme == StandDisplayTheme.COLOR) {
-                    StandDisplayTheme.GRAYSCALE
-                } else {
-                    StandDisplayTheme.COLOR
-                },
-            )
+            current.copy(displayTheme = current.displayTheme.next())
         }
     }
 
@@ -418,17 +544,53 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun toggleInternetRadio() {
+        val selectedID = mutableUiState.value.settings.selectedInternetRadioId ?: return
+        toggleInternetRadio(selectedID)
+    }
+
+    fun toggleInternetRadio(channelID: String) {
+        val channel = mutableUiState.value.settings.internetRadioChannels
+            .firstOrNull { it.id == channelID } ?: return
         when (internetRadioPlayer.state.value) {
             InternetRadioState.Idle,
             is InternetRadioState.Failed,
-            -> mutableUiState.value.settings.internetRadio?.let(internetRadioPlayer::play)
-            InternetRadioState.Loading,
+            -> {
+                selectInternetRadio(channelID)
+                internetRadioPlayer.play(channel)
+            }
+            is InternetRadioState.Loading,
             is InternetRadioState.Playing,
-            -> internetRadioPlayer.stop()
+            is InternetRadioState.Reconnecting,
+            -> {
+                val activeID = when (val state = internetRadioPlayer.state.value) {
+                    is InternetRadioState.Loading -> state.channelID
+                    is InternetRadioState.Playing -> state.channelID
+                    is InternetRadioState.Reconnecting -> state.channelID
+                    else -> null
+                }
+                if (activeID == channelID) {
+                    internetRadioPlayer.stop()
+                } else {
+                    selectInternetRadio(channelID)
+                    internetRadioPlayer.play(channel)
+                }
+            }
         }
     }
 
     fun saveInternetRadio(displayName: String, streamUrl: String): String? {
+        return saveInternetRadioChannel(
+            channelID = mutableUiState.value.settings.selectedInternetRadioId,
+            displayName = displayName,
+            streamUrl = streamUrl,
+        )
+    }
+
+    fun saveInternetRadioChannel(
+        channelID: String?,
+        displayName: String,
+        streamUrl: String,
+    ): String? {
         val error = com.armsone.stand.model.InternetRadioConfiguration.validationMessage(
             displayName,
             streamUrl,
@@ -438,13 +600,61 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
             displayName,
             streamUrl,
         ).normalizedOrNull() ?: return "라디오 주소를 확인해 주세요."
-        settingsRepository.update { it.copy(internetRadio = configuration) }
+        settingsRepository.update { current ->
+            val existingIndex = current.internetRadioChannels.indexOfFirst { it.id == channelID }
+            if (existingIndex < 0 &&
+                current.internetRadioChannels.size >=
+                AppSettings.MAXIMUM_INTERNET_RADIO_CHANNEL_COUNT
+            ) {
+                return@update current
+            }
+            val saved = if (existingIndex >= 0) {
+                configuration.copy(id = current.internetRadioChannels[existingIndex].id)
+            } else {
+                configuration
+            }
+            val channels = current.internetRadioChannels.toMutableList().apply {
+                if (existingIndex >= 0) {
+                    set(existingIndex, saved)
+                } else if (size < AppSettings.MAXIMUM_INTERNET_RADIO_CHANNEL_COUNT) {
+                    add(saved)
+                }
+            }
+            current.copy(
+                internetRadio = saved,
+                internetRadioChannels = channels,
+                selectedInternetRadioId = saved.id,
+            )
+        }
         return null
     }
 
     fun deleteInternetRadio() {
+        mutableUiState.value.settings.selectedInternetRadioId?.let(::deleteInternetRadioChannel)
+    }
+
+    fun deleteInternetRadioChannel(channelID: String) {
         internetRadioPlayer.stop()
-        settingsRepository.update { it.copy(internetRadio = null) }
+        settingsRepository.update { current ->
+            val remaining = current.internetRadioChannels.filterNot {
+                it.id == channelID
+            }
+            val selected = remaining.firstOrNull { it.id == current.selectedInternetRadioId }
+                ?: remaining.firstOrNull()
+            current.copy(
+                internetRadio = selected,
+                internetRadioChannels = remaining,
+                selectedInternetRadioId = selected?.id,
+            )
+        }
+    }
+
+    fun selectInternetRadio(channelID: String) {
+        settingsRepository.update { current ->
+            val selected = current.internetRadioChannels.firstOrNull { it.id == channelID }
+                ?: return@update current
+            current.copy(internetRadio = selected, selectedInternetRadioId = selected.id)
+        }
     }
 
     fun setCameraAmbientSensingEnabled(enabled: Boolean) {
@@ -490,23 +700,6 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
 
     fun restoreRecommendedSettings() {
         settingsRepository.restoreRecommendedValues()
-    }
-
-    fun setLampIntensity(value: Float) {
-        settingsRepository.update { it.copy(lampIntensity = value) }
-        if (mutableUiState.value.isSessionActive) activateLamp(triggeredByMovement = false)
-    }
-
-    fun setSilhouetteIntensity(value: Float) {
-        settingsRepository.update { it.copy(silhouetteIntensity = value) }
-    }
-
-    fun setHoldDuration(value: Float) {
-        settingsRepository.update { it.copy(holdDurationSeconds = value) }
-    }
-
-    fun setClockScale(value: Float) {
-        settingsRepository.update { it.copy(clockScale = value) }
     }
 
     fun setSoundThreshold(value: Float) {
@@ -676,8 +869,16 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
         )
         audioMonitor.setRecordingEnabled(settings.recordingEnabled)
         mutableUiState.update { it.copy(settings = settings) }
+        weatherService.setLocationEnabled(settings.weatherLocationEnabled)
+        if (foreground.get() && settings.weatherLocationEnabled) {
+            weatherService.refreshIfNeeded(locationPermissionGranted, force = true)
+        }
         ambientCamera.setEnabled(settings.cameraAmbientSensingEnabled, cameraPermissionGranted)
-        refreshEnvironmentMode(immediate = settings.modePreference != StandModePreference.AUTOMATIC)
+        if (suppressNextSettingsEnvironmentRefresh) {
+            suppressNextSettingsEnvironmentRefresh = false
+        } else {
+            refreshEnvironmentMode(immediate = settings.modePreference != StandModePreference.AUTOMATIC)
+        }
         syncSleepCareMonitoring()
         syncTorch()
         syncAmbientCameraSampling()
@@ -770,12 +971,27 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun onFaceDownChanged(isFaceDown: Boolean) {
+        val state = mutableUiState.value
+        if (state.isFaceDown == isFaceDown) return
+        if (isFaceDown && !FaceDownLightingPolicy.shouldBlackout(state.isSessionActive, true)) return
         mutableUiState.update { it.copy(isFaceDown = isFaceDown) }
+        if (isFaceDown) {
+            torchController.turnOff()
+        } else {
+            refreshEnvironmentMode(immediate = false)
+            syncTorch()
+        }
     }
 
     private fun onBatteryChanged(battery: DeviceBatteryState) {
         if (battery.shouldProtect) {
             pauseForLowBattery()
+        } else if (BatteryProtectionPolicy.shouldClearProtection(
+                wasProtecting = batteryProtectionLatched,
+                shouldProtectNow = battery.shouldProtect,
+            )
+        ) {
+            batteryProtectionLatched = false
         }
         mutableUiState.update {
             it.copy(
@@ -819,17 +1035,36 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
         } else {
             null
         }
-        val target = if (
+        val usesCameraFallback = settings.modePreference == StandModePreference.AUTOMATIC &&
+            settings.ambientSensingEnabled &&
+            settings.cameraAmbientSensingEnabled &&
+            !sensorMonitor.state.value.lightSensorAvailable
+        val fallbackBrightness = if (usesCameraFallback) {
+            settings.lampIntensity
+        } else {
+            normalizedBrightness
+        }
+        val fallbackTarget = if (
             settings.modePreference == StandModePreference.AUTOMATIC &&
-            normalizedBrightness == null
+            fallbackBrightness == null
         ) {
             state.environmentMode
         } else {
             AmbientLightPolicy.targetMode(
                 preference = settings.modePreference,
-                normalizedBrightness = normalizedBrightness ?: 1f,
+                normalizedBrightness = fallbackBrightness ?: 1f,
                 threshold = settings.brightnessModeThreshold,
             )
+        }
+        val target = if (usesCameraFallback) {
+            AmbientCameraModePolicy.targetMode(
+                current = state.environmentMode,
+                fallback = fallbackTarget,
+                reading = ambientCamera.reading.value,
+                nowNanos = SystemClock.elapsedRealtimeNanos(),
+            )
+        } else {
+            fallbackTarget
         }
 
         if (target == state.environmentMode) {
@@ -874,6 +1109,7 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
                 experienceMode = currentExperience(mode, it.lampPhase),
             )
         }
+        syncDeviceSensorMonitoring()
         syncRecordingSessionForDisplayMode()
         syncSleepCareMonitoring()
         if (previous != mode && mutableUiState.value.isSessionActive) {
@@ -885,22 +1121,37 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
         val state = mutableUiState.value
         if (!state.isSessionActive || batteryProtectionLatched) return
         lampJob?.cancel()
+        if (triggeredByMovement) {
+            if (activeRecordingSessionId == null) syncRecordingSessionForDisplayMode()
+            if (activeStartleEventId == null) {
+                activeStartleEventId = runCatching {
+                    recordingSessionStore.beginStartleEvent(activeRecordingSessionId)
+                }.getOrNull()
+            }
+        } else {
+            finishStartleEvent()
+        }
         movementTriggeredLamp = triggeredByMovement
-        val maximumIntensity = state.settings.lampIntensity
+        val maximumIntensity = if (triggeredByMovement) {
+            max(state.settings.lampIntensity, SimplifiedBrightnessModePolicy.OBJECT_TAP_LEVEL)
+        } else {
+            state.settings.lampIntensity
+        }
         mutableUiState.update {
+            val phase = if (maximumIntensity <= 0f) LampPhase.OFF else LampPhase.HOLDING
             it.copy(
                 lampIntensity = maximumIntensity,
-                lampPhase = LampPhase.HOLDING,
-                experienceMode = currentExperience(it.environmentMode, LampPhase.HOLDING),
+                lampPhase = phase,
+                experienceMode = currentExperience(it.environmentMode, phase),
             )
         }
         syncTorch()
 
-        if (!StandAutomaticDimmingPolicy.shouldFade(
+        val shouldFade = triggeredByMovement || StandAutomaticDimmingPolicy.shouldFade(
                 automaticDimmingEnabled = state.settings.automaticDimmingEnabled,
                 environmentMode = state.environmentMode,
             )
-        ) {
+        if (!shouldFade) {
             return
         }
 
@@ -909,23 +1160,28 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
             if (mutableUiState.value.environmentMode != EnvironmentDisplayMode.MATE) return@launch
             val startedAt = SystemClock.elapsedRealtime()
             val durationMillis = max(100L, (state.settings.fadeDurationSeconds * 1_000).toLong())
+            val targetIntensity = if (triggeredByMovement) state.settings.lampIntensity else 0f
             while (true) {
                 val elapsed = SystemClock.elapsedRealtime() - startedAt
                 val progress = (elapsed.toFloat() / durationMillis).coerceIn(0f, 1f)
-                val intensity = maximumIntensity * (1f - progress)
+                val intensity = targetIntensity +
+                    (maximumIntensity - targetIntensity) * (1f - progress)
+                val phase = when {
+                    progress < 1f -> LampPhase.FADING
+                    targetIntensity <= 0f -> LampPhase.OFF
+                    else -> LampPhase.HOLDING
+                }
                 mutableUiState.update {
                     it.copy(
                         lampIntensity = intensity,
-                        lampPhase = if (progress >= 1f) LampPhase.OFF else LampPhase.FADING,
-                        experienceMode = currentExperience(
-                            it.environmentMode,
-                            if (progress >= 1f) LampPhase.OFF else LampPhase.FADING,
-                        ),
+                        lampPhase = phase,
+                        experienceMode = currentExperience(it.environmentMode, phase),
                     )
                 }
                 syncTorch()
                 if (progress >= 1f) {
                     movementTriggeredLamp = false
+                    finishStartleEvent()
                     torchController.turnOff()
                     mutableUiState.update {
                         it.copy(experienceMode = modeExperience(it.environmentMode))
@@ -943,6 +1199,7 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
         lampJob?.cancel()
         val startingIntensity = state.lampIntensity
         movementTriggeredLamp = false
+        finishStartleEvent()
         lampJob = viewModelScope.launch {
             val startedAt = SystemClock.elapsedRealtime()
             while (true) {
@@ -988,6 +1245,7 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
             monitorMutex.withLock {
                 val state = mutableUiState.value
                 val shouldMonitor = foreground.get() &&
+                    state.settings.soundSensingEnabled &&
                     SleepCareMonitoringPolicy.shouldMonitor(
                         isSessionActive = state.isSessionActive,
                         environmentMode = state.environmentMode,
@@ -995,6 +1253,7 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
                     !monitoringPausedForPlayback &&
                     internetRadioPlayer.state.value !is InternetRadioState.Loading &&
                     internetRadioPlayer.state.value !is InternetRadioState.Playing &&
+                    internetRadioPlayer.state.value !is InternetRadioState.Reconnecting &&
                     !state.batteryProtectionActive &&
                     microphonePermissionGranted
                 if (shouldMonitor) audioMonitor.start() else audioMonitor.stop()
@@ -1019,12 +1278,22 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
                 }.getOrNull()
             }
         } else {
+            finishStartleEvent(at)
             val sessionId = activeRecordingSessionId ?: return
             val ended = runCatching {
                 recordingSessionStore.endMateSession(sessionId, at)
             }.getOrDefault(false)
             if (ended) activeRecordingSessionId = null
         }
+        refreshRecordingSessionGroups(recordingRepository.recordings.value)
+    }
+
+    private fun finishStartleEvent(at: Instant = Instant.now()) {
+        val eventId = activeStartleEventId ?: return
+        val ended = runCatching {
+            recordingSessionStore.endStartleEvent(eventId, at)
+        }.getOrDefault(false)
+        if (ended) activeStartleEventId = null
         refreshRecordingSessionGroups(recordingRepository.recordings.value)
     }
 
@@ -1038,6 +1307,7 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
         if (!foreground.get() ||
             !cameraPermissionGranted ||
             !state.isSessionActive ||
+            !FaceDownLightingPolicy.allowsTorch(state.isFaceDown) ||
             state.environmentMode != EnvironmentDisplayMode.MATE ||
             state.lampPhase == LampPhase.OFF
         ) {
@@ -1059,8 +1329,23 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
         torchController.setLevel(maximumLevel * fadeProgress)
     }
 
+    private fun syncDeviceSensorMonitoring() {
+        when (
+            DeviceSensorMonitoringPolicy.mode(
+                isForeground = foreground.get(),
+                isSessionActive = mutableUiState.value.isSessionActive,
+                environmentMode = mutableUiState.value.environmentMode,
+            )
+        ) {
+            DeviceSensorMonitoringMode.STOPPED -> sensorMonitor.stop()
+            DeviceSensorMonitoringMode.AMBIENT_ONLY -> sensorMonitor.startAmbientOnly()
+            DeviceSensorMonitoringMode.SLEEP_CARE -> sensorMonitor.startSleepCare()
+        }
+    }
+
     private fun permissionAudioMessage(state: StandUiState): String? =
-        if (state.isSessionActive &&
+        if (state.settings.soundSensingEnabled &&
+            state.isSessionActive &&
             state.environmentMode == EnvironmentDisplayMode.MATE &&
             !microphonePermissionGranted
         ) {
@@ -1083,6 +1368,8 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
 
     override fun onCleared() {
         lampJob?.cancel()
+        brightnessTapJob?.cancel()
+        brightnessEndpointLockJob?.cancel()
         controlsJob?.cancel()
         modeTransitionJob?.cancel()
         audioMonitor.close()
@@ -1105,6 +1392,7 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
     companion object {
         private const val CONTROLS_HIDE_DELAY_MILLIS = 8_000L
         private const val LAMP_FRAME_MILLIS = 50L
+        private const val TAP_BRIGHTNESS_FRAME_MILLIS = 50L
         private const val MANUAL_DIM_DURATION_MILLIS = 1_500f
         private const val AMBIENT_CAMERA_SAMPLE_INTERVAL_MILLIS = 30_000L
     }

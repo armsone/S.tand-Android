@@ -1,10 +1,12 @@
 package com.armsone.stand.model
 
 import java.net.URI
+import java.util.UUID
 
 data class InternetRadioConfiguration(
     val displayName: String,
     val streamUrl: String,
+    val id: String = UUID.randomUUID().toString(),
 ) {
     fun normalizedOrNull(): InternetRadioConfiguration? {
         val name = displayName.trim().ifEmpty { "인터넷 라디오" }
@@ -15,7 +17,8 @@ data class InternetRadioConfiguration(
             uri.host.isNullOrBlank() ||
             uri.userInfo != null
         ) return null
-        return copy(displayName = name, streamUrl = url)
+        val stableID = id.trim().takeIf { it.isNotEmpty() } ?: UUID.randomUUID().toString()
+        return copy(displayName = name, streamUrl = url, id = stableID)
     }
 
     companion object {
@@ -37,4 +40,10 @@ data class InternetRadioConfiguration(
             return null
         }
     }
+}
+
+object InternetRadioReconnectPolicy {
+    private val DelaySeconds = listOf(1, 2, 4, 8, 15)
+
+    fun delaySeconds(attempt: Int): Int? = DelaySeconds.getOrNull(attempt.coerceAtLeast(0))
 }

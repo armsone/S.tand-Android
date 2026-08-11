@@ -71,6 +71,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -249,7 +250,7 @@ fun RecordingsScreen(
                 }
             },
         ) { innerPadding ->
-            if (sortedRecordings.isEmpty()) {
+            if (sortedRecordings.isEmpty() && sessionGroups.isEmpty()) {
                 EmptyRecordings(
                     modifier = Modifier
                         .fillMaxSize()
@@ -636,8 +637,16 @@ private fun RecordingSessionCard(
                             }
                         }
                         Text(
-                            "${sessionTimeRange(session)} · ${session.clips.size}개 · " +
-                                formatDuration(session.totalDurationSeconds),
+                            buildString {
+                                append(sessionTimeRange(session))
+                                if (session.clips.isNotEmpty()) {
+                                    append(" · 소리 ${session.clips.size}개 · ")
+                                    append(formatDuration(session.totalDurationSeconds))
+                                }
+                                if (session.startleEvents.isNotEmpty()) {
+                                    append(" · 화들짝 ${session.startleEvents.size}회")
+                                }
+                            },
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -717,11 +726,43 @@ private fun SessionTimeline(session: RecordingSessionGroup) {
                 )
             }
         }
+        Canvas(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(2.dp),
+        ) {
+            drawRoundRect(
+                color = trackColor.copy(alpha = 0.42f),
+                cornerRadius = CornerRadius(size.height / 2f),
+            )
+            session.startleEvents.forEach { event ->
+                val start = RecordingSessionPolicy.markerFraction(
+                    instant = event.startedAt,
+                    sessionStart = session.startedAt,
+                    sessionEnd = session.endedAt,
+                ).toFloat()
+                val end = RecordingSessionPolicy.markerFraction(
+                    instant = event.endedAt ?: session.endedAt,
+                    sessionStart = session.startedAt,
+                    sessionEnd = session.endedAt,
+                ).toFloat()
+                val left = size.width * start
+                val markerWidth = (size.width * (end - start).coerceAtLeast(0f))
+                    .coerceAtLeast(2.dp.toPx())
+                    .coerceAtMost(size.width - left)
+                drawRoundRect(
+                    color = Color.White.copy(alpha = 0.88f),
+                    topLeft = androidx.compose.ui.geometry.Offset(left, 0f),
+                    size = androidx.compose.ui.geometry.Size(markerWidth, size.height),
+                    cornerRadius = CornerRadius(size.height / 2f),
+                )
+            }
+        }
         Row(modifier = Modifier.fillMaxWidth()) {
             Text(formatClockTime(session.startedAt), style = MaterialTheme.typography.labelSmall)
             Spacer(modifier = Modifier.weight(1f))
             Text(
-                "수면 소리 감지 시점",
+                "수면 소리 · 얇은 선은 화들짝",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -890,7 +931,7 @@ private fun RecordingRow(
                 selectionMode -> IconButton(
                     onClick = onToggleSelection,
                     enabled = enabled,
-                    modifier = Modifier.size(42.dp),
+                    modifier = Modifier.size(48.dp),
                 ) {
                     Icon(
                         if (isSelected) Icons.Default.CheckBox else Icons.Default.CheckBoxOutlineBlank,
@@ -995,7 +1036,7 @@ private fun RecordingActionButton(
         onClick = onClick,
         enabled = enabled,
         modifier = Modifier
-            .size(42.dp)
+            .size(48.dp)
             .clip(RoundedCornerShape(13.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant),
     ) {
@@ -1012,6 +1053,7 @@ private fun RecordingSelectionDock(
     onMerge: () -> Unit,
     onDelete: () -> Unit,
 ) {
+    val useLargeTextLayout = LocalDensity.current.fontScale >= 1.3f
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -1021,19 +1063,52 @@ private fun RecordingSelectionDock(
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)),
         shadowElevation = 6.dp,
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            IconButton(onClick = onClear, enabled = !isBusy) {
-                Icon(Icons.Default.Close, contentDescription = "선택 해제")
+        if (useLargeTextLayout) {
+            Column(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = onClear, enabled = !isBusy) {
+                        Icon(Icons.Default.Close, contentDescription = "선택 해제")
+                    }
+                    Text(
+                        "${count}개 선택",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Spacer(modifier = Modifier.weight(1f))
+                    IconButton(onClick = onDelete, enabled = !isBusy) {
+                        Icon(
+                            Icons.Default.Delete,
+                            contentDescription = "선택 삭제",
+                            tint = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+                TextButton(
+                    onClick = onMerge,
+                    enabled = canMerge,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("한데 묶기")
+                }
             }
-            Text("${count}개 선택", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-            Spacer(modifier = Modifier.weight(1f))
-            TextButton(onClick = onMerge, enabled = canMerge) { Text("한데 묶기") }
-            IconButton(onClick = onDelete, enabled = !isBusy) {
-                Icon(Icons.Default.Delete, contentDescription = "선택 삭제", tint = MaterialTheme.colorScheme.error)
+        } else {
+            Row(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                IconButton(onClick = onClear, enabled = !isBusy) {
+                    Icon(Icons.Default.Close, contentDescription = "선택 해제")
+                }
+                Text("${count}개 선택", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.weight(1f))
+                TextButton(onClick = onMerge, enabled = canMerge) { Text("한데 묶기") }
+                IconButton(onClick = onDelete, enabled = !isBusy) {
+                    Icon(Icons.Default.Delete, contentDescription = "선택 삭제", tint = MaterialTheme.colorScheme.error)
+                }
             }
         }
     }
@@ -1050,6 +1125,7 @@ private fun PlaybackPanel(
     onSeek: (Int) -> Unit,
     onClose: () -> Unit,
 ) {
+    val useLargeTextLayout = LocalDensity.current.fontScale >= 1.3f
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -1060,51 +1136,102 @@ private fun PlaybackPanel(
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.30f)),
         shadowElevation = 6.dp,
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            PlaybackIconButton(isPlaying = isPlaying, isPreparing = isPreparing, onClick = onToggle)
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                Text(
-                    formatRecordingTime(clip),
-                    style = MaterialTheme.typography.labelMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Slider(
-                    value = positionMillis.coerceIn(0, max(durationMillis, 1)).toFloat(),
-                    onValueChange = { onSeek(it.toInt()) },
-                    valueRange = 0f..max(durationMillis, 1).toFloat(),
-                    enabled = !isPreparing && durationMillis > 0,
-                )
-                Row(modifier = Modifier.fillMaxWidth()) {
+        if (useLargeTextLayout) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    PlaybackIconButton(isPlaying = isPlaying, isPreparing = isPreparing, onClick = onToggle)
                     Text(
-                        formatDuration(positionMillis / MILLIS_PER_SECOND),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        formatRecordingTime(clip),
+                        modifier = Modifier
+                            .padding(horizontal = 10.dp)
+                            .weight(1f),
+                        style = MaterialTheme.typography.labelMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
-                    Spacer(modifier = Modifier.weight(1f))
+                    PlaybackCloseButton(onClose)
+                }
+                PlaybackProgress(
+                    positionMillis = positionMillis,
+                    durationMillis = durationMillis,
+                    isPreparing = isPreparing,
+                    onSeek = onSeek,
+                )
+            }
+        } else {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                PlaybackIconButton(isPlaying = isPlaying, isPreparing = isPreparing, onClick = onToggle)
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                     Text(
-                        formatDuration(durationMillis / MILLIS_PER_SECOND),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        formatRecordingTime(clip),
+                        style = MaterialTheme.typography.labelMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    PlaybackProgress(
+                        positionMillis = positionMillis,
+                        durationMillis = durationMillis,
+                        isPreparing = isPreparing,
+                        onSeek = onSeek,
                     )
                 }
-            }
-            IconButton(
-                onClick = onClose,
-                modifier = Modifier
-                    .size(42.dp)
-                    .clip(RoundedCornerShape(13.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
-            ) {
-                Icon(Icons.Default.Close, contentDescription = "재생 닫기")
+                PlaybackCloseButton(onClose)
             }
         }
+    }
+}
+
+@Composable
+private fun PlaybackProgress(
+    positionMillis: Int,
+    durationMillis: Int,
+    isPreparing: Boolean,
+    onSeek: (Int) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+        Slider(
+            value = positionMillis.coerceIn(0, max(durationMillis, 1)).toFloat(),
+            onValueChange = { onSeek(it.toInt()) },
+            valueRange = 0f..max(durationMillis, 1).toFloat(),
+            enabled = !isPreparing && durationMillis > 0,
+        )
+        Row(modifier = Modifier.fillMaxWidth()) {
+            Text(
+                formatDuration(positionMillis / MILLIS_PER_SECOND),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            Text(
+                formatDuration(durationMillis / MILLIS_PER_SECOND),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun PlaybackCloseButton(onClose: () -> Unit) {
+    IconButton(
+        onClick = onClose,
+        modifier = Modifier
+            .size(48.dp)
+            .clip(RoundedCornerShape(13.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant),
+    ) {
+        Icon(Icons.Default.Close, contentDescription = "재생 닫기")
     }
 }
 
@@ -1472,7 +1599,8 @@ private fun sessionTimeRange(session: RecordingSessionGroup): String {
 private fun sessionAccessibilityLabel(session: RecordingSessionGroup): String = buildString {
     if (session.isInferred) append("시간 추정, ")
     append(sessionTitle(session))
-    append(", ${sessionTimeRange(session)}, 녹음 ${session.clips.size}개, 총 ")
+    append(", ${sessionTimeRange(session)}, 녹음 ${session.clips.size}개")
+    append(", 화들짝 ${session.startleEvents.size}회, 총 ")
     append(formatDuration(session.totalDurationSeconds))
 }
 

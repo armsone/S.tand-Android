@@ -12,6 +12,7 @@ import android.os.Handler
 import android.os.Looper
 import androidx.core.content.ContextCompat
 import com.armsone.stand.model.InternetRadioConfiguration
+import com.armsone.stand.model.InternetRadioReconnectPolicy
 import java.io.Closeable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,8 +20,14 @@ import kotlinx.coroutines.flow.asStateFlow
 
 sealed interface InternetRadioState {
     data object Idle : InternetRadioState
-    data object Loading : InternetRadioState
-    data class Playing(val displayName: String) : InternetRadioState
+    data class Loading(val channelID: String, val displayName: String) : InternetRadioState
+    data class Playing(val channelID: String, val displayName: String) : InternetRadioState
+    data class Reconnecting(
+        val channelID: String,
+        val displayName: String,
+        val attempt: Int,
+        val delaySeconds: Int,
+    ) : InternetRadioState
     data class Failed(val message: String) : InternetRadioState
 }
 
@@ -42,7 +49,11 @@ class InternetRadioPlayer(context: Context) : Closeable {
     val state: StateFlow<InternetRadioState> = mutableState.asStateFlow()
     private var mediaPlayer: MediaPlayer? = null
     private var receiverRegistered = false
-    private val timeout = Runnable { fail("라디오 연결 시간이 초과되었습니다.") }
+    private var currentConfiguration: InternetRadioConfiguration? = null
+    private var retryAttempt = 0
+    private var explicitlyStopped = true
+    private val timeout = Runnable { handleConnectionFailure() }
+    private val retry = Runnable { currentConfiguration?.let(::startConnection) }
     private val noisyReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) = stop()
     }
@@ -52,12 +63,20 @@ class InternetRadioPlayer(context: Context) : Closeable {
             fail("라디오 주소를 확인해 주세요.")
             return
         }
+        handler.removeCallbacks(retry)
+        explicitlyStopped = false
+        currentConfiguration = radio
+        retryAttempt = 0
+        startConnection(radio)
+    }
+
+    private fun startConnection(radio: InternetRadioConfiguration) {
         releasePlayer(abandonFocus = false)
         if (audioManager.requestAudioFocus(focusRequest) != AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
             fail("다른 오디오가 사용 중입니다.")
             return
         }
-        mutableState.value = InternetRadioState.Loading
+        mutableState.value = InternetRadioState.Loading(radio.id, radio.displayName)
         registerNoisyReceiver()
         val prepared = runCatching {
             MediaPlayer().apply {
@@ -66,16 +85,18 @@ class InternetRadioPlayer(context: Context) : Closeable {
                 setOnPreparedListener {
                     handler.removeCallbacks(timeout)
                     start()
-                    mutableState.value = InternetRadioState.Playing(radio.displayName)
+                    retryAttempt = 0
+                    mutableState.value = InternetRadioState.Playing(radio.id, radio.displayName)
                 }
                 setOnErrorListener { _, _, _ ->
-                    fail("라디오 스트림을 재생할 수 없습니다.")
+                    handleConnectionFailure()
                     true
                 }
+                setOnCompletionListener { handleConnectionFailure() }
                 prepareAsync()
             }
         }.getOrElse {
-            fail("라디오 스트림을 열 수 없습니다.")
+            handleConnectionFailure()
             return
         }
         mediaPlayer = prepared
@@ -83,17 +104,45 @@ class InternetRadioPlayer(context: Context) : Closeable {
     }
 
     fun stop() {
+        explicitlyStopped = true
+        currentConfiguration = null
+        retryAttempt = 0
+        handler.removeCallbacks(retry)
         releasePlayer(abandonFocus = true)
         mutableState.value = InternetRadioState.Idle
     }
 
+    private fun handleConnectionFailure() {
+        if (explicitlyStopped) return
+        val radio = currentConfiguration ?: return
+        releasePlayer(abandonFocus = false)
+        val delaySeconds = InternetRadioReconnectPolicy.delaySeconds(retryAttempt) ?: run {
+            fail("라디오 연결을 복구하지 못했습니다.")
+            return
+        }
+        retryAttempt += 1
+        mutableState.value = InternetRadioState.Reconnecting(
+            channelID = radio.id,
+            displayName = radio.displayName,
+            attempt = retryAttempt,
+            delaySeconds = delaySeconds,
+        )
+        handler.postDelayed(retry, delaySeconds * 1_000L)
+    }
+
     private fun fail(message: String) {
+        explicitlyStopped = true
+        currentConfiguration = null
+        handler.removeCallbacks(retry)
         releasePlayer(abandonFocus = true)
         mutableState.value = InternetRadioState.Failed(message)
     }
 
     private fun releasePlayer(abandonFocus: Boolean) {
         handler.removeCallbacks(timeout)
+        mediaPlayer?.setOnPreparedListener(null)
+        mediaPlayer?.setOnErrorListener(null)
+        mediaPlayer?.setOnCompletionListener(null)
         mediaPlayer?.runCatching { stop() }
         mediaPlayer?.release()
         mediaPlayer = null

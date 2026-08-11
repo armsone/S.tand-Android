@@ -29,6 +29,8 @@ data class StandUiState(
     val ambientCameraState: AmbientCameraState = AmbientCameraState.DISABLED,
     val ambientCameraBrightness: Float? = null,
     val audioLevel: Float = 0f,
+    val effectiveSoundThresholdDB: Float = -50f,
+    val noiseCalibrationProgress: Float = 0f,
     val audioRunning: Boolean = false,
     val isWritingClip: Boolean = false,
     val audioMessage: String? = null,

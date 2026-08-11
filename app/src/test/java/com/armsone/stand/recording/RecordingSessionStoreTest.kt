@@ -5,6 +5,7 @@ import java.io.IOException
 import java.nio.file.Files
 import java.time.Duration
 import java.time.Instant
+import java.util.UUID
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -186,6 +187,37 @@ class RecordingSessionStoreTest {
         assertEquals(listOf(audio.file.name), reloaded.sessions.single().clipFileNames)
         assertEquals(start.plusSeconds(10), reloaded.sessions.single().endedAt)
         assertTrue(directory.listFiles().orEmpty().none { it.name.endsWith(".tmp") })
+    }
+
+    @Test
+    fun startleTimelineRoundTripsAndClosesWithItsMateSession() = withDirectory { directory ->
+        val start = instant("2026-08-10T01:00:00Z")
+        val store = RecordingSessionStore(directory)
+        val sessionId = store.beginMateSession(start)
+        val eventId = store.beginStartleEvent(sessionId, start.plusSeconds(10))
+        assertNotNull(eventId)
+        assertEquals(eventId, store.beginStartleEvent(sessionId, start.plusSeconds(11)))
+
+        store.endMateSession(sessionId, start.plusSeconds(20))
+        val reloaded = RecordingSessionStore(directory)
+        val event = reloaded.sessions.single().startleEvents.single()
+
+        assertEquals(start.plusSeconds(10), event.startedAt)
+        assertEquals(start.plusSeconds(20), event.endedAt)
+        assertEquals(1, reloaded.groups(emptyList(), start.plusSeconds(30)).single().startleEvents.size)
+    }
+
+    @Test
+    fun versionOneManifestLoadsWithNoStartleEvents() = withDirectory { directory ->
+        val id = UUID.randomUUID()
+        File(directory, RecordingSessionStore.MANIFEST_FILE_NAME).writeText(
+            "S.TAND-RECORDING-SESSIONS\t1\nS\t$id\t1000\t2000\t\n",
+        )
+
+        val session = RecordingSessionStore(directory).sessions.single()
+
+        assertEquals(id, session.id)
+        assertTrue(session.startleEvents.isEmpty())
     }
 
     private fun clip(

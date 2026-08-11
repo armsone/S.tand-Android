@@ -41,16 +41,67 @@ private val GrayscaleScheme = darkColorScheme(
     onSurfaceVariant = Color(0xFFD8D8D8),
 )
 
+private val MidnightScheme = darkColorScheme(
+    primary = Color(0xFF61ADFF),
+    onPrimary = Color.Black,
+    secondary = Color(0xFF7DBBFF),
+    background = Color(0xFF030517),
+    onBackground = Color.White,
+    surface = Color(0xFF10172D),
+    onSurface = Color.White,
+    surfaceVariant = Color(0xFF1B2A50),
+    onSurfaceVariant = Color(0xFFD9E8FF),
+)
+
+private val SageScheme = darkColorScheme(
+    primary = Color(0xFF8CC69E),
+    onPrimary = Color.Black,
+    secondary = Color(0xFFA4D3B0),
+    background = Color(0xFF06130E),
+    onBackground = Color.White,
+    surface = Color(0xFF12231B),
+    onSurface = Color.White,
+    surfaceVariant = Color(0xFF203A2B),
+    onSurfaceVariant = Color(0xFFDDEDE1),
+)
+
+fun lampGradientColors(theme: StandDisplayTheme, intensity: Float): List<Color> {
+    val level = intensity.takeIf { it.isFinite() }?.coerceIn(0f, 1f) ?: 0f
+    return when (theme) {
+        StandDisplayTheme.COLOR -> listOf(
+            Color(0xFFFF9E47).copy(alpha = level),
+            Color(0xFFF2450F).copy(alpha = level * 0.72f),
+            Color.Black.copy(alpha = 1f - level * 0.22f),
+        )
+        StandDisplayTheme.GRAYSCALE -> listOf(
+            Color(0xFFB8B8B8).copy(alpha = level * 0.72f),
+            Color(0xFF4D4D4D).copy(alpha = level * 0.64f),
+            Color.Black.copy(alpha = 1f - level * 0.18f),
+        )
+        StandDisplayTheme.MIDNIGHT -> listOf(
+            Color(0xFF4794FF).copy(alpha = level * 0.86f),
+            Color(0xFF143394).copy(alpha = level * 0.78f),
+            Color(0xFF030517).copy(alpha = 1f - level * 0.18f),
+        )
+        StandDisplayTheme.SAGE -> listOf(
+            Color(0xFF99D1A3).copy(alpha = level * 0.80f),
+            Color(0xFF336E4D).copy(alpha = level * 0.72f),
+            Color(0xFF06130E).copy(alpha = 1f - level * 0.18f),
+        )
+    }
+}
+
 @Composable
 fun STandTheme(
     displayTheme: StandDisplayTheme = StandDisplayTheme.COLOR,
     content: @Composable () -> Unit,
 ) {
     MaterialTheme(
-        colorScheme = if (displayTheme == StandDisplayTheme.GRAYSCALE) {
-            GrayscaleScheme
-        } else {
-            ColorScheme
+        colorScheme = when (displayTheme) {
+            StandDisplayTheme.COLOR -> ColorScheme
+            StandDisplayTheme.GRAYSCALE -> GrayscaleScheme
+            StandDisplayTheme.MIDNIGHT -> MidnightScheme
+            StandDisplayTheme.SAGE -> SageScheme
         },
         content = content,
     )

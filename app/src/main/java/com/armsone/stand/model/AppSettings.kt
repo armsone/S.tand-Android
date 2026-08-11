@@ -23,7 +23,14 @@ enum class OrientationPreference(val title: String) {
 
 enum class ClockHourMode { TWELVE, TWENTY_FOUR }
 
-enum class StandDisplayTheme { COLOR, GRAYSCALE }
+enum class StandDisplayTheme(val title: String) {
+    COLOR("오렌지"),
+    GRAYSCALE("그레이"),
+    MIDNIGHT("미드나이트"),
+    SAGE("세이지");
+
+    fun next(): StandDisplayTheme = entries[(ordinal + 1) % entries.size]
+}
 
 enum class StandModePreference(val title: String) {
     AUTOMATIC("자동"),
@@ -44,16 +51,16 @@ enum class StandExperienceMode(val title: String) {
 data class AppSettings(
     val lampIntensity: Float = 0.72f,
     val silhouetteIntensity: Float = 0.05f,
-    val clockScale: Float = 1f,
+    val clockScale: Float = DEFAULT_CLOCK_SCALE,
     val clockFont: ClockFontChoice = ClockFontChoice.TENADA,
     val clockHourMode: ClockHourMode = ClockHourMode.TWELVE,
     val displayTheme: StandDisplayTheme = StandDisplayTheme.COLOR,
     val portraitLayout: StandScreenLayout = StandScreenLayout.Portrait,
     val landscapeLayout: StandScreenLayout = StandScreenLayout.Landscape,
-    val brightnessModeThreshold: Float = 0.35f,
+    val brightnessModeThreshold: Float = 0.4f,
     val holdDurationSeconds: Float = 5f,
     val fadeDurationSeconds: Float = 30f,
-    val automaticDimmingEnabled: Boolean = true,
+    val automaticDimmingEnabled: Boolean = false,
     val soundThresholdDB: Float = -36f,
     val recordingEnabled: Boolean = true,
     val orientationPreference: OrientationPreference = OrientationPreference.AUTOMATIC,
@@ -62,24 +69,62 @@ data class AppSettings(
     val modePreference: StandModePreference = StandModePreference.AUTOMATIC,
     val ambientSensingEnabled: Boolean = true,
     val cameraAmbientSensingEnabled: Boolean = false,
+    val soundSensingEnabled: Boolean = true,
+    val weatherLocationEnabled: Boolean = true,
     val internetRadio: InternetRadioConfiguration? = null,
+    val internetRadioChannels: List<InternetRadioConfiguration> = emptyList(),
+    val selectedInternetRadioId: String? = null,
 ) {
-    fun normalized(): AppSettings = copy(
-        lampIntensity = lampIntensity.coerceIn(0.15f, 1f),
-        silhouetteIntensity = silhouetteIntensity.coerceIn(0.005f, 0.2f),
-        clockScale = clockScale.coerceIn(0.7f, 1.35f),
-        portraitLayout = portraitLayout.copy(),
-        landscapeLayout = landscapeLayout.copy(),
-        brightnessModeThreshold = brightnessModeThreshold.coerceIn(0f, 1f),
-        holdDurationSeconds = holdDurationSeconds.coerceIn(5f, 300f),
-        fadeDurationSeconds = fadeDurationSeconds.coerceIn(0.1f, 120f),
-        soundThresholdDB = soundThresholdDB.coerceIn(-55f, -18f),
-        internetRadio = internetRadio?.normalizedOrNull(),
-    )
+    fun normalized(): AppSettings {
+        val normalizedChannels = buildList {
+            internetRadioChannels.forEach { channel ->
+                channel.normalizedOrNull()?.let(::add)
+            }
+            internetRadio?.normalizedOrNull()?.let(::add)
+        }.distinctBy { it.id }.take(MAXIMUM_INTERNET_RADIO_CHANNEL_COUNT)
+        val selected = normalizedChannels.firstOrNull { it.id == selectedInternetRadioId }
+            ?: internetRadio?.normalizedOrNull()?.let { legacy ->
+                normalizedChannels.firstOrNull { it.id == legacy.id }
+            }
+            ?: normalizedChannels.firstOrNull()
+        return copy(
+            lampIntensity = lampIntensity.coerceIn(0f, 1f),
+            silhouetteIntensity = silhouetteIntensity.coerceIn(0.005f, 0.2f),
+            clockScale = clockScale.coerceIn(0.7f, 1.35f),
+            portraitLayout = portraitLayout.copy(),
+            landscapeLayout = landscapeLayout.copy(),
+            brightnessModeThreshold = brightnessModeThreshold.coerceIn(0f, 1f),
+            holdDurationSeconds = holdDurationSeconds.coerceIn(5f, 300f),
+            fadeDurationSeconds = fadeDurationSeconds.coerceIn(0.1f, 120f),
+            soundThresholdDB = soundThresholdDB.coerceIn(-55f, -18f),
+            clockHourMode = ClockHourMode.TWELVE,
+            orientationPreference = OrientationPreference.AUTOMATIC,
+            internetRadio = selected,
+            internetRadioChannels = normalizedChannels,
+            selectedInternetRadioId = selected?.id,
+        )
+    }
 
     companion object {
+        const val DEFAULT_CLOCK_SCALE = 1.0059053f
+        const val MAXIMUM_INTERNET_RADIO_CHANNEL_COUNT = 2
         val Recommended = AppSettings()
     }
+}
+
+/** One-time alignment with the simplified iOS 1.0.0 (0.23.3) experience. */
+object CurrentExperienceMigration {
+    fun apply(previous: AppSettings): AppSettings = previous.copy(
+        clockScale = AppSettings.DEFAULT_CLOCK_SCALE,
+        clockHourMode = ClockHourMode.TWELVE,
+        portraitLayout = StandScreenLayout.Portrait,
+        landscapeLayout = StandScreenLayout.Landscape,
+        brightnessModeThreshold = 0.4f,
+        holdDurationSeconds = 5f,
+        automaticDimmingEnabled = false,
+        orientationPreference = OrientationPreference.AUTOMATIC,
+        torchEnabled = true,
+    ).normalized()
 }
 
 /** Maps an Android light sensor's very wide lux range onto the 0...1 UI rail. */
@@ -120,4 +165,7 @@ object AmbientLightPolicy {
 object BatteryProtectionPolicy {
     fun shouldProtect(levelFraction: Float?, isCharging: Boolean): Boolean =
         levelFraction != null && levelFraction <= 0.2f && !isCharging
+
+    fun shouldClearProtection(wasProtecting: Boolean, shouldProtectNow: Boolean): Boolean =
+        wasProtecting && !shouldProtectNow
 }

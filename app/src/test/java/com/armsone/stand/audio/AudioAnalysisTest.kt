@@ -7,6 +7,46 @@ import org.junit.Test
 
 class AudioAnalysisTest {
     @Test
+    fun adaptiveNoiseFloorMakesQuietRoomsMoreSensitiveAndNoisyRoomsRelative() {
+        val quietTracker = AdaptiveNoiseFloorTracker()
+        var quietState = quietTracker.state
+        repeat(60) { quietState = quietTracker.observe(rmsDB = -62f, duration = 1.0) }
+
+        val noisyTracker = AdaptiveNoiseFloorTracker()
+        var noisyState = noisyTracker.state
+        repeat(60) { noisyState = noisyTracker.observe(rmsDB = -30f, duration = 1.0) }
+
+        assertTrue(quietState.isCalibrated)
+        assertEquals(-62f, quietState.noiseFloorDB ?: 0f, 0f)
+        assertEquals(-58f, quietState.effectiveSoundThresholdDB, 0f)
+        assertEquals(-30f, noisyState.noiseFloorDB ?: 0f, 0f)
+        assertEquals(-24f, noisyState.effectiveSoundThresholdDB, 0f)
+        assertTrue(noisyState.effectiveSoundThresholdDB > quietState.effectiveSoundThresholdDB)
+    }
+
+    @Test
+    fun adaptiveNoiseFloorIgnoresOneLoudMomentAndDetectsSmallRelativeRise() {
+        val tracker = AdaptiveNoiseFloorTracker()
+        repeat(59) { tracker.observe(rmsDB = -60f, duration = 1.0) }
+        val state = tracker.observe(rmsDB = -10f, duration = 1.0)
+
+        assertEquals(-60f, state.noiseFloorDB ?: 0f, 0f)
+        val detector = AudioEventDetector(
+            AudioDetectorConfiguration(soundThresholdDB = state.effectiveSoundThresholdDB),
+        )
+        detector.analyze(rmsDB = -60f, peakDB = -54f, bufferDuration = 0.02, now = 1.0)
+        detector.analyze(rmsDB = -54f, peakDB = -45f, bufferDuration = 0.02, now = 1.02)
+        detector.analyze(rmsDB = -54f, peakDB = -45f, bufferDuration = 0.02, now = 1.04)
+        val rise = detector.analyze(
+            rmsDB = -54f,
+            peakDB = -45f,
+            bufferDuration = 0.02,
+            now = 1.06,
+        )
+        assertTrue(rise.soundBegan)
+    }
+
+    @Test
     fun lampEnvelopeHoldsThenFadesSmoothly() {
         val envelope = LampEnvelope(
             activatedAt = 10.0,

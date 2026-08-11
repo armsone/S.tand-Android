@@ -1,11 +1,32 @@
 package com.armsone.stand.platform
 
+import com.armsone.stand.model.EnvironmentDisplayMode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PlatformPoliciesTest {
+    @Test
+    fun objectModeKeepsOnlyAmbientMonitoringWhileMateEnablesSleepCare() {
+        assertEquals(
+            DeviceSensorMonitoringMode.STOPPED,
+            DeviceSensorMonitoringPolicy.mode(false, true, EnvironmentDisplayMode.MATE),
+        )
+        assertEquals(
+            DeviceSensorMonitoringMode.STOPPED,
+            DeviceSensorMonitoringPolicy.mode(true, false, EnvironmentDisplayMode.MATE),
+        )
+        assertEquals(
+            DeviceSensorMonitoringMode.AMBIENT_ONLY,
+            DeviceSensorMonitoringPolicy.mode(true, true, EnvironmentDisplayMode.OBJECT),
+        )
+        assertEquals(
+            DeviceSensorMonitoringMode.SLEEP_CARE,
+            DeviceSensorMonitoringPolicy.mode(true, true, EnvironmentDisplayMode.MATE),
+        )
+    }
+
     @Test
     fun cameraBrightnessUsesMedianAndExposureCompensation() {
         assertEquals(0.3f, AmbientCameraPolicy.median(listOf(0.9f, 0.1f, 0.3f))!!, 0f)
@@ -29,7 +50,7 @@ class PlatformPoliciesTest {
     }
 
     @Test
-    fun cameraReadingFreshnessUsesNinetySecondMonotonicWindow() {
+    fun cameraReadingFreshnessUsesTwentySecondMonotonicWindow() {
         val measuredAt = 1_000_000_000L
         val reading = AmbientCameraReading(
             value = 0.15f,
@@ -51,6 +72,53 @@ class PlatformPoliciesTest {
             ),
         )
         assertFalse(AmbientCameraPolicy.isFresh(reading, measuredAt - 1L))
+    }
+
+    @Test
+    fun cameraBrightnessUsesDarkBrightHysteresisAndFallsBackWhenStale() {
+        val now = 30_000_000_000L
+        fun reading(value: Float, ageNanos: Long = 0L) = AmbientCameraReading(
+            value = value,
+            measuredAtElapsedRealtimeNanos = now - ageNanos,
+            lensFacing = 0,
+        )
+
+        assertEquals(
+            EnvironmentDisplayMode.OBJECT,
+            AmbientCameraModePolicy.targetMode(
+                EnvironmentDisplayMode.MATE,
+                EnvironmentDisplayMode.MATE,
+                reading(AmbientCameraPolicy.BrightThreshold),
+                now,
+            ),
+        )
+        assertEquals(
+            EnvironmentDisplayMode.MATE,
+            AmbientCameraModePolicy.targetMode(
+                EnvironmentDisplayMode.MATE,
+                EnvironmentDisplayMode.OBJECT,
+                reading(0.22f),
+                now,
+            ),
+        )
+        assertEquals(
+            EnvironmentDisplayMode.MATE,
+            AmbientCameraModePolicy.targetMode(
+                EnvironmentDisplayMode.OBJECT,
+                EnvironmentDisplayMode.OBJECT,
+                reading(AmbientCameraPolicy.DarkThreshold),
+                now,
+            ),
+        )
+        assertEquals(
+            EnvironmentDisplayMode.OBJECT,
+            AmbientCameraModePolicy.targetMode(
+                EnvironmentDisplayMode.MATE,
+                EnvironmentDisplayMode.OBJECT,
+                reading(0f, AmbientCameraPolicy.MaximumReadingAgeNanos),
+                now,
+            ),
+        )
     }
 
     @Test

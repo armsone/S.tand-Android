@@ -18,6 +18,13 @@ data class RecordingSessionMetadata(
     val startedAt: Instant,
     val endedAt: Instant?,
     val clipFileNames: List<String>,
+    val startleEvents: List<SleepStartleEvent> = emptyList(),
+)
+
+data class SleepStartleEvent(
+    val id: UUID,
+    val startedAt: Instant,
+    val endedAt: Instant?,
 )
 
 data class RecordingSessionGroup(
@@ -26,6 +33,7 @@ data class RecordingSessionGroup(
     val endedAt: Instant,
     val clips: List<RecordingClip>,
     val isInferred: Boolean,
+    val startleEvents: List<SleepStartleEvent> = emptyList(),
 ) {
     val totalDurationSeconds: Double
         get() = clips.sumOf { it.durationSeconds }
@@ -82,10 +90,16 @@ object RecordingSessionPolicy {
         clip: RecordingClip,
         sessionStart: Instant,
         sessionEnd: Instant,
+    ): Double = markerFraction(clip.createdAt, sessionStart, sessionEnd)
+
+    fun markerFraction(
+        instant: Instant,
+        sessionStart: Instant,
+        sessionEnd: Instant,
     ): Double {
         val durationMillis = max(1L, Duration.between(sessionStart, sessionEnd).toMillis())
         return (
-            Duration.between(sessionStart, clip.createdAt).toMillis().toDouble() /
+            Duration.between(sessionStart, instant).toMillis().toDouble() /
                 durationMillis.toDouble()
             ).coerceIn(0.0, 1.0)
     }
@@ -156,6 +170,7 @@ class RecordingSessionStore(
             startedAt = at,
             endedAt = null,
             clipFileNames = emptyList(),
+            startleEvents = emptyList(),
         )
         commitLocked(candidate + session)
         session.id
@@ -167,7 +182,49 @@ class RecordingSessionStore(
         if (index < 0) return@synchronized false
         val session = storedSessions[index]
         val candidate = storedSessions.toMutableList().also { sessions ->
-            sessions[index] = session.copy(endedAt = maxInstant(session.startedAt, at))
+            val endedAt = maxInstant(session.startedAt, at)
+            sessions[index] = session.copy(
+                endedAt = endedAt,
+                startleEvents = session.startleEvents.map { event ->
+                    if (event.endedAt == null) {
+                        event.copy(endedAt = maxInstant(event.startedAt, endedAt))
+                    } else {
+                        event
+                    }
+                },
+            )
+        }
+        commitLocked(candidate)
+        true
+    }
+
+    @Throws(IOException::class)
+    fun beginStartleEvent(sessionId: UUID?, at: Instant = now()): UUID? = synchronized(lock) {
+        val index = storedSessions.indexOfFirst { it.id == sessionId }
+        if (index < 0) return@synchronized null
+        val session = storedSessions[index]
+        session.startleEvents.lastOrNull { it.endedAt == null }?.let { return@synchronized it.id }
+        val event = SleepStartleEvent(UUID.randomUUID(), at, null)
+        val candidate = storedSessions.toMutableList().also { sessions ->
+            sessions[index] = session.copy(startleEvents = session.startleEvents + event)
+        }
+        commitLocked(candidate)
+        event.id
+    }
+
+    @Throws(IOException::class)
+    fun endStartleEvent(id: UUID?, at: Instant = now()): Boolean = synchronized(lock) {
+        if (id == null) return@synchronized false
+        val sessionIndex = storedSessions.indexOfFirst { session ->
+            session.startleEvents.any { it.id == id }
+        }
+        if (sessionIndex < 0) return@synchronized false
+        val session = storedSessions[sessionIndex]
+        val events = session.startleEvents.map { event ->
+            if (event.id == id) event.copy(endedAt = maxInstant(event.startedAt, at)) else event
+        }
+        val candidate = storedSessions.toMutableList().also { sessions ->
+            sessions[sessionIndex] = session.copy(startleEvents = events)
         }
         commitLocked(candidate)
         true
@@ -231,22 +288,26 @@ class RecordingSessionStore(
             val sessionClips = session.clipFileNames
                 .mapNotNull(clipsByName::get)
                 .sortedBy { it.createdAt }
-            if (sessionClips.isEmpty()) return@mapNotNull null
+            if (sessionClips.isEmpty() && session.startleEvents.isEmpty()) return@mapNotNull null
             assignedNames += sessionClips.map { it.file.name }
-            val lastClipEnd = sessionClips.maxOf { clip ->
+            val lastClipEnd = sessionClips.maxOfOrNull { clip ->
                 clip.createdAt.plusMillis(
                     (clip.durationSeconds.coerceAtLeast(0.0) * 1_000.0).toLong(),
                 )
-            }
+            } ?: session.startedAt
+            val lastStartleEnd = session.startleEvents.maxOfOrNull { event ->
+                event.endedAt ?: referenceTime
+            } ?: session.startedAt
             RecordingSessionGroup(
                 id = "session-${session.id}",
                 startedAt = session.startedAt,
                 endedAt = maxInstant(
                     session.startedAt.plusSeconds(1),
-                    session.endedAt ?: maxInstant(referenceTime, lastClipEnd),
+                    session.endedAt ?: maxInstant(referenceTime, maxInstant(lastClipEnd, lastStartleEnd)),
                 ),
                 clips = sessionClips,
                 isInferred = false,
+                startleEvents = session.startleEvents,
             )
         }
         val legacy = RecordingSessionPolicy.inferredGroups(
@@ -274,7 +335,20 @@ class RecordingSessionStore(
 
     private fun recoverOpenSessionsLocked() {
         val recovered = storedSessions.map { session ->
-            if (session.endedAt == null) session.copy(endedAt = session.startedAt) else session
+            if (session.endedAt == null) {
+                session.copy(
+                    endedAt = session.startedAt,
+                    startleEvents = session.startleEvents.map { event ->
+                        if (event.endedAt == null) {
+                            event.copy(endedAt = maxInstant(event.startedAt, session.startedAt))
+                        } else {
+                            event
+                        }
+                    },
+                )
+            } else {
+                session
+            }
         }
         if (recovered == storedSessions) return
         try {
@@ -361,7 +435,8 @@ class RecordingSessionStore(
 
     companion object {
         const val MANIFEST_FILE_NAME = ".recording-sessions-v1"
-        private const val MANIFEST_HEADER = "S.TAND-RECORDING-SESSIONS\t1"
+        private const val MANIFEST_HEADER_V1 = "S.TAND-RECORDING-SESSIONS\t1"
+        private const val MANIFEST_HEADER = "S.TAND-RECORDING-SESSIONS\t2"
         private const val ASSOCIATION_TOLERANCE_SECONDS = 5L
         private val encoder = Base64.getUrlEncoder().withoutPadding()
         private val decoder = Base64.getUrlDecoder()
@@ -380,16 +455,27 @@ class RecordingSessionStore(
                 append(session.endedAt?.toEpochMilli()?.toString().orEmpty())
                 append('\t')
                 append(names)
+                append('\t')
+                append(session.startleEvents.joinToString(",") { event ->
+                    listOf(
+                        event.id.toString(),
+                        event.startedAt.toEpochMilli().toString(),
+                        event.endedAt?.toEpochMilli()?.toString().orEmpty(),
+                    ).joinToString(":")
+                })
                 append('\n')
             }
         }
 
         private fun decodeManifest(text: String): List<RecordingSessionMetadata> {
             val lines = text.lineSequence().toList()
-            require(lines.firstOrNull() == MANIFEST_HEADER) { "Unknown session manifest" }
+            val header = lines.firstOrNull()
+            require(header == MANIFEST_HEADER || header == MANIFEST_HEADER_V1) {
+                "Unknown session manifest"
+            }
             return lines.drop(1).filter(String::isNotBlank).map { line ->
-                val fields = line.split('\t', limit = 5)
-                require(fields.size == 5 && fields[0] == "S") { "Invalid session entry" }
+                val fields = line.split('\t', limit = 6)
+                require(fields.size >= 5 && fields[0] == "S") { "Invalid session entry" }
                 val names = fields[4].takeIf(String::isNotEmpty)
                     ?.split(',')
                     ?.map { encoded ->
@@ -401,6 +487,21 @@ class RecordingSessionStore(
                     startedAt = Instant.ofEpochMilli(fields[2].toLong()),
                     endedAt = fields[3].takeIf(String::isNotEmpty)?.toLong()?.let(Instant::ofEpochMilli),
                     clipFileNames = names.distinct(),
+                    startleEvents = fields.getOrNull(5)
+                        ?.takeIf(String::isNotEmpty)
+                        ?.split(',')
+                        ?.map { encoded ->
+                            val event = encoded.split(':', limit = 3)
+                            require(event.size == 3) { "Invalid startle event" }
+                            SleepStartleEvent(
+                                id = UUID.fromString(event[0]),
+                                startedAt = Instant.ofEpochMilli(event[1].toLong()),
+                                endedAt = event[2].takeIf(String::isNotEmpty)
+                                    ?.toLong()
+                                    ?.let(Instant::ofEpochMilli),
+                            )
+                        }
+                        .orEmpty(),
                 )
             }
         }
@@ -410,6 +511,7 @@ class RecordingSessionStore(
             referenceTime: Instant,
         ): List<RecordingSessionMetadata> = sessions.filterNot { session ->
             session.clipFileNames.isEmpty() &&
+                session.startleEvents.isEmpty() &&
                 session.endedAt != null &&
                 Duration.between(session.endedAt, referenceTime) >
                 RecordingSessionPolicy.mateModeResumeGap

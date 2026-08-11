@@ -1,6 +1,7 @@
 package com.armsone.stand.model
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotSame
 import org.junit.Test
 
@@ -9,6 +10,9 @@ class ScreenLayoutCodecTest {
     fun customizedLayoutRoundTripsWithoutLosingCoordinatesGroupsOrOrder() {
         val customized = StandScreenLayout.Portrait.copy(
             clock = PanelTransform(x = 0.18f, y = -0.12f, scale = 1.4f),
+            seconds = PanelTransform(x = 0.33f, y = 0.08f, scale = 0.7f),
+            secondaryRadio = PanelTransform(x = -0.4f, y = 0.3f, scale = 0.6f),
+            radiosGrouped = false,
             date = PanelTransform(x = -0.2f, y = 0.28f, scale = 0.8f),
             weatherGroupIds = listOf(4, 4, 9),
             controlOrder = listOf(
@@ -29,10 +33,24 @@ class ScreenLayoutCodecTest {
     }
 
     @Test
+    fun legacyV1LayoutWithoutNewOptionalPanelsStillDecodes() {
+        val encoded = ScreenLayoutCodec.encode(StandScreenLayout.Portrait)
+            .replace(Regex("\\|seconds=[^|]+"), "")
+            .replace(Regex("\\|secondaryRadio=[^|]+"), "")
+            .replace(Regex("\\|radiosGrouped=[^|]+"), "")
+
+        val decoded = ScreenLayoutCodec.decodeOrDefault(encoded, StandScreenLayout.Landscape)
+
+        assertEquals(PanelTransform(0.27f, 0.036f), decoded.seconds)
+        assertEquals(PanelTransform(-0.26f, 0.215f, 0.75f), decoded.secondaryRadio)
+        assertFalse(decoded.radiosGrouped)
+    }
+
+    @Test
     fun unknownDuplicateAndMissingControlKindsAreNormalized() {
         val encoded = ScreenLayoutCodec.encode(StandScreenLayout.Portrait)
         val altered = encoded.replace(
-            oldValue = "controlOrder=flashlight,brightness,stopDetection,recordings,settings",
+            oldValue = "controlOrder=recordings,settings",
             newValue =
                 "controlOrder=settings,futureControl,orientation,aiShot,settings,flashlight",
         )
@@ -43,13 +61,7 @@ class ScreenLayoutCodecTest {
         )
 
         assertEquals(
-            listOf(
-                StandControlKind.SETTINGS,
-                StandControlKind.FLASHLIGHT,
-                StandControlKind.BRIGHTNESS,
-                StandControlKind.STOP_DETECTION,
-                StandControlKind.RECORDINGS,
-            ),
+            listOf(StandControlKind.SETTINGS, StandControlKind.RECORDINGS),
             decoded.controlOrder,
         )
     }
@@ -84,8 +96,8 @@ class ScreenLayoutCodecTest {
         val fallback = StandScreenLayout.Landscape
         val valid = ScreenLayoutCodec.encode(StandScreenLayout.Portrait)
         val nonFinite = valid.replace(
-            oldValue = "clock=0.0,0.0,1.0",
-            newValue = "clock=NaN,0.0,1.0",
+            oldValue = "clock=0.0,0.0,1.291905",
+            newValue = "clock=NaN,0.0,1.291905",
         )
         assertEquals(
             fallback,
@@ -93,7 +105,7 @@ class ScreenLayoutCodecTest {
         )
 
         val oversizedScale = valid.replace(
-            oldValue = "clock=0.0,0.0,1.0",
+            oldValue = "clock=0.0,0.0,1.291905",
             newValue = "clock=0.0,0.0,9.0",
         )
         val decoded = ScreenLayoutCodec.decodeOrDefault(oversizedScale, fallback)
@@ -138,13 +150,7 @@ class ScreenLayoutCodecTest {
         assertNotSame(landscape, normalized.landscapeLayout)
         assertEquals(PanelTransform(x = 0f, y = 0f, scale = 2f), normalized.portraitLayout.clock)
         assertEquals(
-            listOf(
-                StandControlKind.SETTINGS,
-                StandControlKind.FLASHLIGHT,
-                StandControlKind.BRIGHTNESS,
-                StandControlKind.STOP_DETECTION,
-                StandControlKind.RECORDINGS,
-            ),
+            listOf(StandControlKind.SETTINGS, StandControlKind.RECORDINGS),
             normalized.portraitLayout.controlOrder,
         )
         assertEquals(listOf(7, 1, 1), normalized.landscapeLayout.weatherGroupIds)

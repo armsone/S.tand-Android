@@ -38,7 +38,23 @@ data class DeviceSensorState(
     val accelerationSensorAvailable: Boolean = false,
     val gyroscopeAvailable: Boolean = false,
     val postureSensorAvailable: Boolean = false,
+    val monitoringMode: DeviceSensorMonitoringMode = DeviceSensorMonitoringMode.STOPPED,
 )
+
+enum class DeviceSensorMonitoringMode { STOPPED, AMBIENT_ONLY, SLEEP_CARE }
+
+object DeviceSensorMonitoringPolicy {
+    fun mode(
+        isForeground: Boolean,
+        isSessionActive: Boolean,
+        environmentMode: com.armsone.stand.model.EnvironmentDisplayMode,
+    ): DeviceSensorMonitoringMode = when {
+        !isForeground || !isSessionActive -> DeviceSensorMonitoringMode.STOPPED
+        environmentMode == com.armsone.stand.model.EnvironmentDisplayMode.MATE ->
+            DeviceSensorMonitoringMode.SLEEP_CARE
+        else -> DeviceSensorMonitoringMode.AMBIENT_ONLY
+    }
+}
 
 /** Pure movement thresholds shared by the Android sensor adapter and JVM tests. */
 object DeviceMovementPolicy {
@@ -119,6 +135,7 @@ class DeviceSensorMonitor(
 
     @Volatile
     private var started = false
+    private var monitoringMode = DeviceSensorMonitoringMode.STOPPED
     private var sensorThread: HandlerThread? = null
     private var sensorHandler: Handler? = null
     private var lastMovementElapsedRealtimeNanos: Long? = null
@@ -127,15 +144,24 @@ class DeviceSensorMonitor(
     private var gravityEstimateInitialized = false
     private var hardwareGravitySeen = false
 
-    fun start() {
+    fun start() = startSleepCare()
+
+    fun startAmbientOnly() = start(DeviceSensorMonitoringMode.AMBIENT_ONLY)
+
+    fun startSleepCare() = start(DeviceSensorMonitoringMode.SLEEP_CARE)
+
+    private fun start(requestedMode: DeviceSensorMonitoringMode) {
+        if (started && monitoringMode != requestedMode) stop()
         synchronized(lifecycleLock) {
-            if (started) return
+            if (started && monitoringMode == requestedMode) return
             started = true
+            monitoringMode = requestedMode
             resetTransientSensorState()
 
             val manager = sensorManager
             if (manager == null) {
                 started = false
+                monitoringMode = DeviceSensorMonitoringMode.STOPPED
                 mutableState.update {
                     it.copy(
                         isRunning = false,
@@ -143,6 +169,7 @@ class DeviceSensorMonitor(
                         accelerationSensorAvailable = false,
                         gyroscopeAvailable = false,
                         postureSensorAvailable = false,
+                        monitoringMode = DeviceSensorMonitoringMode.STOPPED,
                     )
                 }
                 return
@@ -158,13 +185,21 @@ class DeviceSensorMonitor(
             }
 
             request(lightSensor, SensorManager.SENSOR_DELAY_NORMAL)
-            request(movementAccelerationSensor, SensorManager.SENSOR_DELAY_GAME)
-            request(gyroscope, SensorManager.SENSOR_DELAY_GAME)
-            request(postureSensor, SensorManager.SENSOR_DELAY_GAME)
+            if (requestedMode == DeviceSensorMonitoringMode.SLEEP_CARE) {
+                request(movementAccelerationSensor, SensorManager.SENSOR_DELAY_GAME)
+                request(gyroscope, SensorManager.SENSOR_DELAY_GAME)
+                request(postureSensor, SensorManager.SENSOR_DELAY_GAME)
+            }
 
             if (requestedSensors.isEmpty()) {
                 started = false
-                mutableState.update { it.copy(isRunning = false) }
+                monitoringMode = DeviceSensorMonitoringMode.STOPPED
+                mutableState.update {
+                    it.copy(
+                        isRunning = false,
+                        monitoringMode = DeviceSensorMonitoringMode.STOPPED,
+                    )
+                }
                 return
             }
 
@@ -185,6 +220,7 @@ class DeviceSensorMonitor(
                 sensorHandler = handler
             }
             started = registeredTypes.isNotEmpty()
+            monitoringMode = if (started) requestedMode else DeviceSensorMonitoringMode.STOPPED
 
             mutableState.update {
                 it.copy(
@@ -198,6 +234,11 @@ class DeviceSensorMonitor(
                         gyroscope?.type?.let(registeredTypes::contains) == true,
                     postureSensorAvailable =
                         postureSensor?.type?.let(registeredTypes::contains) == true,
+                    monitoringMode = if (started) {
+                        requestedMode
+                    } else {
+                        DeviceSensorMonitoringMode.STOPPED
+                    },
                 )
             }
         }
@@ -208,6 +249,7 @@ class DeviceSensorMonitor(
         synchronized(lifecycleLock) {
             if (!started) return
             started = false
+            monitoringMode = DeviceSensorMonitoringMode.STOPPED
             notifyFaceUp = mutableState.value.isFaceDown
 
             runCatching { sensorManager?.unregisterListener(this) }
@@ -220,6 +262,7 @@ class DeviceSensorMonitor(
                     isRunning = false,
                     isFaceDown = false,
                     lastMovementElapsedRealtimeNanos = null,
+                    monitoringMode = DeviceSensorMonitoringMode.STOPPED,
                 )
             }
         }

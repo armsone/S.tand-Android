@@ -11,6 +11,7 @@ object ScreenLayoutCodec {
     private const val MAX_ENCODED_LENGTH = 4_096
 
     private const val CLOCK = "clock"
+    private const val SECONDS = "seconds"
     private const val WEATHER_ICON = "weatherIcon"
     private const val WEATHER_TEMPERATURE = "weatherTemperature"
     private const val WEATHER_CONDITION = "weatherCondition"
@@ -19,6 +20,8 @@ object ScreenLayoutCodec {
     private const val BRIGHTNESS_RULE = "brightnessRule"
     private const val BATTERY = "battery"
     private const val RADIO = "radio"
+    private const val SECONDARY_RADIO = "secondaryRadio"
+    private const val RADIOS_GROUPED = "radiosGrouped"
     private const val WEATHER_GROUP_IDS = "weatherGroupIds"
     private const val CONTROL_ORDER = "controlOrder"
 
@@ -34,13 +37,14 @@ object ScreenLayoutCodec {
         WEATHER_GROUP_IDS,
         CONTROL_ORDER,
     )
-    private val allowedKeys = requiredKeys + RADIO
+    private val allowedKeys = requiredKeys + setOf(RADIO, SECONDS, SECONDARY_RADIO, RADIOS_GROUPED)
 
     fun encode(layout: StandScreenLayout): String {
         val normalized = layout.copy()
         return buildString {
             append(FORMAT_VERSION)
             appendField(CLOCK, normalized.clock.encoded())
+            appendField(SECONDS, normalized.seconds.encoded())
             appendField(WEATHER_ICON, normalized.weatherIcon.encoded())
             appendField(WEATHER_TEMPERATURE, normalized.weatherTemperature.encoded())
             appendField(WEATHER_CONDITION, normalized.weatherCondition.encoded())
@@ -49,6 +53,8 @@ object ScreenLayoutCodec {
             appendField(BRIGHTNESS_RULE, normalized.brightnessRule.encoded())
             appendField(BATTERY, normalized.battery.encoded())
             appendField(RADIO, normalized.radio.encoded())
+            appendField(SECONDARY_RADIO, normalized.secondaryRadio.encoded())
+            appendField(RADIOS_GROUPED, normalized.radiosGrouped.toString())
             appendField(WEATHER_GROUP_IDS, normalized.weatherGroupIds.joinToString(","))
             appendField(
                 CONTROL_ORDER,
@@ -83,6 +89,7 @@ object ScreenLayoutCodec {
         if (!fields.keys.containsAll(requiredKeys)) return null
 
         val clock = fields[CLOCK]?.toPanelTransform() ?: return null
+        val seconds = fields[SECONDS]?.toPanelTransform()
         val weatherIcon = fields[WEATHER_ICON]?.toPanelTransform() ?: return null
         val weatherTemperature = fields[WEATHER_TEMPERATURE]?.toPanelTransform() ?: return null
         val weatherCondition = fields[WEATHER_CONDITION]?.toPanelTransform() ?: return null
@@ -91,6 +98,14 @@ object ScreenLayoutCodec {
         val brightnessRule = fields[BRIGHTNESS_RULE]?.toPanelTransform() ?: return null
         val battery = fields[BATTERY]?.toPanelTransform() ?: return null
         val radio = fields[RADIO]?.toPanelTransform()
+        val secondaryRadio = fields[SECONDARY_RADIO]?.toPanelTransform()
+        val radiosGrouped = fields[RADIOS_GROUPED]?.let { value ->
+            when (value) {
+                "true" -> true
+                "false" -> false
+                else -> null
+            }
+        }
         val weatherGroupIds = fields[WEATHER_GROUP_IDS]?.toGroupIds() ?: return null
         val controlOrder = StandControlKind.normalizedRawOrder(
             fields[CONTROL_ORDER]
@@ -100,6 +115,7 @@ object ScreenLayoutCodec {
 
         return StandScreenLayout(
             clock = clock,
+            seconds = seconds ?: PanelTransform(x = 0.27f, y = 0.036f),
             weatherIcon = weatherIcon,
             weatherTemperature = weatherTemperature,
             weatherCondition = weatherCondition,
@@ -108,6 +124,12 @@ object ScreenLayoutCodec {
             brightnessRule = brightnessRule,
             battery = battery,
             radio = radio ?: PanelTransform(x = 0f, y = 0.28f),
+            secondaryRadio = secondaryRadio ?: PanelTransform(
+                x = -0.26f,
+                y = 0.215f,
+                scale = 0.75f,
+            ),
+            radiosGrouped = radiosGrouped ?: false,
             weatherGroupIds = weatherGroupIds,
             controlOrder = controlOrder,
         )

@@ -5,7 +5,7 @@
     android:layout_height="match_parent"
     android:background="@drawable/widget_stand_background"
     android:clickable="true"
-    android:contentDescription="@string/app_name"
+    android:contentDescription="@string/stand_widget_description"
     android:focusable="true"
     android:padding="8dp">
 

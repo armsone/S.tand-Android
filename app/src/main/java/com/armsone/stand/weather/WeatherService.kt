@@ -93,6 +93,7 @@ class WeatherService(context: Context) : Closeable {
     val lastUpdated: StateFlow<Instant?> = mutableLastUpdated.asStateFlow()
 
     private val isClosed = AtomicBoolean(false)
+    private val isLocationEnabled = AtomicBoolean(true)
     private val requestGeneration = AtomicLong(0L)
     private val activeConnection = AtomicReference<HttpURLConnection?>(null)
     private val resourceLock = Any()
@@ -117,6 +118,12 @@ class WeatherService(context: Context) : Closeable {
     ) {
         if (isClosed.get()) return
 
+        if (!isLocationEnabled.get()) {
+            invalidateAndCancelActiveWork()
+            mutableAvailability.value = WeatherAvailability.IDLE
+            return
+        }
+
         if (!hasLocationPermission) {
             invalidateAndCancelActiveWork()
             mutableAvailability.value = WeatherAvailability.LOCATION_DENIED
@@ -133,6 +140,15 @@ class WeatherService(context: Context) : Closeable {
         val requestId = beginRequest()
         mutableAvailability.value = WeatherAvailability.REQUESTING_LOCATION
         requestCoarseLocation(requestId)
+    }
+
+    @Synchronized
+    fun setLocationEnabled(enabled: Boolean) {
+        if (isClosed.get() || isLocationEnabled.getAndSet(enabled) == enabled) return
+        if (!enabled) {
+            invalidateAndCancelActiveWork()
+            mutableAvailability.value = WeatherAvailability.IDLE
+        }
     }
 
     @Synchronized

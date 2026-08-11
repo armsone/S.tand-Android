@@ -65,7 +65,6 @@ fun FlipClock(
         DateTimeFormatter.ofPattern("hhmm")
     }
     val digits = now.format(formatter)
-    val seconds = now.format(DateTimeFormatter.ofPattern("ss"))
 
     BoxWithConstraints(modifier = modifier) {
         // Keep the clock proportional to the available canvas, while stopping a tablet's
@@ -84,7 +83,6 @@ fun FlipClock(
         val systemFontScale = LocalDensity.current.fontScale.coerceAtLeast(0.1f)
         val digitTextSize = (cardHeight.value * 0.70f / systemFontScale).sp
         val colonTextSize = (cardHeight.value * 0.52f / systemFontScale).sp
-        val secondTextSize = (cardHeight.value * 0.14f / systemFontScale).sp
         val cardSplitGap = (if (isPortrait) 4.dp else 3.dp) * safeScale
 
         Row(
@@ -129,8 +127,6 @@ fun FlipClock(
                 width = cardWidth,
                 height = cardHeight,
                 splitGap = cardSplitGap,
-                seconds = seconds,
-                secondTextSize = secondTextSize,
             )
         }
     }
@@ -145,8 +141,6 @@ private fun FlipCard(
     width: Dp,
     height: Dp,
     splitGap: Dp,
-    seconds: String? = null,
-    secondTextSize: TextUnit = 12.sp,
 ) {
     val fontFamily = clockFont.fontFamily()
     val density = LocalDensity.current
@@ -189,21 +183,68 @@ private fun FlipCard(
                 )
             }
         }
-        if (seconds != null) {
+    }
+}
+
+@Composable
+fun ClockSeconds(
+    clockFont: ClockFontChoice,
+    isPortrait: Boolean,
+    contentAlpha: Float,
+    showsBackground: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val now by produceState(initialValue = LocalDateTime.now()) {
+        while (true) {
+            value = LocalDateTime.now()
+            delay(250)
+        }
+    }
+    val fontSize = if (showsBackground) {
+        if (isPortrait) 18.sp else 22.sp
+    } else {
+        if (isPortrait) 13.sp else 16.sp
+    }
+    val systemFontScale = LocalDensity.current.fontScale.coerceAtLeast(0.1f)
+    val verticalOffset = ClockVisualPolicy.verticalOffset(
+        font = clockFont,
+        fontSize = fontSize.value * systemFontScale,
+    ).dp
+    val panelWidth = if (isPortrait) 48.dp else 58.dp
+    val panelHeight = if (isPortrait) 36.dp else 42.dp
+    val cornerRadius = if (isPortrait) 11.dp else 13.dp
+    val splitGap = if (isPortrait) 2.dp else 2.5.dp
+
+    Box(
+        modifier = modifier
+            .size(width = panelWidth, height = panelHeight)
+            .then(
+                if (showsBackground) {
+                    Modifier.standPanelSurface(
+                        isDimmed = contentAlpha <= 0.2f,
+                        cornerRadius = cornerRadius,
+                        splitGap = splitGap,
+                    )
+                } else {
+                    Modifier
+                },
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        AnimatedContent(
+            targetState = now.format(DateTimeFormatter.ofPattern("ss")),
+            modifier = Modifier.offset(y = verticalOffset),
+            transitionSpec = { fadeIn() togetherWith fadeOut() },
+            label = "clock seconds",
+        ) { seconds ->
             Text(
                 text = seconds,
                 color = Color.White.copy(alpha = contentAlpha * 0.40f),
-                fontFamily = fontFamily,
-                fontSize = secondTextSize,
+                fontFamily = clockFont.fontFamily(),
+                fontSize = fontSize,
                 fontWeight = clockFont.fontWeight(),
                 maxLines = 1,
                 softWrap = false,
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(
-                        end = width * 0.14f,
-                        bottom = height * 0.07f,
-                    ),
             )
         }
     }
@@ -244,7 +285,6 @@ fun ClockDateAndSeconds(
         DateTimeFormatter.ofPattern("M월 d일 EEEE", Locale.KOREAN),
     )
     Text(
-        // Seconds live on the minute card so the date panel stays visually stable.
         text = dateText,
         color = Color.White.copy(alpha = contentAlpha * 0.7f),
         style = MaterialTheme.typography.bodyMedium,

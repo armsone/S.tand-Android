@@ -59,7 +59,6 @@ class MainActivity : ComponentActivity() {
     private var cameraPermissionQueued = false
     private var pendingPermissionRequest: PermissionRequest? = null
     private var pendingPermissionContinuesInitialSequence = false
-    private var brightnessBeforeFaceDown: Float? = null
     private var observingSystemBrightness = false
     private val systemBrightnessObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
         override fun onChange(selfChange: Boolean) {
@@ -122,7 +121,6 @@ class MainActivity : ComponentActivity() {
         val state = standViewModel.uiState.value
         applySessionWindowState(state.isSessionActive)
         applyOrientationPreference(state.settings.orientationPreference)
-        applyFaceDownBrightness(state.isSessionActive && state.isFaceDown)
     }
 
     override fun onStop() {
@@ -137,7 +135,6 @@ class MainActivity : ComponentActivity() {
         if (hasFocus && lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
             val state = standViewModel.uiState.value
             applySessionWindowState(state.isSessionActive)
-            applyFaceDownBrightness(state.isSessionActive && state.isFaceDown)
         }
     }
 
@@ -165,6 +162,9 @@ class MainActivity : ComponentActivity() {
         val recordingSessionGroups by
             standViewModel.recordingSessionGroups.collectAsStateWithLifecycle()
         var destination by rememberSaveable { mutableStateOf(AppDestination.HOME) }
+        var secondaryReturnDestination by rememberSaveable {
+            mutableStateOf(AppDestination.HOME)
+        }
         var editorIsPortrait by rememberSaveable { mutableStateOf(true) }
         var editorDraftEncoded by rememberSaveable { mutableStateOf<String?>(null) }
         var editorClockFontName by rememberSaveable { mutableStateOf<String?>(null) }
@@ -188,7 +188,12 @@ class MainActivity : ComponentActivity() {
             editorDraftEncoded = null
             editorClockFontName = null
             editorClockHourModeName = null
-            destination = AppDestination.HOME
+            destination = when (destination) {
+                AppDestination.RECORDINGS,
+                AppDestination.RADIO,
+                -> secondaryReturnDestination
+                else -> AppDestination.HOME
+            }
         }
 
         LaunchedEffect(state.isSessionActive) {
@@ -197,9 +202,6 @@ class MainActivity : ComponentActivity() {
         }
         LaunchedEffect(state.settings.orientationPreference) {
             applyOrientationPreference(state.settings.orientationPreference)
-        }
-        LaunchedEffect(state.isSessionActive, state.isFaceDown) {
-            applyFaceDownBrightness(state.isSessionActive && state.isFaceDown)
         }
         LaunchedEffect(torchUseRequested(state)) {
             if (torchUseRequested(state)) requestCameraPermissionForTorch()
@@ -213,34 +215,42 @@ class MainActivity : ComponentActivity() {
                     onRevealControls = standViewModel::revealControls,
                     onToggleTheme = standViewModel::toggleTheme,
                     onOpenEditor = ::openScreenEditor,
-                    onLampIntensityChanged = standViewModel::setLampIntensity,
-                    onSilhouetteIntensityChanged = standViewModel::setSilhouetteIntensity,
-                    onHoldDurationChanged = standViewModel::setHoldDuration,
-                    onAdjustmentFinished = standViewModel::activateLampFromAdjustment,
-                    onClockScaleChanged = standViewModel::setClockScale,
+                    onBrightnessAdjustmentStarted = standViewModel::beginBrightnessAdjustment,
+                    onBrightnessLevelChanged = standViewModel::updateBrightnessLevel,
+                    onBrightnessAdjustmentFinished = standViewModel::endBrightnessAdjustment,
                     onToggleTorch = standViewModel::toggleTorchEnabled,
                     onCycleMode = standViewModel::cycleModePreference,
                     onToggleSession = standViewModel::toggleNightSession,
-                    onSoundThresholdChanged = standViewModel::setSoundThreshold,
                     onToggleOrientation = {
                         standViewModel.toggleOrientationLock(
                             isPortrait = resources.configuration.orientation !=
                                 Configuration.ORIENTATION_LANDSCAPE,
                         )
                     },
-                    onOpenRecordings = { destination = AppDestination.RECORDINGS },
+                    onOpenRecordings = {
+                        secondaryReturnDestination = AppDestination.HOME
+                        destination = AppDestination.RECORDINGS
+                    },
                     onOpenAiShot = ::openAiShot,
                     onOpenSettings = { destination = AppDestination.SETTINGS },
-                    onOpenRadioSettings = { destination = AppDestination.RADIO },
+                    onOpenRadioSettings = {
+                        secondaryReturnDestination = AppDestination.HOME
+                        destination = AppDestination.RADIO
+                    },
                     onToggleRadio = standViewModel::toggleInternetRadio,
                 )
 
                 AppDestination.SETTINGS -> SettingsScreen(
                     state = state,
                     onUpdate = standViewModel::updateSettings,
-                    onRefreshWeather = { standViewModel.refreshWeather() },
                     onRestoreRecommended = standViewModel::restoreRecommendedSettings,
-                    onOpenScreenEditor = ::openScreenEditor,
+                    onToggleInternetRadio = standViewModel::toggleInternetRadio,
+                    onSaveInternetRadio = standViewModel::saveInternetRadioChannel,
+                    onDeleteInternetRadio = standViewModel::deleteInternetRadioChannel,
+                    onOpenRecordings = {
+                        secondaryReturnDestination = AppDestination.SETTINGS
+                        destination = AppDestination.RECORDINGS
+                    },
                     onRequestMicrophonePermission = {
                         retryPermission(PermissionRequest.MICROPHONE)
                     },
@@ -256,8 +266,6 @@ class MainActivity : ComponentActivity() {
                             retryPermission(PermissionRequest.CAMERA)
                         }
                     },
-                    onMeasureAmbientCameraBrightness =
-                        standViewModel::measureAmbientCameraBrightness,
                     onOpenAppSettings = ::openAppSettings,
                     onBack = { destination = AppDestination.HOME },
                 )
@@ -273,7 +281,7 @@ class MainActivity : ComponentActivity() {
                         isBusy = state.recordingOperationInProgress,
                         message = state.recordingOperationMessage,
                         onMessageDismiss = standViewModel::clearRecordingOperationMessage,
-                        onBack = { destination = AppDestination.HOME },
+                        onBack = { destination = secondaryReturnDestination },
                         onDelete = { clip ->
                             if (!standViewModel.deleteRecording(clip)) {
                                 showToast("녹음을 삭제하지 못했습니다.")
@@ -290,7 +298,7 @@ class MainActivity : ComponentActivity() {
                     configuration = state.settings.internetRadio,
                     onSave = standViewModel::saveInternetRadio,
                     onDelete = standViewModel::deleteInternetRadio,
-                    onBack = { destination = AppDestination.HOME },
+                    onBack = { destination = secondaryReturnDestination },
                 )
 
                 AppDestination.EDITOR -> {
@@ -513,32 +521,8 @@ class MainActivity : ComponentActivity() {
         if (requestedOrientation != orientation) requestedOrientation = orientation
     }
 
-    private fun applyFaceDownBrightness(shouldDim: Boolean) {
-        if (shouldDim) {
-            if (brightnessBeforeFaceDown == null) {
-                brightnessBeforeFaceDown = window.attributes.screenBrightness
-            }
-            if (window.attributes.screenBrightness != 0f) {
-                val attributes = window.attributes
-                attributes.screenBrightness = 0f
-                window.attributes = attributes
-            }
-        } else {
-            restoreWindowBrightness()
-        }
-    }
-
-    private fun restoreWindowBrightness() {
-        val previousBrightness = brightnessBeforeFaceDown ?: return
-        val attributes = window.attributes
-        attributes.screenBrightness = previousBrightness
-        window.attributes = attributes
-        brightnessBeforeFaceDown = null
-    }
-
     private fun restoreTransientWindowState() {
         applySessionWindowState(isSessionActive = false)
-        restoreWindowBrightness()
     }
 
     private fun openAiShot() {
