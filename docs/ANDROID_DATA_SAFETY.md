@@ -1,7 +1,7 @@
 # Android 개인정보·Data Safety 근거
 
 검토일: 2026-08-12 KST
-소스 기준: versionName `0.0.1`, versionCode `27`, 빌드 `0.0.27`
+소스 기준: versionName `0.0.1`, versionCode `28`, 빌드 `0.0.28`
 
 이 문서는 Android 소스와 Play Console Data Safety 신고가 어긋나지 않도록 실제 권한, 저장,
 기기 밖 전송 경로를 기록한다. 이 문서 자체가 Play Console 신고를 제출하거나 외부 서비스의
@@ -15,6 +15,7 @@
 | `RECORD_AUDIO` | 사용자가 켠 수면 소리 감지와 로컬 녹음 | 감지·녹음을 사용할 수 없음 |
 | `ACCESS_COARSE_LOCATION` | 현재 날씨 요청용 대략적 위치 | 시계 등 나머지 기능은 유지 |
 | `CAMERA` | 카메라 플래시를 이용한 조명 | 화면 조명 등 나머지 기능은 유지 |
+| `REQUEST_INSTALL_PACKAGES` | GitHub에서 받은 새 S.tand APK의 Android 설치 화면 열기 | 자동 업데이트만 사용할 수 없음 |
 
 계정, 광고 SDK, 분석 SDK, 자체 백엔드와 클라우드 업로드는 없다. Manifest의
 `allowBackup=false`, `fullBackupContent=false`와 `data_extraction_rules.xml`은 앱의 파일,
@@ -29,6 +30,11 @@
 | 날씨 위치 | 마지막 대략 위치와 날씨를 앱 내부 캐시에 보관하고 기능 종료 시 제거 | 날씨 새로고침 때 위도·경도를 소수점 4자리로 반올림해 `api.open-meteo.com`에 HTTPS 전송. 위치 이름 변환은 Android Geocoder를 사용 |
 | 앱 내부 브라우저 | 화면이 열린 동안 WebView 저장소 사용 | 사용자가 연 HTTPS 사이트에 일반 웹 요청 전송. 타사 쿠키, 파일 접근·선택·drop, 다운로드, 웹 카메라·마이크·위치는 차단 |
 | 인터넷 라디오 | HTTPS 스트림 주소와 표시 설정을 앱 내부에 저장 | 재생할 때 사용자가 저장한 스트림 서버에 HTTPS 요청 전송 |
+| 앱 업데이트 | 다운로드한 APK를 앱 캐시에 임시 보관하고 설치 후 OS가 관리 | 앱 시작 시 `api.github.com`에서 최신 Release를 확인하고, 사용자가 업데이트를 누르면 `github.com`에서 APK를 받음 |
+
+업데이트 APK는 지정된 S.tand 저장소의 HTTPS Release만 허용한다. 파일명, versionCode, package name과
+현재 설치 앱의 서명이 모두 맞지 않으면 설치 화면을 열지 않는다. GitHub 확인 실패는 앱의 기존 기능을
+막지 않으며 계정·녹음·설정은 GitHub로 보내지 않는다.
 
 브라우저를 닫거나 renderer를 다시 만들 때 로딩과 미디어를 중지하고 history, form data,
 cache, cookies, WebStorage를 지운다. 브라우저에서 파일 업로드·다운로드를 허용하지 않는다.

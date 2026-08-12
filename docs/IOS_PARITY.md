@@ -4,7 +4,7 @@
 
 iOS 기준: `main` / `0f664b2`, `1.0.0 (0.24.1)`
 
-Android 기준: 작업 트리의 versionName `0.0.1`, versionCode `27`, 빌드 `0.0.27`
+Android 기준: 작업 트리의 versionName `0.0.1`, versionCode `28`, 빌드 `0.0.28`
 
 ## 2026-08-13 iOS 인수인계 체크리스트 재감사
 
@@ -96,6 +96,7 @@ UI 검증은 보류했다.
 | 설정 복구·마이그레이션 | **부분 구현** | 레거시/기본값·payload decodability 테스트 통과 | 해당 없음 | 업데이트 시나리오 대기 | 최초 migration에서 디코딩 불가 layout 원본을 보존하고 실제 설정 변경 때 대체. 실제 과거 APK 업데이트 검증 대기 |
 | 수명주기·배터리·개인정보 | 부분 구현 | 수명주기·배터리 정책과 file timestamp 우선/fallback 통과 | 대기 | 최신 소스 대기 | 백업 제외, 실제 권한·로컬 저장·외부 전송과 file timestamp 근거 문서화. Play Console 제출·네트워크 관찰 대기 |
 | 접근성·큰 글자 | **부분 구현** | 직접 JVM 대상 아님 | 계측 대기 | TalkBack/큰 글자 대기 | 편집 패널 5% 이동/10% 크기 custom action과 홈 조명 adjustable/custom action 구현. 동적 글자 브라우저 배치와 실제 TalkBack 검증 대기 |
+| GitHub 업데이트 | Android 전용 구현 | 태그·저장소·자산 정책 통과 | 안내 화면 계측 통과 | versionCode 28 두 기기 데이터 유지 설치·실행 | iOS에는 없는 Android 배포 방식. APK package/version/현재 서명 검증 후 Android 설치 화면 사용 |
 
 ## 구현 누락
 
@@ -138,16 +139,15 @@ UI 검증은 보류했다.
 
 ## 실기기 검증 대기
 
-- `SM-T500`: versionCode 27 데이터 유지 설치·실행·하단 빌드 표시 확인. 브라우저 popup,
+- `SM-T500`: versionCode 28 데이터 유지 설치·실행 확인. 브라우저 popup,
   다운로드·업로드·권한 거부, 백그라운드 미디어 정지는 대기.
-- `SM-F968N`: versionCode 27 데이터 유지 설치·실행·하단 빌드 표시·Google HTTPS·주소줄 확인.
+- `SM-F968N`: versionCode 28 데이터 유지 설치·실행 확인. 이전 27번에서 Google HTTPS·주소줄 확인.
 - 두 기기: 라디오/마이크 상호배제, AudioFocus, 권한 거부·복구, 화면 회전, TalkBack,
   삭제 부분 실패는 별도 안전한 테스트 데이터로 확인.
 
 ## 현재 배포·버전 상태
 
-- Android versionName `0.0.1`, versionCode `27`, 빌드 표기 `0.0.27`.
+- Android versionName `0.0.1`, versionCode `28`, 빌드 표기 `0.0.28`.
 - 로컬 JVM 테스트·`assembleDebug`·`lintDebug` 성공.
-- 계측 테스트 4개를 `SM-T500`과 `SM-F968N`에서 각각 실행해 실패 0을 확인했다.
-- 두 기기에 같은 APK를 데이터 유지 설치하고 versionCode 27, MainActivity 실행, 하단 빌드 표시를
-  확인했다. `SM-F968N`에서는 최종 브라우저 주소줄의 세로 잘림이 없음을 화면으로 확인했다.
+- 계측 테스트 7개를 `SM-T500`과 `SM-F968N`에서 각각 실행해 실패 0을 확인했다.
+- 두 기기에 같은 APK를 데이터 유지 설치하고 versionCode 28과 MainActivity 실행을 확인했다.

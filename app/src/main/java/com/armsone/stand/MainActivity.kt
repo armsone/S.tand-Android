@@ -9,6 +9,7 @@ import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.database.ContentObserver
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -45,6 +46,7 @@ import com.armsone.stand.model.ClockFontChoice
 import com.armsone.stand.model.ClockHourMode
 import com.armsone.stand.recording.RecordingClip
 import com.armsone.stand.ui.RecordingsScreen
+import com.armsone.stand.ui.AppUpdateDialog
 import com.armsone.stand.ui.ScreenEditorScreen
 import com.armsone.stand.ui.SettingsScreen
 import com.armsone.stand.ui.InternetRadioScreen
@@ -53,11 +55,18 @@ import com.armsone.stand.ui.InternetRadioManagementScreen
 import com.armsone.stand.ui.StandHomeScreen
 import com.armsone.stand.ui.StandUiState
 import com.armsone.stand.ui.theme.STandTheme
+import com.armsone.stand.update.AppUpdateState
+import com.armsone.stand.update.GitHubAppUpdateService
+import java.io.File
 import kotlinx.coroutines.flow.MutableStateFlow
 
 class MainActivity : ComponentActivity() {
     private val standViewModel: StandViewModel by viewModels()
     private val pendingRadioShareUrl = MutableStateFlow<String?>(null)
+    private val appUpdateService by lazy {
+        GitHubAppUpdateService(this, BuildConfig.VERSION_CODE)
+    }
+    private var pendingUpdateInstallFile: File? = null
 
     private var initialPermissionSequenceStarted = false
     private var cameraPermissionAttempted = false
@@ -113,6 +122,15 @@ class MainActivity : ComponentActivity() {
         setContent {
             STandApp()
         }
+        appUpdateService.checkForUpdate()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        val pendingFile = pendingUpdateInstallFile ?: return
+        if (canRequestPackageInstalls()) {
+            window.decorView.post { requestUpdateInstall(pendingFile) }
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -140,6 +158,11 @@ class MainActivity : ComponentActivity() {
         standViewModel.onAppBackground()
         restoreTransientWindowState()
         super.onStop()
+    }
+
+    override fun onDestroy() {
+        appUpdateService.close()
+        super.onDestroy()
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -174,6 +197,8 @@ class MainActivity : ComponentActivity() {
         val recordingSessionGroups by
             standViewModel.recordingSessionGroups.collectAsStateWithLifecycle()
         val sharedRadioUrl by pendingRadioShareUrl.collectAsStateWithLifecycle()
+        val appUpdateState by appUpdateService.state.collectAsStateWithLifecycle()
+        var ignoredUpdateVersion by rememberSaveable { mutableStateOf<Int?>(null) }
         var destination by rememberSaveable { mutableStateOf(AppDestination.HOME) }
         var secondaryReturnDestination by rememberSaveable {
             mutableStateOf(AppDestination.HOME)
@@ -233,6 +258,12 @@ class MainActivity : ComponentActivity() {
         }
         LaunchedEffect(torchUseRequested(state)) {
             if (torchUseRequested(state)) requestCameraPermissionForTorch()
+        }
+        LaunchedEffect(appUpdateState) {
+            val ready = appUpdateState as? AppUpdateState.Ready ?: return@LaunchedEffect
+            if (ignoredUpdateVersion != ready.release.versionCode) {
+                requestUpdateInstall(ready.apkFile)
+            }
         }
 
         STandTheme(displayTheme = state.settings.displayTheme) {
@@ -447,6 +478,31 @@ class MainActivity : ComponentActivity() {
                         },
                     )
                 }
+            }
+
+            val updateVersion = when (val update = appUpdateState) {
+                is AppUpdateState.Available -> update.release.versionCode
+                is AppUpdateState.Downloading -> update.release.versionCode
+                is AppUpdateState.Ready -> update.release.versionCode
+                AppUpdateState.Checking,
+                AppUpdateState.Idle,
+                -> null
+            }
+            if (updateVersion != null && ignoredUpdateVersion != updateVersion) {
+                AppUpdateDialog(
+                    state = appUpdateState,
+                    onDownload = {
+                        (appUpdateState as? AppUpdateState.Available)?.let { available ->
+                            appUpdateService.download(available.release)
+                        }
+                    },
+                    onInstall = {
+                        (appUpdateState as? AppUpdateState.Ready)?.let { ready ->
+                            requestUpdateInstall(ready.apkFile)
+                        }
+                    },
+                    onLater = { ignoredUpdateVersion = updateVersion },
+                )
             }
         }
     }
@@ -676,6 +732,49 @@ class MainActivity : ComponentActivity() {
             .onFailure { showToast("앱 권한 설정을 열 수 없습니다.") }
     }
 
+    private fun requestUpdateInstall(apkFile: File) {
+        if (!apkFile.isFile) {
+            showToast("업데이트 파일을 찾을 수 없습니다.")
+            return
+        }
+        if (!canRequestPackageInstalls()) {
+            pendingUpdateInstallFile = apkFile
+            val intent = Intent(
+                Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                Uri.fromParts("package", packageName, null),
+            )
+            runCatching { startActivity(intent) }
+                .onFailure {
+                    pendingUpdateInstallFile = null
+                    showToast("업데이트 설치 권한 설정을 열 수 없습니다.")
+                }
+            return
+        }
+
+        val contentUri = runCatching {
+            FileProvider.getUriForFile(
+                this,
+                "$packageName.fileprovider",
+                apkFile,
+            )
+        }.getOrElse {
+            showToast("업데이트 파일을 열 수 없습니다.")
+            return
+        }
+        pendingUpdateInstallFile = null
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(contentUri, APK_MIME_TYPE)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        runCatching { startActivity(intent) }
+            .onFailure { showToast("Android 설치 화면을 열 수 없습니다.") }
+    }
+
+    private fun canRequestPackageInstalls(): Boolean =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.O ||
+            packageManager.canRequestPackageInstalls()
+
     private fun torchUseRequested(state: StandUiState): Boolean =
         state.isSessionActive &&
             state.environmentMode == EnvironmentDisplayMode.MATE &&
@@ -699,6 +798,7 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_RADIO_SHARE_URL = "com.armsone.stand.extra.RADIO_SHARE_URL"
         private const val AI_SHOT_URI = "hanclip://aishot"
         private const val DEFAULT_AUDIO_MIME_TYPE = "audio/*"
+        private const val APK_MIME_TYPE = "application/vnd.android.package-archive"
         private const val STATE_INITIAL_PERMISSIONS_STARTED = "initial_permissions_started"
         private const val STATE_CAMERA_PERMISSION_ATTEMPTED = "camera_permission_attempted"
         private const val STATE_CAMERA_PERMISSION_QUEUED = "camera_permission_queued"
