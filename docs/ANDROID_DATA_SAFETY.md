@@ -1,7 +1,7 @@
 # Android 개인정보·Data Safety 근거
 
 검토일: 2026-08-12 KST
-소스 기준: versionName `0.0.1`, versionCode `32`, 빌드 `0.0.32`
+소스 기준: versionName `0.0.1`, versionCode `33`, 빌드 `0.0.33`
 
 이 문서는 Android 소스와 Play Console Data Safety 신고가 어긋나지 않도록 실제 권한, 저장,
 기기 밖 전송 경로를 기록한다. 이 문서 자체가 Play Console 신고를 제출하거나 외부 서비스의

@@ -6,9 +6,7 @@
 
 package com.armsone.stand.ui
 
-import android.view.GestureDetector
 import android.view.HapticFeedbackConstants
-import android.view.MotionEvent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
@@ -17,6 +15,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -76,11 +75,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.PointerEventPass
-import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
@@ -121,6 +118,9 @@ import com.armsone.stand.ui.components.standPanelSurface
 import com.armsone.stand.ui.components.rememberBurnInOffset
 import com.armsone.stand.ui.theme.lampGradientColors
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.math.roundToInt
@@ -238,7 +238,7 @@ fun StandHomeScreen(
                     onToggleRadio = onToggleRadio,
                     onEditRadio = onEditRadio,
                     onClockTap = onScreenTap,
-                    onClockDoubleTap = onToggleTheme,
+                    onClockDoubleTap = {},
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(WindowInsets.safeDrawing.asPaddingValues())
@@ -445,7 +445,6 @@ private fun HomeGestureLayer(
     modifier: Modifier = Modifier,
     content: @Composable BoxScope.() -> Unit,
 ) {
-    val context = LocalContext.current
     val view = LocalView.current
     val latestState = rememberUpdatedState(state)
     val latestOnScreenTap = rememberUpdatedState(onScreenTap)
@@ -466,31 +465,6 @@ private fun HomeGestureLayer(
     var layerHeightPx by remember { mutableStateOf(0f) }
     val bottomGestureExclusionPx = with(LocalDensity.current) { 104.dp.toPx() }
 
-    val gestureDetector = remember(context) {
-        GestureDetector(
-            context,
-            object : GestureDetector.SimpleOnGestureListener() {
-                override fun onDown(event: MotionEvent): Boolean = true
-
-                override fun onSingleTapConfirmed(event: MotionEvent): Boolean {
-                    view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
-                    latestOnScreenTap.value()
-                    return true
-                }
-
-                override fun onDoubleTap(event: MotionEvent): Boolean {
-                    view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
-                    latestOnToggleTheme.value()
-                    return true
-                }
-
-                override fun onLongPress(event: MotionEvent) {
-                    view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-                    latestOnOpenEditor.value()
-                }
-            },
-        )
-    }
     Box(
         modifier = modifier
             .onSizeChanged { layerHeightPx = it.height.toFloat() }
@@ -539,6 +513,105 @@ private fun HomeGestureLayer(
                         true
                     },
                 )
+            }
+            .pointerInput(Unit) {
+                var previousTapUpTime = 0L
+                var previousTapPosition = Offset.Unspecified
+
+                awaitEachGesture {
+                    val down = awaitFirstDown(
+                        requireUnconsumed = false,
+                        pass = PointerEventPass.Initial,
+                    )
+                    var moved = false
+                    var upPosition = down.position
+                    var upTime = down.uptimeMillis
+                    var pressed = true
+
+                    while (pressed) {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                        moved = moved ||
+                            (change.position - down.position).getDistance() >=
+                            viewConfiguration.touchSlop
+                        upPosition = change.position
+                        upTime = change.uptimeMillis
+                        pressed = change.pressed
+                    }
+
+                    if (!moved &&
+                        !pressed &&
+                        down.position.y < layerHeightPx - bottomGestureExclusionPx
+                    ) {
+                        val isDoubleTap = previousTapUpTime > 0L &&
+                            upTime - previousTapUpTime <= viewConfiguration.doubleTapTimeoutMillis &&
+                            (upPosition - previousTapPosition).getDistance() <=
+                            viewConfiguration.touchSlop * 4f
+
+                        if (isDoubleTap) {
+                            previousTapUpTime = 0L
+                            view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                            latestOnToggleTheme.value()
+                        } else {
+                            previousTapUpTime = upTime
+                            previousTapPosition = upPosition
+                        }
+                    }
+                }
+            }
+            .pointerInput(Unit) {
+                coroutineScope {
+                    var previousTapUpTime = 0L
+                    var previousTapPosition = Offset.Unspecified
+                    var pendingSingleTap: Job? = null
+
+                    awaitEachGesture {
+                        val down = awaitFirstDown(
+                            requireUnconsumed = true,
+                            pass = PointerEventPass.Final,
+                        )
+                        if (down.position.y >= layerHeightPx - bottomGestureExclusionPx) {
+                            waitForUpOrCancellation(pass = PointerEventPass.Final)
+                            return@awaitEachGesture
+                        }
+
+                        var longPressTriggered = false
+                        val longPressJob = launch {
+                            delay(viewConfiguration.longPressTimeoutMillis)
+                            longPressTriggered = true
+                            pendingSingleTap?.cancel()
+                            previousTapUpTime = 0L
+                            view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                            latestOnOpenEditor.value()
+                        }
+                        val up = waitForUpOrCancellation(pass = PointerEventPass.Final)
+                        longPressJob.cancel()
+
+                        if (up != null && !longPressTriggered) {
+                            val isDoubleTap = previousTapUpTime > 0L &&
+                                up.uptimeMillis - previousTapUpTime <=
+                                viewConfiguration.doubleTapTimeoutMillis &&
+                                (up.position - previousTapPosition).getDistance() <=
+                                viewConfiguration.touchSlop * 4f
+
+                            if (isDoubleTap) {
+                                pendingSingleTap?.cancel()
+                                pendingSingleTap = null
+                                previousTapUpTime = 0L
+                            } else {
+                                previousTapUpTime = up.uptimeMillis
+                                previousTapPosition = up.position
+                                pendingSingleTap?.cancel()
+                                pendingSingleTap = launch {
+                                    delay(viewConfiguration.doubleTapTimeoutMillis)
+                                    previousTapUpTime = 0L
+                                    view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                                    latestOnScreenTap.value()
+                                }
+                            }
+                        }
+                    }
+                }
             }
             .pointerInput(Unit) {
                 awaitEachGesture {
@@ -632,22 +705,7 @@ private fun HomeGestureLayer(
                     }
                 }
             },
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .pointerInteropFilter { event ->
-                    if (event.actionMasked == MotionEvent.ACTION_DOWN &&
-                        event.y >= layerHeightPx - bottomGestureExclusionPx
-                    ) {
-                        return@pointerInteropFilter false
-                    }
-                    gestureDetector.onTouchEvent(event)
-                    true
-                },
-        )
-        content()
-    }
+    ) { content() }
 }
 
 private enum class HomeAdjustmentAxis {

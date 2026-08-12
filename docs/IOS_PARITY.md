@@ -4,7 +4,7 @@
 
 iOS 기준: `main` / `0f664b2`, `1.0.0 (0.24.1)`
 
-Android 기준: 작업 트리의 versionName `0.0.1`, versionCode `32`, 빌드 `0.0.32`
+Android 기준: 작업 트리의 versionName `0.0.1`, versionCode `33`, 빌드 `0.0.33`
 
 ## 2026-08-13 iOS 인수인계 체크리스트 재감사
 
@@ -139,18 +139,20 @@ UI 검증은 보류했다.
 
 ## 실기기 검증 대기
 
-- `SM-T500`: versionCode 28 데이터 유지 설치·실행 확인. 브라우저 popup,
+- `SM-T500`: versionCode 33 데이터 유지 설치·실행 확인. 브라우저 popup,
   다운로드·업로드·권한 거부, 백그라운드 미디어 정지는 대기.
-- `SM-F968N`: versionCode 28 데이터 유지 설치·실행 확인. 이전 27번에서 Google HTTPS·주소줄 확인.
+- `SM-F968N`: versionCode 33 데이터 유지 설치·실행 확인. 이전 27번에서 Google HTTPS·주소줄 확인.
 - 두 기기: 라디오/마이크 상호배제, AudioFocus, 권한 거부·복구, 화면 회전, TalkBack,
   삭제 부분 실패는 별도 안전한 테스트 데이터로 확인.
 
 ## 현재 배포·버전 상태
 
-- Android versionName `0.0.1`, versionCode `32`, 빌드 표기 `0.0.32`.
+- Android versionName `0.0.1`, versionCode `33`, 빌드 표기 `0.0.33`.
 - 로컬 JVM 테스트·`assembleDebug`·`lintDebug` 성공.
-- 계측 테스트 7개를 `SM-T500`과 `SM-F968N`에서 각각 실행해 실패 0을 확인했다.
-- 두 기기에 같은 APK를 데이터 유지 설치하고 versionCode 28과 MainActivity 실행을 확인했다.
+- 홈 날씨 패널 더블 터치 계측 테스트를 `SM-T500`에서 실행해 실패 0을 확인했다.
+  `SM-F968N`은 빈 공간 실기기 더블 터치로 테마 변경을 확인했고, 같은 계측 테스트는 테스트 서비스
+  미설치로 시작 전에 중단됐다.
+- 두 기기에 체크섬이 같은 APK를 데이터 유지 설치하고 versionCode 33과 MainActivity 실행을 확인했다.
 - GitHub `android-v32` Release를 공개하고, `SM-F968N`과 Android 10 `SM-T500`의 versionCode 30
   설치본에서 업데이트 안내→다운로드→서명 검사→설치를 진행해 versionCode 32와 기존 녹음 파일
   유지를 확인했다. 최초 사용자는 Android의 `이 출처 허용`을 한 번 켜야 한다.
