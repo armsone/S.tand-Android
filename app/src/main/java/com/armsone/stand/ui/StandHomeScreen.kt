@@ -13,6 +13,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
@@ -34,6 +36,7 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -72,6 +75,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -246,6 +250,7 @@ fun StandHomeScreen(
                 )
             } else {
                 StandStartContent(
+                    state = state,
                     onStart = onToggleSession,
                     modifier = Modifier.align(Alignment.Center),
                 )
@@ -330,31 +335,84 @@ fun StandHomeScreen(
 
 @Composable
 private fun StandStartContent(
+    state: StandUiState,
     onStart: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val allPermissionsGranted = state.hasCameraPermission &&
+        state.hasMicrophonePermission &&
+        state.hasApproximateLocationPermission
+
     Column(
-        modifier = modifier.padding(horizontal = 28.dp),
+        modifier = modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 24.dp, vertical = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Image(
             painter = painterResource(R.drawable.stand_brand_icon),
             contentDescription = null,
-            modifier = Modifier.size(76.dp),
+            modifier = Modifier.size(64.dp),
         )
         Text(
-            text = "S.tand가 곁에 있을게요",
+            text = "시작 전에 권한을 확인할게요",
             color = Color.White.copy(alpha = 0.92f),
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center,
         )
         Text(
-            text = "시작하면 오브제와 매이트 모드를 오가며 시간·날씨와 잠자리를 돌봅니다.",
+            text = "왜 필요한지 먼저 확인한 뒤 한 번에 진행합니다. 허용하지 않아도 앱은 시작되며, 허용한 기능만 작동합니다.",
             color = Color.White.copy(alpha = 0.62f),
             style = MaterialTheme.typography.bodyMedium,
             textAlign = TextAlign.Center,
+            modifier = Modifier.widthIn(max = 520.dp),
+        )
+        Surface(
+            color = Color.White.copy(alpha = 0.08f),
+            shape = RoundedCornerShape(18.dp),
+            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
+            modifier = Modifier
+                .fillMaxWidth()
+                .widthIn(max = 520.dp),
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 18.dp, vertical = 8.dp),
+            ) {
+                PermissionReasonRow(
+                    icon = Icons.Default.FlashlightOn,
+                    title = "플래시",
+                    reason = "화들짝 모드에서 어두운 방을 잠깐 밝힙니다.",
+                    isGranted = state.hasCameraPermission,
+                )
+                PermissionReasonRow(
+                    icon = Icons.Default.CameraAlt,
+                    title = "카메라",
+                    reason = "방 밝기만 측정합니다. 사진·영상은 저장하거나 전송하지 않습니다.",
+                    isGranted = state.hasCameraPermission,
+                )
+                PermissionReasonRow(
+                    icon = Icons.Default.Mic,
+                    title = "마이크",
+                    reason = "잠꼬대·코골이를 감지하고 필요한 소리를 기기에만 저장합니다.",
+                    isGranted = state.hasMicrophonePermission,
+                )
+                PermissionReasonRow(
+                    icon = Icons.Default.LocationOn,
+                    title = "위치 정보",
+                    reason = "대략적인 위치로 현재 날씨를 찾습니다. 정확한 위치는 요청하지 않습니다.",
+                    isGranted = state.hasApproximateLocationPermission,
+                )
+            }
+        }
+        Text(
+            text = "플래시와 카메라는 Android의 같은 카메라 권한을 사용합니다. 버튼을 누르면 필요한 권한창만 차례로 표시됩니다.",
+            color = Color.White.copy(alpha = 0.52f),
+            style = MaterialTheme.typography.bodySmall,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.widthIn(max = 520.dp),
         )
         Surface(
             onClick = onStart,
@@ -363,8 +421,13 @@ private fun StandStartContent(
             shape = RoundedCornerShape(16.dp),
             modifier = Modifier
                 .height(52.dp)
+                .widthIn(min = 220.dp)
                 .semantics {
-                    contentDescription = "S.tand 시작"
+                    contentDescription = if (allPermissionsGranted) {
+                        "S.tand 시작"
+                    } else {
+                        "권한 확인하고 S.tand 시작"
+                    }
                 },
         ) {
             Row(
@@ -373,8 +436,69 @@ private fun StandStartContent(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Icon(Icons.Default.LightMode, contentDescription = null)
-                Text("S.tand 시작", fontWeight = FontWeight.Bold)
+                Text(
+                    text = if (allPermissionsGranted) {
+                        "S.tand 시작"
+                    } else {
+                        "권한 확인하고 시작"
+                    },
+                    fontWeight = FontWeight.Bold,
+                )
             }
+        }
+    }
+}
+
+@Composable
+private fun PermissionReasonRow(
+    icon: ImageVector,
+    title: String,
+    reason: String,
+    isGranted: Boolean,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = Color.White.copy(alpha = 0.84f),
+            modifier = Modifier.size(21.dp),
+        )
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    text = title,
+                    color = Color.White.copy(alpha = 0.92f),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    text = if (isGranted) "허용됨" else "확인 필요",
+                    color = if (isGranted) {
+                        Color(0xFF9FD6A8)
+                    } else {
+                        Color.White.copy(alpha = 0.48f)
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            }
+            Text(
+                text = reason,
+                color = Color.White.copy(alpha = 0.60f),
+                style = MaterialTheme.typography.bodySmall,
+            )
         }
     }
 }

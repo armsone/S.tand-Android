@@ -265,6 +265,7 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
         hasMicrophonePermission: Boolean,
         hasLocationPermission: Boolean,
         hasCameraPermission: Boolean,
+        mayAutomaticallyStart: Boolean,
     ) {
         foreground.set(true)
         setPermissions(
@@ -275,7 +276,7 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
         batteryMonitor.start()
         onBatteryChanged(batteryMonitor.state.value)
 
-        if (!didAutomaticallyStart) {
+        if (!didAutomaticallyStart && mayAutomaticallyStart) {
             didAutomaticallyStart = true
             startNightSession()
         } else if (mutableUiState.value.isSessionActive) {

@@ -4,9 +4,19 @@
 
 iOS 기준: `main` / `0f664b2`, `1.0.0 (0.24.1)`
 
-Android 기준: 작업 트리의 versionName `0.0.1`, versionCode `33`, 빌드 `0.0.33`
+Android 기준: 작업 트리의 versionName `0.0.1`, versionCode `34`, 빌드 `0.0.34`
 
 ## 2026-08-13 iOS 인수인계 체크리스트 재감사
+
+### 첫 실행 권한 안내
+
+- Android 첫 화면에 플래시·카메라·마이크·위치 정보의 사용 이유와 거부해도 앱이 시작된다는
+  설명을 추가했다.
+- 버튼 한 번으로 아직 없는 권한을 카메라→마이크→대략적 위치 순서로 요청한다. 플래시와
+  카메라는 같은 Android 카메라 권한을 사용한다.
+- `SM-T500`에서 설명 화면 표시, 세 권한창 순서와 모두 허용 후 오브제 모드 시작을 확인했다.
+- 이 흐름은 현재 iOS 기준 문서에 없는 신규 사용자 요구다. iOS에는 별도 구현 요청을 전달하며,
+  iPhone 실기기 결과를 받기 전까지 동등 완료로 표시하지 않는다.
 
 `ANDROID_IMPLEMENTATION_HANDOFF.md`와 `ANDROID_PARITY_ACCEPTANCE_CHECKLIST.md`를 처음부터
 끝까지 읽고 iOS `0f664b2`의 실제 정책과 Android 작업 트리를 다시 대조했다. 변경 전
@@ -147,7 +157,7 @@ UI 검증은 보류했다.
 
 ## 현재 배포·버전 상태
 
-- Android versionName `0.0.1`, versionCode `33`, 빌드 표기 `0.0.33`.
+- Android versionName `0.0.1`, versionCode `34`, 빌드 표기 `0.0.34`.
 - 로컬 JVM 테스트·`assembleDebug`·`lintDebug` 성공.
 - 홈 날씨 패널 더블 터치 계측 테스트를 `SM-T500`에서 실행해 실패 0을 확인했다.
   `SM-F968N`은 빈 공간 실기기 더블 터치로 테마 변경을 확인했고, 같은 계측 테스트는 테스트 서비스

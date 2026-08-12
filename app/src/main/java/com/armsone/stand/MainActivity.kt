@@ -58,6 +58,7 @@ import com.armsone.stand.ui.theme.STandTheme
 import com.armsone.stand.update.AppUpdateState
 import com.armsone.stand.update.GitHubAppUpdateService
 import java.io.File
+import java.util.ArrayDeque
 import kotlinx.coroutines.flow.MutableStateFlow
 
 class MainActivity : ComponentActivity() {
@@ -68,11 +69,11 @@ class MainActivity : ComponentActivity() {
     }
     private var pendingUpdateInstallFile: File? = null
 
-    private var initialPermissionSequenceStarted = false
     private var cameraPermissionAttempted = false
     private var cameraPermissionQueued = false
     private var pendingPermissionRequest: PermissionRequest? = null
-    private var pendingPermissionContinuesInitialSequence = false
+    private var startSessionAfterPermissionSequence = false
+    private val permissionSequenceRemaining = ArrayDeque<PermissionRequest>()
     private var observingSystemBrightness = false
     private val systemBrightnessObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
         override fun onChange(selfChange: Boolean) {
@@ -84,9 +85,7 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.RequestPermission(),
     ) { granted ->
         val completedRequest = pendingPermissionRequest
-        val continueInitialSequence = pendingPermissionContinuesInitialSequence
         pendingPermissionRequest = null
-        pendingPermissionContinuesInitialSequence = false
         syncViewModelPermissions()
         if (completedRequest == PermissionRequest.CAMERA) {
             standViewModel.onCameraPermissionResult(granted)
@@ -94,17 +93,16 @@ class MainActivity : ComponentActivity() {
 
         when {
             completedRequest == PermissionRequest.CAMERA -> cameraPermissionQueued = false
-            continueInitialSequence && completedRequest == PermissionRequest.MICROPHONE ->
-                requestInitialLocationPermission()
-            else -> launchQueuedCameraPermissionIfNeeded()
+        }
+        if (startSessionAfterPermissionSequence) {
+            continuePermissionReviewSequence()
+        } else {
+            launchQueuedCameraPermissionIfNeeded()
         }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        initialPermissionSequenceStarted = savedInstanceState
-            ?.getBoolean(STATE_INITIAL_PERMISSIONS_STARTED)
-            ?: false
         cameraPermissionAttempted = savedInstanceState
             ?.getBoolean(STATE_CAMERA_PERMISSION_ATTEMPTED)
             ?: false
@@ -114,9 +112,14 @@ class MainActivity : ComponentActivity() {
         pendingPermissionRequest = savedInstanceState
             ?.getString(STATE_PENDING_PERMISSION)
             ?.let { name -> PermissionRequest.entries.firstOrNull { it.name == name } }
-        pendingPermissionContinuesInitialSequence = savedInstanceState
-            ?.getBoolean(STATE_PENDING_PERMISSION_CONTINUES_INITIAL_SEQUENCE)
+        startSessionAfterPermissionSequence = savedInstanceState
+            ?.getBoolean(STATE_START_SESSION_AFTER_PERMISSION_SEQUENCE)
             ?: false
+        savedInstanceState
+            ?.getStringArrayList(STATE_PERMISSION_SEQUENCE_REMAINING)
+            .orEmpty()
+            .mapNotNull { name -> PermissionRequest.entries.firstOrNull { it.name == name } }
+            .forEach(permissionSequenceRemaining::addLast)
         acceptRadioShareDraft(intent)
 
         setContent {
@@ -142,10 +145,16 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         startObservingSystemBrightness()
+        val hasMicrophonePermission = hasPermission(Manifest.permission.RECORD_AUDIO)
+        val hasLocationPermission = hasPermission(Manifest.permission.ACCESS_COARSE_LOCATION)
+        val hasCameraPermission = hasPermission(Manifest.permission.CAMERA)
         standViewModel.onAppForeground(
-            hasMicrophonePermission = hasPermission(Manifest.permission.RECORD_AUDIO),
-            hasLocationPermission = hasPermission(Manifest.permission.ACCESS_COARSE_LOCATION),
-            hasCameraPermission = hasPermission(Manifest.permission.CAMERA),
+            hasMicrophonePermission = hasMicrophonePermission,
+            hasLocationPermission = hasLocationPermission,
+            hasCameraPermission = hasCameraPermission,
+            mayAutomaticallyStart = hasMicrophonePermission &&
+                hasLocationPermission &&
+                hasCameraPermission,
         )
 
         val state = standViewModel.uiState.value
@@ -174,18 +183,18 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
-        outState.putBoolean(
-            STATE_INITIAL_PERMISSIONS_STARTED,
-            initialPermissionSequenceStarted,
-        )
         outState.putBoolean(STATE_CAMERA_PERMISSION_ATTEMPTED, cameraPermissionAttempted)
         outState.putBoolean(STATE_CAMERA_PERMISSION_QUEUED, cameraPermissionQueued)
         pendingPermissionRequest?.let {
             outState.putString(STATE_PENDING_PERMISSION, it.name)
         }
         outState.putBoolean(
-            STATE_PENDING_PERMISSION_CONTINUES_INITIAL_SEQUENCE,
-            pendingPermissionContinuesInitialSequence,
+            STATE_START_SESSION_AFTER_PERMISSION_SEQUENCE,
+            startSessionAfterPermissionSequence,
+        )
+        outState.putStringArrayList(
+            STATE_PERMISSION_SEQUENCE_REMAINING,
+            ArrayList(permissionSequenceRemaining.map { it.name }),
         )
         super.onSaveInstanceState(outState)
     }
@@ -251,7 +260,6 @@ class MainActivity : ComponentActivity() {
 
         LaunchedEffect(state.isSessionActive) {
             applySessionWindowState(state.isSessionActive)
-            if (state.isSessionActive) beginInitialPermissionSequence()
         }
         LaunchedEffect(state.settings.orientationPreference) {
             applyOrientationPreference(state.settings.orientationPreference)
@@ -280,7 +288,13 @@ class MainActivity : ComponentActivity() {
                     onClockScaleChanged = standViewModel::updateClockScale,
                     onToggleTorch = standViewModel::toggleTorchEnabled,
                     onCycleMode = standViewModel::cycleModePreference,
-                    onToggleSession = standViewModel::toggleNightSession,
+                    onToggleSession = {
+                        if (state.isSessionActive) {
+                            standViewModel.toggleNightSession()
+                        } else {
+                            reviewPermissionsAndStartSession()
+                        }
+                    },
                     onToggleOrientation = {
                         standViewModel.toggleOrientationLock(
                             isPortrait = resources.configuration.orientation !=
@@ -507,32 +521,50 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun beginInitialPermissionSequence() {
-        if (initialPermissionSequenceStarted) return
-        initialPermissionSequenceStarted = true
-
-        if (hasPermission(Manifest.permission.RECORD_AUDIO)) {
-            requestInitialLocationPermission()
-        } else {
-            launchPermission(
-                request = PermissionRequest.MICROPHONE,
-                permission = Manifest.permission.RECORD_AUDIO,
-                continueInitialSequence = true,
-            )
+    private fun reviewPermissionsAndStartSession() {
+        if (pendingPermissionRequest != null) {
+            showToast("진행 중인 권한 요청을 먼저 완료해 주세요.")
+            return
         }
+
+        permissionSequenceRemaining.clear()
+        listOf(
+            PermissionRequest.CAMERA,
+            PermissionRequest.MICROPHONE,
+            PermissionRequest.LOCATION,
+        ).filterNot { request -> hasPermission(permissionFor(request)) }
+            .forEach(permissionSequenceRemaining::addLast)
+
+        if (permissionSequenceRemaining.isEmpty()) {
+            standViewModel.toggleNightSession()
+            return
+        }
+
+        startSessionAfterPermissionSequence = true
+        if (permissionSequenceRemaining.contains(PermissionRequest.CAMERA)) {
+            cameraPermissionAttempted = true
+        }
+        continuePermissionReviewSequence()
     }
 
-    private fun requestInitialLocationPermission() {
-        if (hasPermission(Manifest.permission.ACCESS_COARSE_LOCATION)) {
-            syncViewModelPermissions()
-            launchQueuedCameraPermissionIfNeeded()
-        } else {
-            launchPermission(
-                request = PermissionRequest.LOCATION,
-                permission = Manifest.permission.ACCESS_COARSE_LOCATION,
-                continueInitialSequence = true,
-            )
+    private fun continuePermissionReviewSequence() {
+        if (pendingPermissionRequest != null) return
+
+        while (permissionSequenceRemaining.isNotEmpty()) {
+            val request = permissionSequenceRemaining.removeFirst()
+            val permission = permissionFor(request)
+            if (hasPermission(permission)) continue
+            launchPermission(request = request, permission = permission)
+            return
         }
+
+        syncViewModelPermissions()
+        val shouldStartSession = startSessionAfterPermissionSequence
+        startSessionAfterPermissionSequence = false
+        if (shouldStartSession && !standViewModel.uiState.value.isSessionActive) {
+            standViewModel.toggleNightSession()
+        }
+        launchQueuedCameraPermissionIfNeeded()
     }
 
     private fun requestCameraPermissionForTorch() {
@@ -565,11 +597,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun retryPermission(request: PermissionRequest) {
-        val permission = when (request) {
-            PermissionRequest.MICROPHONE -> Manifest.permission.RECORD_AUDIO
-            PermissionRequest.LOCATION -> Manifest.permission.ACCESS_COARSE_LOCATION
-            PermissionRequest.CAMERA -> Manifest.permission.CAMERA
-        }
+        val permission = permissionFor(request)
         if (hasPermission(permission)) {
             syncViewModelPermissions()
             showToast("이미 허용된 권한입니다.")
@@ -583,14 +611,12 @@ class MainActivity : ComponentActivity() {
         launchPermission(
             request = request,
             permission = permission,
-            continueInitialSequence = false,
         )
     }
 
     private fun launchPermission(
         request: PermissionRequest,
         permission: String,
-        continueInitialSequence: Boolean = false,
     ) {
         if (pendingPermissionRequest != null) {
             if (request == PermissionRequest.CAMERA) cameraPermissionQueued = true
@@ -598,22 +624,26 @@ class MainActivity : ComponentActivity() {
         }
 
         pendingPermissionRequest = request
-        pendingPermissionContinuesInitialSequence = continueInitialSequence
         runCatching { permissionLauncher.launch(permission) }
             .onFailure {
                 pendingPermissionRequest = null
-                pendingPermissionContinuesInitialSequence = false
                 syncViewModelPermissions()
-                when {
+                if (startSessionAfterPermissionSequence) {
+                    continuePermissionReviewSequence()
+                } else when {
                     request == PermissionRequest.CAMERA -> {
                         cameraPermissionQueued = false
                         cameraPermissionAttempted = false
                     }
-                    continueInitialSequence && request == PermissionRequest.MICROPHONE ->
-                        requestInitialLocationPermission()
                     else -> launchQueuedCameraPermissionIfNeeded()
                 }
             }
+    }
+
+    private fun permissionFor(request: PermissionRequest): String = when (request) {
+        PermissionRequest.MICROPHONE -> Manifest.permission.RECORD_AUDIO
+        PermissionRequest.LOCATION -> Manifest.permission.ACCESS_COARSE_LOCATION
+        PermissionRequest.CAMERA -> Manifest.permission.CAMERA
     }
 
     private fun syncViewModelPermissions() {
@@ -799,11 +829,12 @@ class MainActivity : ComponentActivity() {
         private const val AI_SHOT_URI = "hanclip://aishot"
         private const val DEFAULT_AUDIO_MIME_TYPE = "audio/*"
         private const val APK_MIME_TYPE = "application/vnd.android.package-archive"
-        private const val STATE_INITIAL_PERMISSIONS_STARTED = "initial_permissions_started"
         private const val STATE_CAMERA_PERMISSION_ATTEMPTED = "camera_permission_attempted"
         private const val STATE_CAMERA_PERMISSION_QUEUED = "camera_permission_queued"
         private const val STATE_PENDING_PERMISSION = "pending_permission"
-        private const val STATE_PENDING_PERMISSION_CONTINUES_INITIAL_SEQUENCE =
-            "pending_permission_continues_initial_sequence"
+        private const val STATE_START_SESSION_AFTER_PERMISSION_SEQUENCE =
+            "start_session_after_permission_sequence"
+        private const val STATE_PERMISSION_SEQUENCE_REMAINING =
+            "permission_sequence_remaining"
     }
 }
