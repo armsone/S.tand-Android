@@ -115,7 +115,12 @@ class GitHubAppUpdateService(
             if (oldFile.name != release.assetName) oldFile.delete()
         }
         val destination = File(updateDirectory, release.assetName)
-        val partial = File(updateDirectory, "${release.assetName}.part")
+        // Android 10's PackageManager refuses to inspect an otherwise valid archive when the
+        // temporary path does not end in .apk. Keep the partial marker before the extension.
+        val partial = File(
+            updateDirectory,
+            "${release.assetName.removeSuffix(".apk")}.partial.apk",
+        )
         partial.delete()
 
         val connection = openConnection(release.apkUrl)

@@ -24,6 +24,9 @@ S.tand Android는 Google Play 대신 GitHub Release의 APK를 확인한다. 단�
 6. 낮은 versionCode의 실제 설치본에서 업데이트 안내, 다운로드, 알 수 없는 앱 설치 권한과 Android
    설치 화면을 확인한다. 앱 삭제나 데이터 초기화는 하지 않는다.
 
+Android 10도 APK를 검사할 수 있도록 다운로드 중인 임시 파일명은 `.partial.apk`로 끝나야 한다.
+`.apk.part`는 최신 Android에서는 열리지만 Android 10 PackageManager가 APK로 인식하지 않는다.
+
 ## 서명 보관
 
 현재 업데이트 계보는 이 Mac의 Android debug keystore를 사용한다. keystore 파일 자체나 비밀번호를
