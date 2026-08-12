@@ -169,6 +169,8 @@ UI 검증은 보류했다.
   앱 내부 업데이트 설치 흐름은 아직 별도로 실행하지 않았다.
 - GitHub `android-v34` Release를 공개하고 태그, 공개 상태, APK 이름과 크기를 확인했다. 첫 실행
   권한 안내는 `SM-T500`에서 실제 권한 순서까지 검증했으며 두 기기에 versionCode 34를 설치했다.
+- GitHub `android-v35` Release를 공개하고 두 기기에 versionCode 35를 데이터 유지 설치했다.
+  `SM-F968N`에서 최초 권한 안내와 무작위 값 4 저장, 다음 실행에서 안내 생략과 값 3 감소를 확인했다.
 - GitHub `android-v32` Release를 공개하고, `SM-F968N`과 Android 10 `SM-T500`의 versionCode 30
   설치본에서 업데이트 안내→다운로드→서명 검사→설치를 진행해 versionCode 32와 기존 녹음 파일
   유지를 확인했다. 최초 사용자는 Android의 `이 출처 허용`을 한 번 켜야 한다.
