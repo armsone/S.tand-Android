@@ -26,6 +26,7 @@ class StandHomeScreenTest {
             STandTheme {
                 StandHomeScreen(
                     state = StandUiState(),
+                    showPermissionReview = true,
                     onScreenTap = {},
                     onToggleTheme = {},
                     onOpenEditor = {},

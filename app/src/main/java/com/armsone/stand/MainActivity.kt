@@ -39,6 +39,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.armsone.stand.model.EnvironmentDisplayMode
 import com.armsone.stand.model.LampPhase
 import com.armsone.stand.model.OrientationPreference
+import com.armsone.stand.model.PermissionReminderPolicy
 import com.armsone.stand.model.RadioShareImportPolicy
 import com.armsone.stand.model.StandExperienceMode
 import com.armsone.stand.model.ScreenLayoutCodec
@@ -60,6 +61,7 @@ import com.armsone.stand.update.GitHubAppUpdateService
 import java.io.File
 import java.util.ArrayDeque
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlin.random.Random
 
 class MainActivity : ComponentActivity() {
     private val standViewModel: StandViewModel by viewModels()
@@ -74,6 +76,7 @@ class MainActivity : ComponentActivity() {
     private var pendingPermissionRequest: PermissionRequest? = null
     private var startSessionAfterPermissionSequence = false
     private val permissionSequenceRemaining = ArrayDeque<PermissionRequest>()
+    private var showPermissionReviewOnThisLaunch by mutableStateOf(false)
     private var observingSystemBrightness = false
     private val systemBrightnessObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
         override fun onChange(selfChange: Boolean) {
@@ -120,6 +123,10 @@ class MainActivity : ComponentActivity() {
             .orEmpty()
             .mapNotNull { name -> PermissionRequest.entries.firstOrNull { it.name == name } }
             .forEach(permissionSequenceRemaining::addLast)
+        showPermissionReviewOnThisLaunch = savedInstanceState
+            ?.takeIf { state -> state.containsKey(STATE_SHOW_PERMISSION_REVIEW_ON_THIS_LAUNCH) }
+            ?.getBoolean(STATE_SHOW_PERMISSION_REVIEW_ON_THIS_LAUNCH)
+            ?: schedulePermissionReviewForLaunch()
         acceptRadioShareDraft(intent)
 
         setContent {
@@ -152,9 +159,8 @@ class MainActivity : ComponentActivity() {
             hasMicrophonePermission = hasMicrophonePermission,
             hasLocationPermission = hasLocationPermission,
             hasCameraPermission = hasCameraPermission,
-            mayAutomaticallyStart = hasMicrophonePermission &&
-                hasLocationPermission &&
-                hasCameraPermission,
+            mayAutomaticallyStart = !showPermissionReviewOnThisLaunch ||
+                (hasMicrophonePermission && hasLocationPermission && hasCameraPermission),
         )
 
         val state = standViewModel.uiState.value
@@ -195,6 +201,10 @@ class MainActivity : ComponentActivity() {
         outState.putStringArrayList(
             STATE_PERMISSION_SEQUENCE_REMAINING,
             ArrayList(permissionSequenceRemaining.map { it.name }),
+        )
+        outState.putBoolean(
+            STATE_SHOW_PERMISSION_REVIEW_ON_THIS_LAUNCH,
+            showPermissionReviewOnThisLaunch,
         )
         super.onSaveInstanceState(outState)
     }
@@ -278,6 +288,7 @@ class MainActivity : ComponentActivity() {
             when (destination) {
                 AppDestination.HOME -> StandHomeScreen(
                     state = state,
+                    showPermissionReview = showPermissionReviewOnThisLaunch,
                     onScreenTap = standViewModel::onScreenTap,
                     onToggleTheme = standViewModel::toggleTheme,
                     onOpenEditor = ::openScreenEditor,
@@ -291,8 +302,10 @@ class MainActivity : ComponentActivity() {
                     onToggleSession = {
                         if (state.isSessionActive) {
                             standViewModel.toggleNightSession()
-                        } else {
+                        } else if (showPermissionReviewOnThisLaunch) {
                             reviewPermissionsAndStartSession()
+                        } else {
+                            standViewModel.toggleNightSession()
                         }
                     },
                     onToggleOrientation = {
@@ -561,6 +574,7 @@ class MainActivity : ComponentActivity() {
         syncViewModelPermissions()
         val shouldStartSession = startSessionAfterPermissionSequence
         startSessionAfterPermissionSequence = false
+        showPermissionReviewOnThisLaunch = false
         if (shouldStartSession && !standViewModel.uiState.value.isSessionActive) {
             standViewModel.toggleNightSession()
         }
@@ -644,6 +658,39 @@ class MainActivity : ComponentActivity() {
         PermissionRequest.MICROPHONE -> Manifest.permission.RECORD_AUDIO
         PermissionRequest.LOCATION -> Manifest.permission.ACCESS_COARSE_LOCATION
         PermissionRequest.CAMERA -> Manifest.permission.CAMERA
+    }
+
+    private fun schedulePermissionReviewForLaunch(): Boolean {
+        val preferences = getSharedPreferences(
+            PERMISSION_REMINDER_PREFERENCES,
+            MODE_PRIVATE,
+        )
+        val hasMissingPermission = listOf(
+            Manifest.permission.CAMERA,
+            Manifest.permission.RECORD_AUDIO,
+            Manifest.permission.ACCESS_COARSE_LOCATION,
+        ).any { permission -> !hasPermission(permission) }
+        val remaining = if (preferences.contains(KEY_LAUNCHES_UNTIL_PERMISSION_REMINDER)) {
+            preferences.getInt(KEY_LAUNCHES_UNTIL_PERMISSION_REMINDER, 1)
+        } else {
+            null
+        }
+        val nextInterval = Random.nextInt(
+            from = PermissionReminderPolicy.MINIMUM_LAUNCH_INTERVAL,
+            until = PermissionReminderPolicy.MAXIMUM_LAUNCH_INTERVAL + 1,
+        )
+        val decision = PermissionReminderPolicy.decide(
+            hasMissingPermission = hasMissingPermission,
+            launchesUntilReminder = remaining,
+            nextRandomInterval = nextInterval,
+        )
+
+        preferences.edit().apply {
+            decision.launchesUntilNextReminder?.let { launches ->
+                putInt(KEY_LAUNCHES_UNTIL_PERMISSION_REMINDER, launches)
+            } ?: remove(KEY_LAUNCHES_UNTIL_PERMISSION_REMINDER)
+        }.apply()
+        return decision.shouldShow
     }
 
     private fun syncViewModelPermissions() {
@@ -836,5 +883,10 @@ class MainActivity : ComponentActivity() {
             "start_session_after_permission_sequence"
         private const val STATE_PERMISSION_SEQUENCE_REMAINING =
             "permission_sequence_remaining"
+        private const val STATE_SHOW_PERMISSION_REVIEW_ON_THIS_LAUNCH =
+            "show_permission_review_on_this_launch"
+        private const val PERMISSION_REMINDER_PREFERENCES = "permission_reminder"
+        private const val KEY_LAUNCHES_UNTIL_PERMISSION_REMINDER =
+            "launches_until_permission_reminder"
     }
 }

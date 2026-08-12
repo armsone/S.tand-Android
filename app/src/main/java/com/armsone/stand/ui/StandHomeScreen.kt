@@ -132,6 +132,7 @@ import kotlin.math.roundToInt
 @Composable
 fun StandHomeScreen(
     state: StandUiState,
+    showPermissionReview: Boolean = false,
     onScreenTap: () -> Unit,
     onToggleTheme: () -> Unit,
     onOpenEditor: () -> Unit,
@@ -251,6 +252,7 @@ fun StandHomeScreen(
             } else {
                 StandStartContent(
                     state = state,
+                    showPermissionReview = showPermissionReview,
                     onStart = onToggleSession,
                     modifier = Modifier.align(Alignment.Center),
                 )
@@ -336,9 +338,15 @@ fun StandHomeScreen(
 @Composable
 private fun StandStartContent(
     state: StandUiState,
+    showPermissionReview: Boolean,
     onStart: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    if (!showPermissionReview) {
+        RegularStartContent(onStart = onStart, modifier = modifier)
+        return
+    }
+
     val allPermissionsGranted = state.hasCameraPermission &&
         state.hasMicrophonePermission &&
         state.hasApproximateLocationPermission
@@ -444,6 +452,55 @@ private fun StandStartContent(
                     },
                     fontWeight = FontWeight.Bold,
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun RegularStartContent(
+    onStart: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier.padding(horizontal = 28.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Image(
+            painter = painterResource(R.drawable.stand_brand_icon),
+            contentDescription = null,
+            modifier = Modifier.size(76.dp),
+        )
+        Text(
+            text = "S.tand가 곁에 있을게요",
+            color = Color.White.copy(alpha = 0.92f),
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center,
+        )
+        Text(
+            text = "시작하면 오브제와 매이트 모드를 오가며 시간·날씨와 잠자리를 돌봅니다.",
+            color = Color.White.copy(alpha = 0.62f),
+            style = MaterialTheme.typography.bodyMedium,
+            textAlign = TextAlign.Center,
+        )
+        Surface(
+            onClick = onStart,
+            color = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary,
+            shape = RoundedCornerShape(16.dp),
+            modifier = Modifier
+                .height(52.dp)
+                .semantics { contentDescription = "S.tand 시작" },
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 22.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Icon(Icons.Default.LightMode, contentDescription = null)
+                Text("S.tand 시작", fontWeight = FontWeight.Bold)
             }
         }
     }
