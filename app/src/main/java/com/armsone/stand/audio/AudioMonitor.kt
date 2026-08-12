@@ -394,6 +394,10 @@ class AudioMonitor(
         ) {
             AudioCandidateFrameAction.RETAIN -> Unit
             AudioCandidateFrameAction.OPEN_CONTINUATION -> {
+                if (!AudioPendingSegmentPolicy.canOpenContinuation(candidate.sealedSegments.size)) {
+                    discardCandidate()
+                    return
+                }
                 val continuation = openContinuation(candidate, nowNanos) ?: return
                 try {
                     continuation.append(samples, sampleCount)
@@ -406,7 +410,11 @@ class AudioMonitor(
             AudioCandidateFrameAction.SEAL_AND_WAIT -> sealCurrentSegment(candidate)
             AudioCandidateFrameAction.SEAL_AND_CONTINUE -> {
                 if (sealCurrentSegment(candidate)) {
-                    openContinuation(candidate, nowNanos)
+                    if (AudioPendingSegmentPolicy.canOpenContinuation(candidate.sealedSegments.size)) {
+                        openContinuation(candidate, nowNanos)
+                    } else {
+                        discardCandidate()
+                    }
                 }
             }
             AudioCandidateFrameAction.FINALIZE -> finalizeCandidate()
@@ -636,6 +644,13 @@ internal object AudioClipDurationPolicy {
     fun shouldRoll(startedAtNanos: Long, nowNanos: Long): Boolean =
         nowNanos >= startedAtNanos &&
             nowNanos - startedAtNanos >= MaximumClipDurationNanos
+}
+
+internal object AudioPendingSegmentPolicy {
+    const val MaximumPendingSegmentCount = 4
+
+    fun canOpenContinuation(sealedSegmentCount: Int): Boolean =
+        sealedSegmentCount.coerceAtLeast(0) < MaximumPendingSegmentCount
 }
 
 internal enum class AudioCandidateFrameAction {

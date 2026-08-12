@@ -7,6 +7,14 @@ import org.junit.Test
 
 class AudioMonitorTest {
     @Test
+    fun continuousRecordingNeverOpensAContinuationAfterFourPendingSegments() {
+        assertTrue(AudioPendingSegmentPolicy.canOpenContinuation(0))
+        assertTrue(AudioPendingSegmentPolicy.canOpenContinuation(3))
+        assertTrue(!AudioPendingSegmentPolicy.canOpenContinuation(4))
+        assertTrue(!AudioPendingSegmentPolicy.canOpenContinuation(5))
+    }
+
+    @Test
     fun candidateRollsAtNinetySecondsButNotBefore() {
         val startedAt = 12_000_000_000L
 

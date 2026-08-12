@@ -3,9 +3,20 @@ package com.armsone.stand.model
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotSame
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ScreenLayoutCodecTest {
+    @Test
+    fun decodabilityDistinguishesCurrentPayloadsFromFutureOrCorruptPayloads() {
+        val encoded = ScreenLayoutCodec.encode(StandScreenLayout.Portrait)
+
+        assertTrue(ScreenLayoutCodec.isDecodable(encoded))
+        assertFalse(ScreenLayoutCodec.isDecodable("S.tand-layout-v99|future=true"))
+        assertFalse(ScreenLayoutCodec.isDecodable("corrupt"))
+        assertFalse(ScreenLayoutCodec.isDecodable(null))
+    }
+
     @Test
     fun customizedLayoutRoundTripsWithoutLosingCoordinatesGroupsOrOrder() {
         val customized = StandScreenLayout.Portrait.copy(

@@ -120,6 +120,7 @@ class WeatherService(context: Context) : Closeable {
 
         if (!isLocationEnabled.get()) {
             invalidateAndCancelActiveWork()
+            clearCachedWeather()
             mutableAvailability.value = WeatherAvailability.IDLE
             return
         }
@@ -147,6 +148,7 @@ class WeatherService(context: Context) : Closeable {
         if (isClosed.get() || isLocationEnabled.getAndSet(enabled) == enabled) return
         if (!enabled) {
             invalidateAndCancelActiveWork()
+            clearCachedWeather()
             mutableAvailability.value = WeatherAvailability.IDLE
         }
     }
@@ -170,6 +172,12 @@ class WeatherService(context: Context) : Closeable {
     private fun invalidateAndCancelActiveWork() {
         requestGeneration.incrementAndGet()
         cancelActiveWork()
+    }
+
+    private fun clearCachedWeather() {
+        mutableWeather.value = null
+        mutableLocationName.value = null
+        mutableLastUpdated.value = null
     }
 
     @SuppressLint("MissingPermission")

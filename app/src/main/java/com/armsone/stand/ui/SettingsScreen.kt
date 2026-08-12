@@ -33,6 +33,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Security
@@ -103,6 +104,8 @@ fun SettingsScreen(
     onToggleInternetRadio: (String) -> Unit,
     onSaveInternetRadio: (String?, String, String) -> String?,
     onDeleteInternetRadio: (String) -> Unit,
+    onManageInternetRadios: () -> Unit,
+    onOpenInternetRadioBrowser: () -> Unit,
     onOpenRecordings: () -> Unit,
     onRequestMicrophonePermission: () -> Unit,
     onRequestApproximateLocationPermission: () -> Unit,
@@ -113,6 +116,7 @@ fun SettingsScreen(
     modifier: Modifier = Modifier,
 ) {
     var showResetConfirmation by remember { mutableStateOf(false) }
+    var pendingRadioDeletionID by remember { mutableStateOf<String?>(null) }
     var selectedLicense by remember { mutableStateOf<ClockFontChoice?>(null) }
     var editingRadioID by remember { mutableStateOf<String?>(null) }
     var addingRadio by remember { mutableStateOf(false) }
@@ -251,8 +255,7 @@ fun SettingsScreen(
                                         if (radioValidationMessage == null) editingRadioID = null
                                     },
                                     onDelete = {
-                                        onDeleteInternetRadio(channel.id)
-                                        editingRadioID = null
+                                        pendingRadioDeletionID = channel.id
                                     },
                                     onClose = { editingRadioID = null },
                                 )
@@ -291,6 +294,27 @@ fun SettingsScreen(
                                 modifier = Modifier.fillMaxWidth(),
                             ) { Text(if (settings.internetRadioChannels.isEmpty()) "첫 채널 추가" else "채널 추가") }
                         }
+                        TextButton(
+                            onClick = onManageInternetRadios,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Icon(Icons.Default.Radio, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("채널 관리")
+                        }
+                        TextButton(
+                            onClick = onOpenInternetRadioBrowser,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Icon(Icons.Default.Public, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("웹에서 주소 찾기")
+                        }
+                        Text(
+                            "브라우저는 스트리밍 주소를 자동으로 감지하거나 채널에 입력하지 않습니다. 이용 권한이 있는 주소를 직접 복사한 뒤 채널 추가 화면에서 붙여넣어 주세요.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                         Text(
                             "최대 두 채널을 저장합니다. 현재 선택 채널은 홈에서 재생할 수 있고, 연결이 끊기면 자동 재연결합니다. 재생 중에는 소리 감지와 녹음을 잠시 멈춥니다.",
                             style = MaterialTheme.typography.bodySmall,
@@ -518,6 +542,26 @@ fun SettingsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showResetConfirmation = false }) { Text("취소") }
+            },
+        )
+    }
+
+    pendingRadioDeletionID?.let { channelID ->
+        AlertDialog(
+            onDismissRequest = { pendingRadioDeletionID = null },
+            title = { Text("라디오 채널을 삭제할까요?") },
+            text = { Text("홈의 라디오 패널에서도 이 채널이 제거됩니다.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDeleteInternetRadio(channelID)
+                        editingRadioID = null
+                        pendingRadioDeletionID = null
+                    },
+                ) { Text("삭제") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingRadioDeletionID = null }) { Text("취소") }
             },
         )
     }

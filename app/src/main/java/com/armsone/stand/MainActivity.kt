@@ -48,6 +48,8 @@ import com.armsone.stand.ui.RecordingsScreen
 import com.armsone.stand.ui.ScreenEditorScreen
 import com.armsone.stand.ui.SettingsScreen
 import com.armsone.stand.ui.InternetRadioScreen
+import com.armsone.stand.ui.InternetRadioBrowserScreen
+import com.armsone.stand.ui.InternetRadioManagementScreen
 import com.armsone.stand.ui.StandHomeScreen
 import com.armsone.stand.ui.StandUiState
 import com.armsone.stand.ui.theme.STandTheme
@@ -176,6 +178,10 @@ class MainActivity : ComponentActivity() {
         var secondaryReturnDestination by rememberSaveable {
             mutableStateOf(AppDestination.HOME)
         }
+        var browserReturnDestination by rememberSaveable {
+            mutableStateOf(AppDestination.SETTINGS)
+        }
+        var radioEditorChannelID by rememberSaveable { mutableStateOf<String?>(null) }
         var editorIsPortrait by rememberSaveable { mutableStateOf(true) }
         var editorDraftEncoded by rememberSaveable { mutableStateOf<String?>(null) }
         var editorClockFontName by rememberSaveable { mutableStateOf<String?>(null) }
@@ -184,6 +190,7 @@ class MainActivity : ComponentActivity() {
         LaunchedEffect(sharedRadioUrl) {
             if (sharedRadioUrl != null) {
                 secondaryReturnDestination = AppDestination.HOME
+                radioEditorChannelID = null
                 destination = AppDestination.RADIO
             }
         }
@@ -210,7 +217,9 @@ class MainActivity : ComponentActivity() {
             destination = when (destination) {
                 AppDestination.RECORDINGS,
                 AppDestination.RADIO,
+                AppDestination.RADIO_MANAGEMENT,
                 -> secondaryReturnDestination
+                AppDestination.BROWSER -> browserReturnDestination
                 else -> AppDestination.HOME
             }
         }
@@ -237,6 +246,7 @@ class MainActivity : ComponentActivity() {
                     onBrightnessAdjustmentStarted = standViewModel::beginBrightnessAdjustment,
                     onBrightnessLevelChanged = standViewModel::updateBrightnessLevel,
                     onBrightnessAdjustmentFinished = standViewModel::endBrightnessAdjustment,
+                    onInternetRadioVolumeChanged = standViewModel::updateInternetRadioVolume,
                     onToggleTorch = standViewModel::toggleTorchEnabled,
                     onCycleMode = standViewModel::cycleModePreference,
                     onToggleSession = standViewModel::toggleNightSession,
@@ -253,6 +263,11 @@ class MainActivity : ComponentActivity() {
                     onOpenAiShot = ::openAiShot,
                     onOpenSettings = { destination = AppDestination.SETTINGS },
                     onToggleRadio = standViewModel::toggleInternetRadio,
+                    onEditRadio = { channelID ->
+                        radioEditorChannelID = channelID
+                        secondaryReturnDestination = AppDestination.HOME
+                        destination = AppDestination.RADIO
+                    },
                 )
 
                 AppDestination.SETTINGS -> SettingsScreen(
@@ -262,6 +277,14 @@ class MainActivity : ComponentActivity() {
                     onToggleInternetRadio = standViewModel::toggleInternetRadio,
                     onSaveInternetRadio = standViewModel::saveInternetRadioChannel,
                     onDeleteInternetRadio = standViewModel::deleteInternetRadioChannel,
+                    onManageInternetRadios = {
+                        secondaryReturnDestination = AppDestination.SETTINGS
+                        destination = AppDestination.RADIO_MANAGEMENT
+                    },
+                    onOpenInternetRadioBrowser = {
+                        browserReturnDestination = AppDestination.SETTINGS
+                        destination = AppDestination.BROWSER
+                    },
                     onOpenRecordings = {
                         secondaryReturnDestination = AppDestination.SETTINGS
                         destination = AppDestination.RECORDINGS
@@ -310,20 +333,58 @@ class MainActivity : ComponentActivity() {
                 }
 
                 AppDestination.RADIO -> InternetRadioScreen(
-                    configuration = if (sharedRadioUrl == null) state.settings.internetRadio else null,
+                    configuration = if (sharedRadioUrl == null) {
+                        state.settings.internetRadioChannels.firstOrNull {
+                            it.id == radioEditorChannelID
+                        }
+                    } else {
+                        null
+                    },
                     initialUrl = sharedRadioUrl,
                     onSave = { name, url ->
-                        if (sharedRadioUrl == null) {
-                            standViewModel.saveInternetRadio(name, url)
-                        } else {
-                            standViewModel.saveInternetRadioChannel(null, name, url)
-                        }
+                        standViewModel.saveInternetRadioChannel(
+                            if (sharedRadioUrl == null) radioEditorChannelID else null,
+                            name,
+                            url,
+                        )
                     },
-                    onDelete = standViewModel::deleteInternetRadio,
+                    onDelete = {
+                        radioEditorChannelID?.let(standViewModel::deleteInternetRadioChannel)
+                    },
+                    onOpenBrowser = {
+                        browserReturnDestination = AppDestination.RADIO
+                        destination = AppDestination.BROWSER
+                    },
                     onBack = {
                         pendingRadioShareUrl.value = null
+                        radioEditorChannelID = null
                         destination = secondaryReturnDestination
                     },
+                )
+
+                AppDestination.RADIO_MANAGEMENT -> InternetRadioManagementScreen(
+                    state = state,
+                    onToggle = standViewModel::toggleInternetRadio,
+                    onAdd = {
+                        radioEditorChannelID = null
+                        secondaryReturnDestination = AppDestination.RADIO_MANAGEMENT
+                        destination = AppDestination.RADIO
+                    },
+                    onEdit = { channelID ->
+                        radioEditorChannelID = channelID
+                        secondaryReturnDestination = AppDestination.RADIO_MANAGEMENT
+                        destination = AppDestination.RADIO
+                    },
+                    onMove = standViewModel::moveInternetRadioChannel,
+                    onOpenBrowser = {
+                        browserReturnDestination = AppDestination.RADIO_MANAGEMENT
+                        destination = AppDestination.BROWSER
+                    },
+                    onBack = { destination = secondaryReturnDestination },
+                )
+
+                AppDestination.BROWSER -> InternetRadioBrowserScreen(
+                    onClose = { destination = browserReturnDestination },
                 )
 
                 AppDestination.EDITOR -> {
@@ -350,6 +411,10 @@ class MainActivity : ComponentActivity() {
                         onLayoutChange = { editorDraftEncoded = ScreenLayoutCodec.encode(it) },
                         onClockFontChange = { editorClockFontName = it.name },
                         onClockHourModeChange = { editorClockHourModeName = it.name },
+                        onManageRadios = {
+                            secondaryReturnDestination = AppDestination.EDITOR
+                            destination = AppDestination.RADIO_MANAGEMENT
+                        },
                         onSave = { saved, savedClockFont, savedClockHourMode ->
                             standViewModel.updateSettings { current ->
                                 if (editorIsPortrait) {
@@ -615,7 +680,15 @@ class MainActivity : ComponentActivity() {
             (state.settings.torchEnabled ||
                 state.experienceMode == StandExperienceMode.STARTLED)
 
-    private enum class AppDestination { HOME, SETTINGS, RECORDINGS, EDITOR, RADIO }
+    private enum class AppDestination {
+        HOME,
+        SETTINGS,
+        RECORDINGS,
+        EDITOR,
+        RADIO,
+        RADIO_MANAGEMENT,
+        BROWSER,
+    }
 
     private enum class PermissionRequest { MICROPHONE, LOCATION, CAMERA }
 

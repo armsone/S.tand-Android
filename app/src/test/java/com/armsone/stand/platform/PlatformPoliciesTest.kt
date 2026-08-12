@@ -8,6 +8,22 @@ import org.junit.Test
 
 class PlatformPoliciesTest {
     @Test
+    fun horizontalDragCoversFullRadioVolumeRangeAndClamps() {
+        assertEquals(0.5f, RadioVolumePolicy.HORIZONTAL_DRAG_TRAVEL_RATIO, 0f)
+        assertEquals(1f, RadioVolumePolicy.level(0.5f, 100f, 400f), 0f)
+        assertEquals(0f, RadioVolumePolicy.level(0.5f, -100f, 400f), 0f)
+        assertEquals(1f, RadioVolumePolicy.level(0.8f, 1_000f, 400f), 0f)
+        assertEquals(0f, RadioVolumePolicy.level(0.2f, -1_000f, 400f), 0f)
+    }
+
+    @Test
+    fun sensorCallbackRequiresTheCurrentRunningGeneration() {
+        assertTrue(DeviceSensorCallbackPolicy.shouldDeliver(4L, 4L, true))
+        assertFalse(DeviceSensorCallbackPolicy.shouldDeliver(3L, 4L, true))
+        assertFalse(DeviceSensorCallbackPolicy.shouldDeliver(4L, 4L, false))
+    }
+
+    @Test
     fun objectModeKeepsOnlyAmbientMonitoringWhileMateEnablesSleepCare() {
         assertEquals(
             DeviceSensorMonitoringMode.STOPPED,

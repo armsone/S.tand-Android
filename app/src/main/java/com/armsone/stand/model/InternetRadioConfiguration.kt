@@ -43,7 +43,7 @@ data class InternetRadioConfiguration(
 }
 
 object InternetRadioReconnectPolicy {
-    private val DelaySeconds = listOf(1, 2, 4, 8, 15)
+    private val DelaySeconds = listOf(2, 4, 8, 15, 30)
 
     fun delaySeconds(attempt: Int): Int? = DelaySeconds.getOrNull(attempt.coerceAtLeast(0))
 }

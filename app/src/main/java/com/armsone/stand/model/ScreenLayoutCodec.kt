@@ -73,6 +73,9 @@ object ScreenLayoutCodec {
         return decode(encoded) ?: safeFallback
     }
 
+    fun isDecodable(encoded: String?): Boolean =
+        !encoded.isNullOrBlank() && encoded.length <= MAX_ENCODED_LENGTH && decode(encoded) != null
+
     private fun decode(encoded: String): StandScreenLayout? {
         val parts = encoded.split(FIELD_SEPARATOR)
         if (parts.firstOrNull() != FORMAT_VERSION) return null

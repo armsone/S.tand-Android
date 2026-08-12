@@ -14,6 +14,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -70,23 +72,31 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.semantics.stateDescription
 import com.armsone.stand.R
+import com.armsone.stand.BuildConfig
 import com.armsone.stand.model.EnvironmentDisplayMode
 import com.armsone.stand.model.InternetRadioConfiguration
 import com.armsone.stand.model.LampPhase
@@ -98,6 +108,7 @@ import com.armsone.stand.model.StandScreenLayout
 import com.armsone.stand.model.SimplifiedBrightnessModePolicy
 import com.armsone.stand.model.WeatherPiece
 import com.armsone.stand.platform.InternetRadioState
+import com.armsone.stand.platform.RadioVolumePolicy
 import com.armsone.stand.ui.components.ClockDateAndSeconds
 import com.armsone.stand.ui.components.ClockSeconds
 import com.armsone.stand.ui.components.FlipClock
@@ -119,6 +130,7 @@ fun StandHomeScreen(
     onBrightnessAdjustmentStarted: () -> Unit,
     onBrightnessLevelChanged: (Float) -> Unit,
     onBrightnessAdjustmentFinished: () -> Unit,
+    onInternetRadioVolumeChanged: (Float) -> Unit,
     onToggleTorch: () -> Unit,
     onCycleMode: () -> Unit,
     onToggleSession: () -> Unit,
@@ -127,6 +139,7 @@ fun StandHomeScreen(
     onOpenAiShot: () -> Unit,
     onOpenSettings: () -> Unit,
     onToggleRadio: (String) -> Unit,
+    onEditRadio: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val burnInOffset = rememberBurnInOffset()
@@ -177,6 +190,13 @@ fun StandHomeScreen(
                 )
             },
             onBrightnessAdjustmentFinished = onBrightnessAdjustmentFinished,
+            onInternetRadioVolumeChanged = { value ->
+                onInternetRadioVolumeChanged(value)
+                adjustmentFeedback = HomeAdjustmentFeedback(
+                    title = "라디오 볼륨 ${(value * 100f).roundToInt()}%",
+                    value = "",
+                )
+            },
             modifier = Modifier.fillMaxSize(),
         ) {
             Box(
@@ -198,6 +218,7 @@ fun StandHomeScreen(
                 burnInOffset = burnInOffset,
                 isExpanded = isExpanded,
                 onToggleRadio = onToggleRadio,
+                onEditRadio = onEditRadio,
                 onClockTap = onScreenTap,
                 onClockDoubleTap = onToggleTheme,
                 modifier = Modifier
@@ -210,7 +231,12 @@ fun StandHomeScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(WindowInsets.safeDrawing.asPaddingValues())
-                    .padding(horizontal = if (isPortrait) 16.dp else 28.dp, vertical = 14.dp),
+                    .padding(
+                        start = if (isPortrait) 16.dp else 28.dp,
+                        top = 14.dp,
+                        end = if (isPortrait) 16.dp else 28.dp,
+                        bottom = if (isPortrait) 28.dp else 18.dp,
+                    ),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Header(state = state, contentAlpha = contentAlpha)
@@ -236,6 +262,27 @@ fun StandHomeScreen(
                     )
                 }
             }
+
+            Text(
+                text = "${BuildConfig.BUILD_NUMBER} · 밝기 " +
+                    "${(state.lampIntensity.coerceIn(0f, 1f) * 100f).roundToInt()}%",
+                color = Color.White.copy(
+                    alpha = if (state.isDisplayDark) 0f else 0.28f,
+                ),
+                fontFamily = FontFamily.Monospace,
+                fontSize = 9.sp,
+                lineHeight = 10.sp,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(WindowInsets.safeDrawing.asPaddingValues())
+                    .padding(bottom = 6.dp)
+                    .semantics {
+                        contentDescription =
+                            "빌드 번호 ${BuildConfig.BUILD_NUMBER}, 현재 밝기 " +
+                            "${(state.lampIntensity.coerceIn(0f, 1f) * 100f).roundToInt()}퍼센트"
+                    },
+            )
         }
 
         if (state.batteryProtectionActive) {
@@ -318,12 +365,14 @@ private fun HomeAdjustmentFeedbackPanel(
                 color = Color.White.copy(alpha = 0.72f),
                 style = MaterialTheme.typography.labelMedium,
             )
-            Text(
-                text = feedback.value,
-                color = Color.White,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-            )
+            if (feedback.value.isNotEmpty()) {
+                Text(
+                    text = feedback.value,
+                    color = Color.White,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
         }
     }
 }
@@ -336,6 +385,7 @@ private fun HomeGestureLayer(
     onBrightnessAdjustmentStarted: () -> Unit,
     onBrightnessLevelChanged: (Float) -> Unit,
     onBrightnessAdjustmentFinished: () -> Unit,
+    onInternetRadioVolumeChanged: (Float) -> Unit,
     modifier: Modifier = Modifier,
     content: @Composable BoxScope.() -> Unit,
 ) {
@@ -347,6 +397,9 @@ private fun HomeGestureLayer(
     val latestOnBrightnessLevelChanged = rememberUpdatedState(onBrightnessLevelChanged)
     val latestOnBrightnessAdjustmentFinished = rememberUpdatedState(
         onBrightnessAdjustmentFinished,
+    )
+    val latestOnInternetRadioVolumeChanged = rememberUpdatedState(
+        onInternetRadioVolumeChanged,
     )
     var layerHeightPx by remember { mutableStateOf(0f) }
     val bottomGestureExclusionPx = with(LocalDensity.current) { 104.dp.toPx() }
@@ -373,42 +426,93 @@ private fun HomeGestureLayer(
     Box(
         modifier = modifier
             .onSizeChanged { layerHeightPx = it.height.toFloat() }
-            .pointerInput(bottomGestureExclusionPx) {
-                var startingLevel = 0f
-                var cumulativeDrag = 0f
-                var ignoreDrag = false
-                detectVerticalDragGestures(
-                    onDragStart = { offset ->
-                        ignoreDrag = offset.y >= layerHeightPx - bottomGestureExclusionPx
-                        if (!ignoreDrag) {
-                            val current = latestState.value
-                            startingLevel = current.lampIntensity.takeIf { current.isSessionActive }
-                                ?: current.settings.lampIntensity
-                            cumulativeDrag = 0f
-                            latestOnBrightnessAdjustmentStarted.value()
-                        }
+            .semantics {
+                val currentLevel = state.lampIntensity.coerceIn(0f, 1f)
+                progressBarRangeInfo = ProgressBarRangeInfo(currentLevel, 0f..1f, 19)
+                setProgress { requestedLevel ->
+                    onBrightnessAdjustmentStarted()
+                    onBrightnessLevelChanged(requestedLevel.coerceIn(0f, 1f))
+                    onBrightnessAdjustmentFinished()
+                    true
+                }
+                customActions = listOf(
+                    CustomAccessibilityAction("앱 밝기 5퍼센트 올리기") {
+                        onBrightnessAdjustmentStarted()
+                        onBrightnessLevelChanged((currentLevel + 0.05f).coerceAtMost(1f))
+                        onBrightnessAdjustmentFinished()
+                        true
                     },
-                    onDragEnd = {
-                        if (!ignoreDrag) {
-                            latestOnBrightnessAdjustmentFinished.value()
-                        }
+                    CustomAccessibilityAction("앱 밝기 5퍼센트 내리기") {
+                        onBrightnessAdjustmentStarted()
+                        onBrightnessLevelChanged((currentLevel - 0.05f).coerceAtLeast(0f))
+                        onBrightnessAdjustmentFinished()
+                        true
                     },
-                    onDragCancel = {
-                        if (!ignoreDrag) {
-                            latestOnBrightnessAdjustmentFinished.value()
+                )
+            }
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(
+                        requireUnconsumed = false,
+                        pass = PointerEventPass.Initial,
+                    )
+                    var axis: HomeAdjustmentAxis? = null
+                    var startingLevel = 0f
+                    var finished = false
+
+                    do {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                        val translation = change.position - down.position
+
+                        if (axis == null && translation.getDistance() >= viewConfiguration.touchSlop) {
+                            axis = if (abs(translation.y) > abs(translation.x)) {
+                                val current = latestState.value
+                                startingLevel = current.lampIntensity
+                                    .takeIf { current.isSessionActive }
+                                    ?: current.settings.lampIntensity
+                                latestOnBrightnessAdjustmentStarted.value()
+                                HomeAdjustmentAxis.VERTICAL_BRIGHTNESS
+                            } else {
+                                startingLevel = latestState.value.internetRadioVolume
+                                HomeAdjustmentAxis.HORIZONTAL_RADIO_VOLUME
+                            }
                         }
-                    },
-                ) { change, dragAmount ->
-                    if (!ignoreDrag) {
-                        change.consume()
-                        cumulativeDrag += dragAmount
-                        latestOnBrightnessLevelChanged.value(
-                            SimplifiedBrightnessModePolicy.level(
-                                startingAt = startingLevel,
-                                verticalTranslationPx = cumulativeDrag,
-                                viewportHeightPx = layerHeightPx,
-                            ),
-                        )
+
+                        when (axis) {
+                            HomeAdjustmentAxis.VERTICAL_BRIGHTNESS -> {
+                                change.consume()
+                                latestOnBrightnessLevelChanged.value(
+                                    SimplifiedBrightnessModePolicy.level(
+                                        startingAt = startingLevel,
+                                        verticalTranslationPx = translation.y,
+                                        viewportHeightPx = layerHeightPx,
+                                    ),
+                                )
+                            }
+                            HomeAdjustmentAxis.HORIZONTAL_RADIO_VOLUME -> {
+                                change.consume()
+                                latestOnInternetRadioVolumeChanged.value(
+                                    RadioVolumePolicy.level(
+                                        startingAt = startingLevel,
+                                        horizontalTranslationPx = translation.x,
+                                        viewportWidthPx = size.width.toFloat(),
+                                    ),
+                                )
+                            }
+                            null -> Unit
+                        }
+
+                        if (!change.pressed) {
+                            if (axis == HomeAdjustmentAxis.VERTICAL_BRIGHTNESS) {
+                                latestOnBrightnessAdjustmentFinished.value()
+                            }
+                            finished = true
+                        }
+                    } while (!finished)
+
+                    if (!finished && axis == HomeAdjustmentAxis.VERTICAL_BRIGHTNESS) {
+                        latestOnBrightnessAdjustmentFinished.value()
                     }
                 }
             },
@@ -428,6 +532,11 @@ private fun HomeGestureLayer(
         )
         content()
     }
+}
+
+private enum class HomeAdjustmentAxis {
+    VERTICAL_BRIGHTNESS,
+    HORIZONTAL_RADIO_VOLUME,
 }
 
 @Composable
@@ -516,6 +625,7 @@ private fun DashboardCanvas(
     burnInOffset: com.armsone.stand.ui.components.BurnInOffset,
     isExpanded: Boolean,
     onToggleRadio: (String) -> Unit,
+    onEditRadio: (String) -> Unit,
     onClockTap: () -> Unit,
     onClockDoubleTap: () -> Unit,
     modifier: Modifier = Modifier,
@@ -631,6 +741,7 @@ private fun DashboardCanvas(
                     configurations = radioConfigurations,
                     contentAlpha = contentAlpha,
                     onClick = onToggleRadio,
+                    onLongClick = onEditRadio,
                     modifier = Modifier
                         .align(Alignment.Center)
                         .panelTransform(layout.radio, canvasWidth.value, canvasHeight.value),
@@ -643,6 +754,7 @@ private fun DashboardCanvas(
                         configuration = configuration,
                         contentAlpha = contentAlpha,
                         onClick = { onToggleRadio(configuration.id) },
+                        onLongClick = { onEditRadio(configuration.id) },
                         modifier = Modifier
                             .align(Alignment.Center)
                             .panelTransform(transform, canvasWidth.value, canvasHeight.value),
@@ -659,6 +771,7 @@ internal fun RadioPanel(
     configuration: InternetRadioConfiguration?,
     contentAlpha: Float,
     onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
     drawsSurface: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
@@ -698,10 +811,13 @@ internal fun RadioPanel(
         else -> "등록한 인터넷 라디오를 재생합니다."
     }
     Surface(
-        onClick = onClick,
         modifier = modifier
             .width(144.dp)
             .height(60.dp)
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick,
+            )
             .semantics(mergeDescendants = true) {
                 contentDescription = "$title, $detail. $accessibilityHint"
                 stateDescription = detail
@@ -761,6 +877,7 @@ internal fun GroupedRadioPanel(
     configurations: List<InternetRadioConfiguration>,
     contentAlpha: Float,
     onClick: (String) -> Unit,
+    onLongClick: (String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -779,6 +896,7 @@ internal fun GroupedRadioPanel(
                 configuration = configuration,
                 contentAlpha = contentAlpha,
                 onClick = { onClick(configuration.id) },
+                onLongClick = { onLongClick(configuration.id) },
                 drawsSurface = false,
             )
         }

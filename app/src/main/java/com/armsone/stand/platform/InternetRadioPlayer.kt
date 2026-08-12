@@ -35,6 +35,21 @@ sealed interface InternetRadioState {
     ) : InternetRadioState
 }
 
+object RadioVolumePolicy {
+    const val HORIZONTAL_DRAG_TRAVEL_RATIO = 0.5f
+
+    fun clamped(level: Float): Float = level.coerceIn(0f, 1f)
+
+    fun level(
+        startingAt: Float,
+        horizontalTranslationPx: Float,
+        viewportWidthPx: Float,
+    ): Float {
+        val travel = (viewportWidthPx * HORIZONTAL_DRAG_TRAVEL_RATIO).coerceAtLeast(1f)
+        return clamped(startingAt + horizontalTranslationPx / travel)
+    }
+}
+
 class InternetRadioPlayer(context: Context) : Closeable {
     private val appContext = context.applicationContext
     private val audioManager = appContext.getSystemService(AudioManager::class.java)
@@ -46,16 +61,19 @@ class InternetRadioPlayer(context: Context) : Closeable {
     private val focusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
         .setAudioAttributes(attributes)
         .setOnAudioFocusChangeListener { change ->
-            if (change < 0) stop()
+            handler.post { handleAudioFocusChange(change) }
         }
         .build()
     private val mutableState = MutableStateFlow<InternetRadioState>(InternetRadioState.Idle)
     val state: StateFlow<InternetRadioState> = mutableState.asStateFlow()
+    private val mutableVolume = MutableStateFlow(1f)
+    val volume: StateFlow<Float> = mutableVolume.asStateFlow()
     private var mediaPlayer: MediaPlayer? = null
     private var receiverRegistered = false
     private var currentConfiguration: InternetRadioConfiguration? = null
     private var retryAttempt = 0
     private var explicitlyStopped = true
+    private var resumeAfterFocusGain = false
     private val timeout = Runnable { handleConnectionFailure() }
     private val retry = Runnable { currentConfiguration?.let(::startConnection) }
     private val noisyReceiver = object : BroadcastReceiver() {
@@ -69,6 +87,7 @@ class InternetRadioPlayer(context: Context) : Closeable {
         }
         handler.removeCallbacks(retry)
         explicitlyStopped = false
+        resumeAfterFocusGain = false
         currentConfiguration = radio
         retryAttempt = 0
         startConnection(radio)
@@ -85,6 +104,7 @@ class InternetRadioPlayer(context: Context) : Closeable {
         val prepared = runCatching {
             MediaPlayer().apply {
                 setAudioAttributes(attributes)
+                setVolume(mutableVolume.value, mutableVolume.value)
                 setDataSource(radio.streamUrl)
                 setOnPreparedListener {
                     handler.removeCallbacks(timeout)
@@ -107,8 +127,15 @@ class InternetRadioPlayer(context: Context) : Closeable {
         handler.postDelayed(timeout, CONNECTION_TIMEOUT_MILLIS)
     }
 
+    fun updateVolume(level: Float) {
+        val normalized = RadioVolumePolicy.clamped(level)
+        mutableVolume.value = normalized
+        mediaPlayer?.setVolume(normalized, normalized)
+    }
+
     fun stop() {
         explicitlyStopped = true
+        resumeAfterFocusGain = false
         currentConfiguration = null
         retryAttempt = 0
         handler.removeCallbacks(retry)
@@ -139,6 +166,7 @@ class InternetRadioPlayer(context: Context) : Closeable {
         configuration: InternetRadioConfiguration? = currentConfiguration,
     ) {
         explicitlyStopped = true
+        resumeAfterFocusGain = false
         currentConfiguration = null
         handler.removeCallbacks(retry)
         releasePlayer(abandonFocus = true)
@@ -159,6 +187,26 @@ class InternetRadioPlayer(context: Context) : Closeable {
         mediaPlayer = null
         unregisterNoisyReceiver()
         if (abandonFocus) audioManager.abandonAudioFocusRequest(focusRequest)
+    }
+
+    private fun handleAudioFocusChange(change: Int) {
+        when (change) {
+            AudioManager.AUDIOFOCUS_GAIN -> {
+                if (!resumeAfterFocusGain || explicitlyStopped) return
+                resumeAfterFocusGain = false
+                currentConfiguration?.let(::startConnection)
+            }
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK,
+            -> {
+                if (explicitlyStopped || currentConfiguration == null) return
+                resumeAfterFocusGain = true
+                handler.removeCallbacks(retry)
+                releasePlayer(abandonFocus = false)
+                mutableState.value = InternetRadioState.Idle
+            }
+            AudioManager.AUDIOFOCUS_LOSS -> stop()
+        }
     }
 
     private fun registerNoisyReceiver() {

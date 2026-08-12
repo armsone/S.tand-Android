@@ -18,7 +18,7 @@ class InternetRadioConfigurationTest {
     }
 
     @Test fun reconnectBackoffStopsAfterFiveAttempts() {
-        assertEquals(listOf(1, 2, 4, 8, 15), (0..4).map(InternetRadioReconnectPolicy::delaySeconds))
+        assertEquals(listOf(2, 4, 8, 15, 30), (0..4).map(InternetRadioReconnectPolicy::delaySeconds))
         assertNull(InternetRadioReconnectPolicy.delaySeconds(5))
     }
 

@@ -48,6 +48,7 @@ data class StandUiState(
     val recordingOperationMessage: String? = null,
     val isFaceDown: Boolean = false,
     val internetRadioState: InternetRadioState = InternetRadioState.Idle,
+    val internetRadioVolume: Float = 1f,
 ) {
     val isDisplayDark: Boolean
         get() = isSessionActive && lampPhase == LampPhase.OFF && !controlsVisible

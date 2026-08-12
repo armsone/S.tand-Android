@@ -154,6 +154,7 @@ fun ScreenEditorScreen(
     onLayoutChange: (StandScreenLayout) -> Unit,
     onClockFontChange: (ClockFontChoice) -> Unit,
     onClockHourModeChange: (ClockHourMode) -> Unit,
+    onManageRadios: () -> Unit,
     onSave: (StandScreenLayout, ClockFontChoice, ClockHourMode) -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
@@ -228,6 +229,7 @@ fun ScreenEditorScreen(
                     },
                 )
             },
+            onManageRadios = onManageRadios,
             onLayoutChange = onLayoutChange,
             measuredPanelSizes = measuredPanelSizes,
             modifier = Modifier
@@ -356,6 +358,7 @@ private fun PanelCanvas(
     onSelectedPanelChange: (EditorPanelKey) -> Unit,
     onClockClick: () -> Unit,
     onClockDoubleClick: () -> Unit,
+    onManageRadios: () -> Unit,
     onLayoutChange: (StandScreenLayout) -> Unit,
     measuredPanelSizes: MutableMap<EditorPanelKey, FloatSize>,
     modifier: Modifier = Modifier,
@@ -400,7 +403,7 @@ private fun PanelCanvas(
                 add(EditorPanelKey.Date)
                 add(EditorPanelKey.Battery)
                 add(EditorPanelKey.Radio)
-                if (radioConfigurations.size == 2 && !layout.radiosGrouped) {
+                if (radioConfigurations.isNotEmpty() && !layout.radiosGrouped) {
                     add(EditorPanelKey.SecondaryRadio)
                 }
             }
@@ -411,10 +414,12 @@ private fun PanelCanvas(
                     canvasSize = canvas,
                     screenScale = state.settings.clockScale,
                     selected = selectedPanel == key,
-                    onClick = if (key == EditorPanelKey.Clock) {
-                        onClockClick
-                    } else {
-                        { onSelectedPanelChange(key) }
+                    onClick = when {
+                        key == EditorPanelKey.Clock -> onClockClick
+                        key == EditorPanelKey.Radio && radioConfigurations.isEmpty() -> onManageRadios
+                        key == EditorPanelKey.SecondaryRadio &&
+                            radioConfigurations.getOrNull(1) == null -> onManageRadios
+                        else -> ({ onSelectedPanelChange(key) })
                     },
                     onGestureSelect = { onSelectedPanelChange(key) },
                     onDoubleClick = when {
@@ -492,7 +497,11 @@ private fun PanelCanvas(
                                     state = state,
                                     configuration = configuration,
                                     contentAlpha = contentAlpha,
-                                    onClick = { onSelectedPanelChange(key) },
+                                    onClick = if (configuration == null) {
+                                        onManageRadios
+                                    } else {
+                                        { onSelectedPanelChange(key) }
+                                    },
                                 )
                             }
                         }
@@ -595,6 +604,43 @@ private fun BoxScope.EditablePanelNode(
         workingTransform = transform
     }
 
+    fun applyAccessibleTransform(updated: PanelTransform) {
+        val safe = updated.copy(scale = PanelEditingPolicy.clampScale(updated.scale))
+        workingTransform = safe
+        latestOnTransformEnd.value?.invoke(safe) ?: latestOnTransformChange(safe)
+    }
+
+    val panelAccessibilityActions = listOf(
+        CustomAccessibilityAction("위로 5퍼센트 이동") {
+            applyAccessibleTransform(workingTransform.copy(y = workingTransform.y - 0.05f))
+            true
+        },
+        CustomAccessibilityAction("아래로 5퍼센트 이동") {
+            applyAccessibleTransform(workingTransform.copy(y = workingTransform.y + 0.05f))
+            true
+        },
+        CustomAccessibilityAction("왼쪽으로 5퍼센트 이동") {
+            applyAccessibleTransform(workingTransform.copy(x = workingTransform.x - 0.05f))
+            true
+        },
+        CustomAccessibilityAction("오른쪽으로 5퍼센트 이동") {
+            applyAccessibleTransform(workingTransform.copy(x = workingTransform.x + 0.05f))
+            true
+        },
+        CustomAccessibilityAction("10퍼센트 확대") {
+            applyAccessibleTransform(workingTransform.copy(scale = workingTransform.scale + 0.1f))
+            true
+        },
+        CustomAccessibilityAction("10퍼센트 축소") {
+            applyAccessibleTransform(workingTransform.copy(scale = workingTransform.scale - 0.1f))
+            true
+        },
+        CustomAccessibilityAction("열기") {
+            onClick()
+            true
+        },
+    )
+
     Box(
         modifier = Modifier
             .align(Alignment.Center)
@@ -611,6 +657,7 @@ private fun BoxScope.EditablePanelNode(
                     "${key.title} 패널. 끌어서 이동하고 왼쪽 위 손잡이로 크기를 조절합니다."
                 stateDescription = "크기 ${(workingTransform.scale * 100).roundToInt()}퍼센트"
                 role = Role.Button
+                customActions = panelAccessibilityActions
             }
             .combinedClickable(
                 onClick = onClick,
@@ -1626,7 +1673,7 @@ private fun panelKeys(
     add(EditorPanelKey.Date)
     add(EditorPanelKey.Battery)
     add(EditorPanelKey.Radio)
-    if (radioCount >= 2 && !layout.radiosGrouped) add(EditorPanelKey.SecondaryRadio)
+    if (radioCount >= 1 && !layout.radiosGrouped) add(EditorPanelKey.SecondaryRadio)
 }
 
 private fun StandScreenLayout.weatherPieces(groupId: Int): List<WeatherPiece> =

@@ -43,8 +43,18 @@ class SettingsRepository(context: Context) {
         if (booleanValue(CURRENT_EXPERIENCE_MIGRATION_KEY, false)) return loaded
 
         return CurrentExperienceMigration.apply(loaded).also { migrated ->
-            persist(migrated)
+            persist(
+                migrated,
+                preservedUnreadableLayouts = unreadableLayoutPayloads(),
+            )
             preferences.edit { putBoolean(CURRENT_EXPERIENCE_MIGRATION_KEY, true) }
+        }
+    }
+
+    private fun unreadableLayoutPayloads(): Map<String, String> = buildMap {
+        listOf(PORTRAIT_LAYOUT_KEY, LANDSCAPE_LAYOUT_KEY).forEach { key ->
+            val raw = stringValue(key)
+            if (!raw.isNullOrBlank() && !ScreenLayoutCodec.isDecodable(raw)) put(key, raw)
         }
     }
 
@@ -141,7 +151,10 @@ class SettingsRepository(context: Context) {
         )
     }
 
-    private fun persist(value: AppSettings) {
+    private fun persist(
+        value: AppSettings,
+        preservedUnreadableLayouts: Map<String, String> = emptyMap(),
+    ) {
         preferences.edit {
             putFloat("lampIntensity", value.lampIntensity)
             putFloat("silhouetteIntensity", value.silhouetteIntensity)
@@ -151,6 +164,7 @@ class SettingsRepository(context: Context) {
             putString("displayTheme", value.displayTheme.name)
             putString(PORTRAIT_LAYOUT_KEY, ScreenLayoutCodec.encode(value.portraitLayout))
             putString(LANDSCAPE_LAYOUT_KEY, ScreenLayoutCodec.encode(value.landscapeLayout))
+            preservedUnreadableLayouts.forEach(::putString)
             putFloat("brightnessModeThreshold", value.brightnessModeThreshold)
             putFloat("holdDurationSeconds", value.holdDurationSeconds)
             putFloat("fadeDurationSeconds", value.fadeDurationSeconds)

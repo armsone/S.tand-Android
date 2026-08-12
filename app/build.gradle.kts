@@ -11,10 +11,10 @@ android {
         applicationId = "com.armsone.stand"
         minSdk = 26
         targetSdk = 37
-        versionCode = 23
+        versionCode = 26
         versionName = "0.0.1"
 
-        buildConfigField("String", "BUILD_NUMBER", "\"0.0.23\"")
+        buildConfigField("String", "BUILD_NUMBER", "\"0.0.26\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

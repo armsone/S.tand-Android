@@ -12,7 +12,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -36,6 +38,7 @@ fun InternetRadioScreen(
     initialUrl: String? = null,
     onSave: (String, String) -> String?,
     onDelete: () -> Unit,
+    onOpenBrowser: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -46,6 +49,7 @@ fun InternetRadioScreen(
         mutableStateOf(initialUrl ?: configuration?.streamUrl.orEmpty())
     }
     var error by remember(configuration, initialUrl) { mutableStateOf<String?>(null) }
+    var confirmsDeletion by remember(configuration) { mutableStateOf(false) }
     Scaffold(
         modifier = modifier.fillMaxSize(),
         topBar = {
@@ -91,6 +95,17 @@ fun InternetRadioScreen(
                 supportingText = error?.let { message -> { Text(message) } },
                 shape = RoundedCornerShape(16.dp),
             )
+            OutlinedButton(
+                onClick = onOpenBrowser,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Icon(Icons.Default.Public, contentDescription = null)
+                Text("웹에서 주소 찾기", modifier = Modifier.padding(start = 8.dp))
+            }
+            Text(
+                "브라우저에서 주소를 직접 복사한 뒤 이 화면으로 돌아와 붙여넣어 주세요.",
+                style = MaterialTheme.typography.bodySmall,
+            )
             Spacer(Modifier.weight(1f))
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -98,7 +113,7 @@ fun InternetRadioScreen(
             ) {
                 if (configuration != null) {
                     OutlinedButton(
-                        onClick = { onDelete(); onBack() },
+                        onClick = { confirmsDeletion = true },
                         modifier = Modifier.weight(1f),
                     ) { Text("삭제") }
                 }
@@ -111,5 +126,24 @@ fun InternetRadioScreen(
                 ) { Text("저장") }
             }
         }
+    }
+    if (confirmsDeletion) {
+        AlertDialog(
+            onDismissRequest = { confirmsDeletion = false },
+            title = { Text("라디오 채널을 삭제할까요?") },
+            text = { Text("홈의 라디오 패널에서도 이 채널이 제거됩니다.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        confirmsDeletion = false
+                        onDelete()
+                        onBack()
+                    },
+                ) { Text("삭제") }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { confirmsDeletion = false }) { Text("취소") }
+            },
+        )
     }
 }

@@ -138,6 +138,8 @@ class DeviceSensorMonitor(
     private var monitoringMode = DeviceSensorMonitoringMode.STOPPED
     private var sensorThread: HandlerThread? = null
     private var sensorHandler: Handler? = null
+    @Volatile
+    private var lifecycleGeneration = 0L
     private var lastMovementElapsedRealtimeNanos: Long? = null
 
     private val gravityEstimate = FloatArray(3)
@@ -154,6 +156,7 @@ class DeviceSensorMonitor(
         if (started && monitoringMode != requestedMode) stop()
         synchronized(lifecycleLock) {
             if (started && monitoringMode == requestedMode) return
+            lifecycleGeneration += 1L
             started = true
             monitoringMode = requestedMode
             resetTransientSensorState()
@@ -247,6 +250,7 @@ class DeviceSensorMonitor(
     fun stop() {
         val notifyFaceUp: Boolean
         synchronized(lifecycleLock) {
+            lifecycleGeneration += 1L
             if (!started) return
             started = false
             monitoringMode = DeviceSensorMonitoringMode.STOPPED
@@ -430,8 +434,15 @@ class DeviceSensorMonitor(
         runCatching { sensorManager?.getDefaultSensor(type) }.getOrNull()
 
     private fun dispatchSensorCallback(callback: () -> Unit) {
+        val capturedGeneration = lifecycleGeneration
         dispatchCallback {
-            if (started) callback()
+            if (
+                DeviceSensorCallbackPolicy.shouldDeliver(
+                    capturedGeneration = capturedGeneration,
+                    currentGeneration = lifecycleGeneration,
+                    isStarted = started,
+                )
+            ) callback()
         }
     }
 
@@ -442,4 +453,12 @@ class DeviceSensorMonitor(
             mainHandler.post { runCatching(callback) }
         }
     }
+}
+
+internal object DeviceSensorCallbackPolicy {
+    fun shouldDeliver(
+        capturedGeneration: Long,
+        currentGeneration: Long,
+        isStarted: Boolean,
+    ): Boolean = isStarted && capturedGeneration == currentGeneration
 }

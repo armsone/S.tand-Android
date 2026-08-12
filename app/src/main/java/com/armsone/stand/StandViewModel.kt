@@ -254,6 +254,12 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
                 syncSleepCareMonitoring()
             }
             .launchIn(viewModelScope)
+
+        internetRadioPlayer.volume
+            .onEach { volume ->
+                mutableUiState.update { it.copy(internetRadioVolume = volume) }
+            }
+            .launchIn(viewModelScope)
     }
 
     fun onAppForeground(
@@ -549,6 +555,10 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
         toggleInternetRadio(selectedID)
     }
 
+    fun updateInternetRadioVolume(level: Float) {
+        internetRadioPlayer.updateVolume(level)
+    }
+
     fun toggleInternetRadio(channelID: String) {
         val channel = mutableUiState.value.settings.internetRadioChannels
             .firstOrNull { it.id == channelID } ?: return
@@ -682,6 +692,19 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
             val selected = current.internetRadioChannels.firstOrNull { it.id == channelID }
                 ?: return@update current
             current.copy(internetRadio = selected, selectedInternetRadioId = selected.id)
+        }
+    }
+
+    fun moveInternetRadioChannel(channelID: String, destinationIndex: Int) {
+        settingsRepository.update { current ->
+            val sourceIndex = current.internetRadioChannels.indexOfFirst { it.id == channelID }
+            if (sourceIndex < 0 || destinationIndex !in current.internetRadioChannels.indices ||
+                sourceIndex == destinationIndex
+            ) return@update current
+            val reordered = current.internetRadioChannels.toMutableList()
+            val channel = reordered.removeAt(sourceIndex)
+            reordered.add(destinationIndex, channel)
+            current.copy(internetRadioChannels = reordered)
         }
     }
 
