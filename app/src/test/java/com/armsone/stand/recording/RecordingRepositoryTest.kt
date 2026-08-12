@@ -103,6 +103,47 @@ class RecordingRepositoryTest {
     }
 
     @Test
+    fun recordingTimestampPrefersAppFileNameOverLocalFileMetadata() {
+        val fileNameInstant = Instant.parse("2026-08-10T01:02:03.456Z")
+        val fileName = RecordingFileNames.create(
+            instant = fileNameInstant,
+            zoneId = ZoneOffset.UTC,
+            nonce = "abcdef12",
+        )
+
+        assertEquals(
+            fileNameInstant,
+            RecordingTimestampPolicy.createdAt(
+                fileName = fileName,
+                lastModifiedMillis = Instant.parse("2026-08-11T00:00:00Z").toEpochMilli(),
+                zoneId = ZoneOffset.UTC,
+            ),
+        )
+    }
+
+    @Test
+    fun recordingTimestampFallsBackOnlyToPositiveLocalFileMetadata() {
+        val fallback = Instant.parse("2026-08-11T00:00:00Z")
+
+        assertEquals(
+            fallback,
+            RecordingTimestampPolicy.createdAt(
+                fileName = "legacy-recording.wav",
+                lastModifiedMillis = fallback.toEpochMilli(),
+                zoneId = ZoneOffset.UTC,
+            ),
+        )
+        assertEquals(
+            Instant.EPOCH,
+            RecordingTimestampPolicy.createdAt(
+                fileName = "legacy-recording.wav",
+                lastModifiedMillis = 0L,
+                zoneId = ZoneOffset.UTC,
+            ),
+        )
+    }
+
+    @Test
     fun repositoryWritesStandardWavCalculatesDurationAndSortsNewestFirst() {
         withTemporaryDirectory { directory ->
             val repository = RecordingRepository(

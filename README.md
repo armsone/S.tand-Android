@@ -5,8 +5,8 @@ S.tand iOS 앱을 Android에 맞게 옮기는 Kotlin·Jetpack Compose 프로젝�
 ## 현재 기준
 
 - Android 앱 버전: `0.0.1`
-- 사용자용 빌드 표기: `0.0.25`
-- Android `versionCode`: `25`
+- 사용자용 빌드 표기: `0.0.26`
+- Android `versionCode`: `26`
 - applicationId: `com.armsone.stand`
 - 최소 SDK: 26
 - 대상/컴파일 SDK: 37
@@ -48,6 +48,12 @@ sdk.dir=/Users/사용자명/Library/Android/sdk
 - `weather`: 대략적 위치와 Open-Meteo 현재 날씨
 - `ui`: 방향별 플립시계 홈·실제 홈 위 화면 편집, 설정, 녹음 재생·선택·병합·공유·삭제 화면
 - `widget`: 앱 빠른 실행 홈 화면 위젯
+
+## 0.0.26 코드 안전성 보강 기준
+
+`0.0.26` 후보는 화면 편집의 빈 라디오 관리 진입, 홈 밝기와 편집 패널의 접근성 조작,
+WebView renderer 복구와 파일 입력 차단을 보강했습니다. 녹음 생성 시각은 앱 파일명을 우선하고
+앱 전용 파일의 수정 시각만 fallback으로 사용하도록 테스트와 Data Safety 근거를 고정했습니다.
 
 ## 0.0.25 iOS 0.24.0 동등성 보강 기준
 

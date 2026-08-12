@@ -189,11 +189,11 @@ class RecordingRepository internal constructor(
 
     private fun makeClip(file: File): RecordingClip? {
         val duration = durationResolver.durationSeconds(file) ?: return null
-        val createdAt = RecordingFileNames.parse(file.name, zoneId)
-            ?: file.lastModified()
-                .takeIf { it > 0L }
-                ?.let(Instant::ofEpochMilli)
-            ?: Instant.EPOCH
+        val createdAt = RecordingTimestampPolicy.createdAt(
+            fileName = file.name,
+            lastModifiedMillis = file.lastModified(),
+            zoneId = zoneId,
+        )
         return RecordingClip(
             file = file,
             createdAt = createdAt,
@@ -325,6 +325,22 @@ class RecordingRepository internal constructor(
         val rawResource: Int,
         val minuteOffset: Int,
     )
+}
+
+internal object RecordingTimestampPolicy {
+    /**
+     * Uses the timestamp embedded by S.tand first. The fallback reads only the local metadata of
+     * the recording file already managed inside the app's private recordings directory.
+     */
+    fun createdAt(
+        fileName: String,
+        lastModifiedMillis: Long,
+        zoneId: ZoneId,
+    ): Instant = RecordingFileNames.parse(fileName, zoneId)
+        ?: lastModifiedMillis
+            .takeIf { it > 0L }
+            ?.let(Instant::ofEpochMilli)
+        ?: Instant.EPOCH
 }
 
 internal object RecordingFileNames {
