@@ -4,7 +4,7 @@
 
 iOS 기준: `main` / `0f664b2`, `1.0.0 (0.24.1)`
 
-Android 기준: 작업 트리의 versionName `0.0.1`, versionCode `28`, 빌드 `0.0.28`
+Android 기준: 작업 트리의 versionName `0.0.1`, versionCode `29`, 빌드 `0.0.29`
 
 ## 2026-08-13 iOS 인수인계 체크리스트 재감사
 
@@ -147,7 +147,7 @@ UI 검증은 보류했다.
 
 ## 현재 배포·버전 상태
 
-- Android versionName `0.0.1`, versionCode `28`, 빌드 표기 `0.0.28`.
+- Android versionName `0.0.1`, versionCode `29`, 빌드 표기 `0.0.29`.
 - 로컬 JVM 테스트·`assembleDebug`·`lintDebug` 성공.
 - 계측 테스트 7개를 `SM-T500`과 `SM-F968N`에서 각각 실행해 실패 0을 확인했다.
 - 두 기기에 같은 APK를 데이터 유지 설치하고 versionCode 28과 MainActivity 실행을 확인했다.
