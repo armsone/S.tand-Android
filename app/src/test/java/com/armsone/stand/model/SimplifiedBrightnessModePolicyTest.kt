@@ -5,7 +5,8 @@ import org.junit.Test
 
 class SimplifiedBrightnessModePolicyTest {
     @Test
-    fun `quarter viewport drag spans the full brightness range`() {
+    fun `half viewport drag spans the full brightness range`() {
+        assertEquals(0.5f, SimplifiedBrightnessModePolicy.VERTICAL_DRAG_TRAVEL_RATIO, 0f)
         assertEquals(1f, SimplifiedBrightnessModePolicy.level(0.5f, -250f, 1_000f), 0.0001f)
         assertEquals(0f, SimplifiedBrightnessModePolicy.level(0.5f, 250f, 1_000f), 0.0001f)
     }
@@ -39,7 +40,7 @@ class SimplifiedBrightnessModePolicyTest {
             SimplifiedBrightnessModePolicy.stabilizedAdjustment(1f, StandModePreference.AUTOMATIC),
         )
         assertEquals(
-            BrightnessAdjustment(0f, StandModePreference.AUTOMATIC),
+            BrightnessAdjustment(0f, StandModePreference.MATE),
             SimplifiedBrightnessModePolicy.stabilizedAdjustment(0f, StandModePreference.AUTOMATIC),
         )
     }

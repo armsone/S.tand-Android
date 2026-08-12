@@ -4,6 +4,7 @@ package com.armsone.stand.ui
 
 import android.media.AudioAttributes
 import android.media.MediaPlayer
+import android.media.audiofx.LoudnessEnhancer
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
@@ -39,10 +40,13 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -109,6 +113,7 @@ fun RecordingsScreen(
     onMergeSelected: (List<RecordingClip>, Boolean) -> Unit,
     onMergeToday: (Boolean) -> Unit,
     onDeleteSelected: (List<RecordingClip>) -> Unit,
+    onDeleteAll: () -> Unit,
     onPlaybackStateChanged: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
@@ -119,11 +124,13 @@ fun RecordingsScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     var pendingDelete by remember { mutableStateOf<RecordingClip?>(null) }
     var pendingDeleteSelected by remember { mutableStateOf(false) }
+    var pendingDeleteAll by remember { mutableStateOf(false) }
     var pendingMerge by remember { mutableStateOf<PendingMerge?>(null) }
     var selectionMode by rememberSaveable { mutableStateOf(false) }
     var selectedPaths by rememberSaveable { mutableStateOf(emptyList<String>()) }
     var expandedSessionIds by rememberSaveable { mutableStateOf(emptyList<String>()) }
     var mergedExpanded by rememberSaveable { mutableStateOf(false) }
+    var listActionsExpanded by remember { mutableStateOf(false) }
 
     val sortedRecordings = remember(recordings) {
         recordings.sortedWith(
@@ -206,15 +213,50 @@ fun RecordingsScreen(
                         }
                     },
                     actions = {
-                        if (originals.isNotEmpty()) {
-                            TextButton(
-                                onClick = {
-                                    selectionMode = !selectionMode
-                                    if (!selectionMode) selectedPaths = emptyList()
-                                },
+                        if (sortedRecordings.isNotEmpty()) {
+                            IconButton(
+                                onClick = { listActionsExpanded = true },
                                 enabled = !isBusy,
                             ) {
-                                Text(if (selectionMode) "완료" else "선택")
+                                Icon(Icons.Default.MoreVert, contentDescription = "목록 작업")
+                            }
+                            DropdownMenu(
+                                expanded = listActionsExpanded,
+                                onDismissRequest = { listActionsExpanded = false },
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("전체 선택") },
+                                    onClick = {
+                                        listActionsExpanded = false
+                                        selectionMode = true
+                                        selectedPaths = originals.map { it.file.absolutePath }
+                                    },
+                                    enabled = originals.isNotEmpty(),
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("오늘 선택") },
+                                    onClick = {
+                                        listActionsExpanded = false
+                                        selectionMode = true
+                                        selectedPaths = todayOriginals.map { it.file.absolutePath }
+                                    },
+                                    enabled = todayOriginals.isNotEmpty(),
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("선택 모두 해제") },
+                                    onClick = {
+                                        listActionsExpanded = false
+                                        selectedPaths = emptyList()
+                                    },
+                                    enabled = selectedPaths.isNotEmpty(),
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("전체 삭제", color = MaterialTheme.colorScheme.error) },
+                                    onClick = {
+                                        listActionsExpanded = false
+                                        pendingDeleteAll = true
+                                    },
+                                )
                             }
                         }
                     },
@@ -242,7 +284,9 @@ fun RecordingsScreen(
                             isPreparing = player.isPreparing,
                             positionMillis = player.positionMillis,
                             durationMillis = player.durationMillis,
+                            boostEnabled = player.boostEnabled,
                             onToggle = { player.toggle(clip) },
+                            onToggleBoost = player::toggleBoost,
                             onSeek = player::seekTo,
                             onClose = player::stop,
                         )
@@ -416,6 +460,24 @@ fun RecordingsScreen(
                     val clips = selectedClips
                     selectedPaths = emptyList()
                     onDeleteSelected(clips)
+                }
+            },
+        )
+    }
+
+    if (pendingDeleteAll) {
+        ConfirmActionDialog(
+            title = "저장된 수면 소리를 모두 삭제할까요?",
+            message = "삭제한 녹음은 복구할 수 없습니다.",
+            confirmLabel = "모두 삭제",
+            onDismiss = { pendingDeleteAll = false },
+            onConfirm = {
+                pendingDeleteAll = false
+                if (!isBusy) {
+                    player.stop()
+                    selectedPaths = emptyList()
+                    expandedSessionIds = emptyList()
+                    onDeleteAll()
                 }
             },
         )
@@ -1121,7 +1183,9 @@ private fun PlaybackPanel(
     isPreparing: Boolean,
     positionMillis: Int,
     durationMillis: Int,
+    boostEnabled: Boolean,
     onToggle: () -> Unit,
+    onToggleBoost: () -> Unit,
     onSeek: (Int) -> Unit,
     onClose: () -> Unit,
 ) {
@@ -1145,6 +1209,7 @@ private fun PlaybackPanel(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     PlaybackIconButton(isPlaying = isPlaying, isPreparing = isPreparing, onClick = onToggle)
+                    PlaybackBoostButton(boostEnabled = boostEnabled, onClick = onToggleBoost)
                     Text(
                         formatRecordingTime(clip),
                         modifier = Modifier
@@ -1172,6 +1237,7 @@ private fun PlaybackPanel(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 PlaybackIconButton(isPlaying = isPlaying, isPreparing = isPreparing, onClick = onToggle)
+                PlaybackBoostButton(boostEnabled = boostEnabled, onClick = onToggleBoost)
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                     Text(
                         formatRecordingTime(clip),
@@ -1189,6 +1255,32 @@ private fun PlaybackPanel(
                 PlaybackCloseButton(onClose)
             }
         }
+    }
+}
+
+@Composable
+private fun PlaybackBoostButton(
+    boostEnabled: Boolean,
+    onClick: () -> Unit,
+) {
+    TextButton(
+        onClick = onClick,
+        modifier = Modifier
+            .size(48.dp)
+            .semantics {
+                contentDescription = if (boostEnabled) {
+                    "작은 소리 두 배 증폭 끄기"
+                } else {
+                    "작은 소리 두 배 증폭 켜기"
+                }
+                stateDescription = if (boostEnabled) "켜짐" else "꺼짐"
+            },
+    ) {
+        Text(
+            "2×",
+            color = if (boostEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = FontWeight.Bold,
+        )
     }
 }
 
@@ -1425,8 +1517,16 @@ private class RecordingPlaybackController(
         private set
     var errorMessage by mutableStateOf<String?>(null)
         private set
+    var boostEnabled by mutableStateOf(true)
+        private set
 
     private var mediaPlayer: MediaPlayer? = null
+    private var loudnessEnhancer: LoudnessEnhancer? = null
+
+    fun toggleBoost() {
+        boostEnabled = !boostEnabled
+        applyBoost()
+    }
 
     fun toggle(clip: RecordingClip) {
         errorMessage = null
@@ -1486,6 +1586,12 @@ private class RecordingPlaybackController(
                     .build(),
             )
             nextPlayer.setDataSource(clip.file.absolutePath)
+            loudnessEnhancer = runCatching {
+                LoudnessEnhancer(nextPlayer.audioSessionId).apply {
+                    setTargetGain(BOOST_GAIN_MILLIBELS)
+                    enabled = boostEnabled
+                }
+            }.getOrNull()
             nextPlayer.setOnPreparedListener { preparedPlayer ->
                 if (mediaPlayer !== preparedPlayer || activeClip?.file != clip.file) return@setOnPreparedListener
                 isPreparing = false
@@ -1539,6 +1645,8 @@ private class RecordingPlaybackController(
     private fun releaseCurrent(clearSelection: Boolean) {
         val player = mediaPlayer
         mediaPlayer = null
+        runCatching { loudnessEnhancer?.release() }
+        loudnessEnhancer = null
         runCatching { player?.stop() }
         runCatching { player?.reset() }
         runCatching { player?.release() }
@@ -1555,6 +1663,14 @@ private class RecordingPlaybackController(
         if (isPlaying == value) return
         isPlaying = value
         runCatching { onPlaybackStateChanged(value) }
+    }
+
+    private fun applyBoost() {
+        runCatching { loudnessEnhancer?.enabled = boostEnabled }
+    }
+
+    private companion object {
+        const val BOOST_GAIN_MILLIBELS = 600
     }
 }
 

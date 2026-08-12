@@ -416,6 +416,14 @@ private fun PanelCanvas(
                     selected = selectedPanel == key,
                     onClick = when {
                         key == EditorPanelKey.Clock -> onClockClick
+                        key == EditorPanelKey.Radio &&
+                            radioConfigurations.size == 2 &&
+                            layout.radiosGrouped -> {
+                            {
+                                onLayoutChange(RadioGroupPolicy.split(layout))
+                                onSelectedPanelChange(EditorPanelKey.Radio)
+                            }
+                        }
                         key == EditorPanelKey.Radio && radioConfigurations.isEmpty() -> onManageRadios
                         key == EditorPanelKey.SecondaryRadio &&
                             radioConfigurations.getOrNull(1) == null -> onManageRadios
@@ -485,7 +493,10 @@ private fun PanelCanvas(
                                     state = state,
                                     configurations = radioConfigurations,
                                     contentAlpha = contentAlpha,
-                                    onClick = {},
+                                    onClick = {
+                                        onLayoutChange(RadioGroupPolicy.split(layout))
+                                        onSelectedPanelChange(EditorPanelKey.Radio)
+                                    },
                                 )
                             } else {
                                 val configuration = if (key == EditorPanelKey.SecondaryRadio) {

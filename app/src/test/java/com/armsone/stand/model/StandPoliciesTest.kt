@@ -7,6 +7,13 @@ import org.junit.Test
 
 class StandPoliciesTest {
     @Test
+    fun homeClockScaleMatchesTheIosPinchRange() {
+        assertEquals(0.7f, HomeClockScalePolicy.scaled(1f, 0.1f), 0f)
+        assertEquals(1.35f, HomeClockScalePolicy.scaled(1f, 3f), 0f)
+        assertEquals(1.2f, HomeClockScalePolicy.scaled(0.8f, 1.5f), 0.0001f)
+    }
+
+    @Test
     fun faceDownBlackoutRequiresActiveSessionAndAlwaysBlocksTorch() {
         assertFalse(FaceDownLightingPolicy.shouldBlackout(false, true))
         assertTrue(FaceDownLightingPolicy.shouldBlackout(true, true))
@@ -39,30 +46,35 @@ class StandPoliciesTest {
     }
 
     @Test
-    fun torchIsLimitedToEnabledMateStartleEvents() {
+    fun torchUsesTheIosTenPercentFallbackWhenDisabledDuringMateStartle() {
         assertEquals(
             0.0,
-            LampTorchLightingPolicy.maximumLevel(true, false, EnvironmentDisplayMode.MATE),
+            LampTorchLightingPolicy.maximumLevel(true, false, true, EnvironmentDisplayMode.MATE),
             0.0,
         )
         assertEquals(
             0.0,
-            LampTorchLightingPolicy.maximumLevel(false, false, EnvironmentDisplayMode.MATE),
+            LampTorchLightingPolicy.maximumLevel(false, false, true, EnvironmentDisplayMode.MATE),
             0.0,
         )
         assertEquals(
-            0.0,
-            LampTorchLightingPolicy.maximumLevel(false, true, EnvironmentDisplayMode.MATE),
+            0.1,
+            LampTorchLightingPolicy.maximumLevel(false, true, true, EnvironmentDisplayMode.MATE),
             0.0,
         )
         assertEquals(
             1.0,
-            LampTorchLightingPolicy.maximumLevel(true, true, EnvironmentDisplayMode.MATE),
+            LampTorchLightingPolicy.maximumLevel(true, true, true, EnvironmentDisplayMode.MATE),
             0.0,
         )
         assertEquals(
             0.0,
-            LampTorchLightingPolicy.maximumLevel(true, true, EnvironmentDisplayMode.OBJECT),
+            LampTorchLightingPolicy.maximumLevel(true, true, true, EnvironmentDisplayMode.OBJECT),
+            0.0,
+        )
+        assertEquals(
+            0.0,
+            LampTorchLightingPolicy.maximumLevel(true, true, false, EnvironmentDisplayMode.MATE),
             0.0,
         )
     }

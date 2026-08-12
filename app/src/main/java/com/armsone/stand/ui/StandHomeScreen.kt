@@ -7,6 +7,7 @@
 package com.armsone.stand.ui
 
 import android.view.GestureDetector
+import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.BorderStroke
@@ -37,6 +38,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.automirrored.filled.RotateRight
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.BatteryChargingFull
@@ -45,6 +47,7 @@ import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.FlashlightOn
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PlayArrow
@@ -79,6 +82,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.font.FontFamily
@@ -98,6 +102,7 @@ import androidx.compose.ui.semantics.stateDescription
 import com.armsone.stand.R
 import com.armsone.stand.BuildConfig
 import com.armsone.stand.model.EnvironmentDisplayMode
+import com.armsone.stand.model.HomeClockScalePolicy
 import com.armsone.stand.model.InternetRadioConfiguration
 import com.armsone.stand.model.LampPhase
 import com.armsone.stand.model.OrientationPreference
@@ -124,13 +129,13 @@ import kotlin.math.roundToInt
 fun StandHomeScreen(
     state: StandUiState,
     onScreenTap: () -> Unit,
-    onRevealControls: () -> Unit,
     onToggleTheme: () -> Unit,
     onOpenEditor: () -> Unit,
     onBrightnessAdjustmentStarted: () -> Unit,
     onBrightnessLevelChanged: (Float) -> Unit,
     onBrightnessAdjustmentFinished: () -> Unit,
     onInternetRadioVolumeChanged: (Float) -> Unit,
+    onClockScaleChanged: (Float) -> Unit,
     onToggleTorch: () -> Unit,
     onCycleMode: () -> Unit,
     onToggleSession: () -> Unit,
@@ -147,7 +152,7 @@ fun StandHomeScreen(
 
     LaunchedEffect(adjustmentFeedback) {
         if (adjustmentFeedback != null) {
-            delay(1_100L)
+            delay(1_200L)
             adjustmentFeedback = null
         }
     }
@@ -181,6 +186,7 @@ fun StandHomeScreen(
             state = state,
             onScreenTap = onScreenTap,
             onOpenEditor = onOpenEditor,
+            onToggleTheme = onToggleTheme,
             onBrightnessAdjustmentStarted = onBrightnessAdjustmentStarted,
             onBrightnessLevelChanged = { value ->
                 onBrightnessLevelChanged(value)
@@ -189,12 +195,23 @@ fun StandHomeScreen(
                     value = "${(value * 100f).roundToInt()}%",
                 )
             },
-            onBrightnessAdjustmentFinished = onBrightnessAdjustmentFinished,
+            onBrightnessAdjustmentFinished = {
+                onBrightnessAdjustmentFinished()
+                adjustmentFeedback = null
+            },
             onInternetRadioVolumeChanged = { value ->
                 onInternetRadioVolumeChanged(value)
                 adjustmentFeedback = HomeAdjustmentFeedback(
-                    title = "라디오 볼륨 ${(value * 100f).roundToInt()}%",
-                    value = "",
+                    title = "라디오 볼륨",
+                    value = "${(value * 100f).roundToInt()}%",
+                )
+            },
+            onRadioVolumeAdjustmentFinished = { adjustmentFeedback = null },
+            onClockScaleChanged = { value ->
+                onClockScaleChanged(value)
+                adjustmentFeedback = HomeAdjustmentFeedback(
+                    title = "시계 크기",
+                    value = "${(value * 100f).roundToInt()}%",
                 )
             },
             modifier = Modifier.fillMaxSize(),
@@ -211,21 +228,28 @@ fun StandHomeScreen(
             )
 
         if (!state.isFaceDown) {
-            DashboardCanvas(
-                state = state,
-                isPortrait = isPortrait,
-                contentAlpha = contentAlpha,
-                burnInOffset = burnInOffset,
-                isExpanded = isExpanded,
-                onToggleRadio = onToggleRadio,
-                onEditRadio = onEditRadio,
-                onClockTap = onScreenTap,
-                onClockDoubleTap = onToggleTheme,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(WindowInsets.safeDrawing.asPaddingValues())
-                    .padding(horizontal = if (isPortrait) 16.dp else 28.dp),
-            )
+            if (state.isSessionActive) {
+                DashboardCanvas(
+                    state = state,
+                    isPortrait = isPortrait,
+                    contentAlpha = contentAlpha,
+                    burnInOffset = burnInOffset,
+                    isExpanded = isExpanded,
+                    onToggleRadio = onToggleRadio,
+                    onEditRadio = onEditRadio,
+                    onClockTap = onScreenTap,
+                    onClockDoubleTap = onToggleTheme,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(WindowInsets.safeDrawing.asPaddingValues())
+                        .padding(horizontal = if (isPortrait) 16.dp else 28.dp),
+                )
+            } else {
+                StandStartContent(
+                    onStart = onToggleSession,
+                    modifier = Modifier.align(Alignment.Center),
+                )
+            }
 
             Column(
                 modifier = Modifier
@@ -242,25 +266,18 @@ fun StandHomeScreen(
                 Header(state = state, contentAlpha = contentAlpha)
                 Spacer(Modifier.weight(1f))
 
-                if (state.controlsVisible || !state.isSessionActive) {
-                    HomeControls(
-                        state = state,
-                        isPortrait = isPortrait,
-                        isExpanded = isExpanded,
-                        onToggleTorch = onToggleTorch,
-                        onCycleMode = onCycleMode,
-                        onToggleSession = onToggleSession,
-                        onToggleOrientation = onToggleOrientation,
-                        onOpenRecordings = onOpenRecordings,
-                        onOpenAiShot = onOpenAiShot,
-                        onOpenSettings = onOpenSettings,
-                    )
-                } else {
-                    HiddenControlsReveal(
-                        lampPhase = state.lampPhase,
-                        onClick = onRevealControls,
-                    )
-                }
+                HomeControls(
+                    state = state,
+                    isPortrait = isPortrait,
+                    isExpanded = isExpanded,
+                    onToggleTorch = onToggleTorch,
+                    onCycleMode = onCycleMode,
+                    onToggleSession = onToggleSession,
+                    onToggleOrientation = onToggleOrientation,
+                    onOpenRecordings = onOpenRecordings,
+                    onOpenAiShot = onOpenAiShot,
+                    onOpenSettings = onOpenSettings,
+                )
             }
 
             Text(
@@ -312,28 +329,52 @@ fun StandHomeScreen(
 }
 
 @Composable
-private fun HiddenControlsReveal(
-    lampPhase: LampPhase,
-    onClick: () -> Unit,
+private fun StandStartContent(
+    onStart: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    Surface(
-        onClick = onClick,
-        color = Color.Transparent,
-        contentColor = Color.White.copy(alpha = 0.24f),
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(80.dp),
+    Column(
+        modifier = modifier.padding(horizontal = 28.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Box(contentAlignment = Alignment.Center) {
-            Text(
-                text = if (lampPhase == LampPhase.HOLDING) {
-                    "탭하면 자연스럽게 어두워짐"
-                } else {
-                    "탭하면 조명 켜짐"
+        Image(
+            painter = painterResource(R.drawable.stand_brand_icon),
+            contentDescription = null,
+            modifier = Modifier.size(76.dp),
+        )
+        Text(
+            text = "S.tand가 곁에 있을게요",
+            color = Color.White.copy(alpha = 0.92f),
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center,
+        )
+        Text(
+            text = "시작하면 오브제와 매이트 모드를 오가며 시간·날씨와 잠자리를 돌봅니다.",
+            color = Color.White.copy(alpha = 0.62f),
+            style = MaterialTheme.typography.bodyMedium,
+            textAlign = TextAlign.Center,
+        )
+        Surface(
+            onClick = onStart,
+            color = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary,
+            shape = RoundedCornerShape(16.dp),
+            modifier = Modifier
+                .height(52.dp)
+                .semantics {
+                    contentDescription = "S.tand 시작"
                 },
-                style = MaterialTheme.typography.labelMedium,
-                textAlign = TextAlign.Center,
-            )
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 22.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Icon(Icons.Default.LightMode, contentDescription = null)
+                Text("S.tand 시작", fontWeight = FontWeight.Bold)
+            }
         }
     }
 }
@@ -351,28 +392,40 @@ private fun HomeAdjustmentFeedbackPanel(
     Surface(
         modifier = modifier,
         color = Color(0xFF181A1F),
-        shape = RoundedCornerShape(18.dp),
+        shape = CircleShape,
         border = BorderStroke(1.dp, Color.White.copy(alpha = 0.16f)),
-        shadowElevation = 7.dp,
+        shadowElevation = 0.dp,
     ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+        Row(
+            modifier = Modifier
+                .height(46.dp)
+                .padding(horizontal = 15.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(9.dp),
         ) {
+            Icon(
+                imageVector = if (feedback.title == "라디오 볼륨") {
+                    Icons.AutoMirrored.Filled.VolumeUp
+                } else {
+                    Icons.Default.LightMode
+                },
+                contentDescription = null,
+                tint = Color.White.copy(alpha = 0.92f),
+                modifier = Modifier.size(16.dp),
+            )
             Text(
                 text = feedback.title,
-                color = Color.White.copy(alpha = 0.72f),
+                color = Color.White.copy(alpha = 0.92f),
                 style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
             )
-            if (feedback.value.isNotEmpty()) {
-                Text(
-                    text = feedback.value,
-                    color = Color.White,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                )
-            }
+            Text(
+                text = feedback.value,
+                color = Color.White.copy(alpha = 0.92f),
+                fontFamily = FontFamily.Monospace,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+            )
         }
     }
 }
@@ -382,17 +435,22 @@ private fun HomeGestureLayer(
     state: StandUiState,
     onScreenTap: () -> Unit,
     onOpenEditor: () -> Unit,
+    onToggleTheme: () -> Unit,
     onBrightnessAdjustmentStarted: () -> Unit,
     onBrightnessLevelChanged: (Float) -> Unit,
     onBrightnessAdjustmentFinished: () -> Unit,
     onInternetRadioVolumeChanged: (Float) -> Unit,
+    onRadioVolumeAdjustmentFinished: () -> Unit,
+    onClockScaleChanged: (Float) -> Unit,
     modifier: Modifier = Modifier,
     content: @Composable BoxScope.() -> Unit,
 ) {
     val context = LocalContext.current
+    val view = LocalView.current
     val latestState = rememberUpdatedState(state)
     val latestOnScreenTap = rememberUpdatedState(onScreenTap)
     val latestOnOpenEditor = rememberUpdatedState(onOpenEditor)
+    val latestOnToggleTheme = rememberUpdatedState(onToggleTheme)
     val latestOnBrightnessAdjustmentStarted = rememberUpdatedState(onBrightnessAdjustmentStarted)
     val latestOnBrightnessLevelChanged = rememberUpdatedState(onBrightnessLevelChanged)
     val latestOnBrightnessAdjustmentFinished = rememberUpdatedState(
@@ -401,6 +459,10 @@ private fun HomeGestureLayer(
     val latestOnInternetRadioVolumeChanged = rememberUpdatedState(
         onInternetRadioVolumeChanged,
     )
+    val latestOnRadioVolumeAdjustmentFinished = rememberUpdatedState(
+        onRadioVolumeAdjustmentFinished,
+    )
+    val latestOnClockScaleChanged = rememberUpdatedState(onClockScaleChanged)
     var layerHeightPx by remember { mutableStateOf(0f) }
     val bottomGestureExclusionPx = with(LocalDensity.current) { 104.dp.toPx() }
 
@@ -411,13 +473,19 @@ private fun HomeGestureLayer(
                 override fun onDown(event: MotionEvent): Boolean = true
 
                 override fun onSingleTapConfirmed(event: MotionEvent): Boolean {
+                    view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
                     latestOnScreenTap.value()
                     return true
                 }
 
-                override fun onDoubleTap(event: MotionEvent): Boolean = false
+                override fun onDoubleTap(event: MotionEvent): Boolean {
+                    view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                    latestOnToggleTheme.value()
+                    return true
+                }
 
                 override fun onLongPress(event: MotionEvent) {
+                    view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
                     latestOnOpenEditor.value()
                 }
             },
@@ -428,24 +496,46 @@ private fun HomeGestureLayer(
             .onSizeChanged { layerHeightPx = it.height.toFloat() }
             .semantics {
                 val currentLevel = state.lampIntensity.coerceIn(0f, 1f)
-                progressBarRangeInfo = ProgressBarRangeInfo(currentLevel, 0f..1f, 19)
+                contentDescription = "홈 화면 제어"
+                progressBarRangeInfo = ProgressBarRangeInfo(currentLevel, 0f..1f, 9)
                 setProgress { requestedLevel ->
+                    if (!state.isSessionActive) return@setProgress false
                     onBrightnessAdjustmentStarted()
                     onBrightnessLevelChanged(requestedLevel.coerceIn(0f, 1f))
                     onBrightnessAdjustmentFinished()
                     true
                 }
-                customActions = listOf(
-                    CustomAccessibilityAction("앱 밝기 5퍼센트 올리기") {
+                if (state.isSessionActive) customActions = listOf(
+                    CustomAccessibilityAction("앱 밝기 10퍼센트 올리기") {
                         onBrightnessAdjustmentStarted()
-                        onBrightnessLevelChanged((currentLevel + 0.05f).coerceAtMost(1f))
+                        onBrightnessLevelChanged((currentLevel + 0.1f).coerceAtMost(1f))
                         onBrightnessAdjustmentFinished()
                         true
                     },
-                    CustomAccessibilityAction("앱 밝기 5퍼센트 내리기") {
+                    CustomAccessibilityAction("앱 밝기 10퍼센트 내리기") {
                         onBrightnessAdjustmentStarted()
-                        onBrightnessLevelChanged((currentLevel - 0.05f).coerceAtLeast(0f))
+                        onBrightnessLevelChanged((currentLevel - 0.1f).coerceAtLeast(0f))
                         onBrightnessAdjustmentFinished()
+                        true
+                    },
+                    CustomAccessibilityAction("오브제와 매이트 전환") {
+                        onScreenTap()
+                        true
+                    },
+                    CustomAccessibilityAction("테마 전환") {
+                        onToggleTheme()
+                        true
+                    },
+                    CustomAccessibilityAction("화면 편집 열기") {
+                        onOpenEditor()
+                        true
+                    },
+                    CustomAccessibilityAction("시계 크게") {
+                        onClockScaleChanged((state.settings.clockScale + 0.1f).coerceAtMost(1.35f))
+                        true
+                    },
+                    CustomAccessibilityAction("시계 작게") {
+                        onClockScaleChanged((state.settings.clockScale - 0.1f).coerceAtLeast(0.7f))
                         true
                     },
                 )
@@ -458,12 +548,21 @@ private fun HomeGestureLayer(
                     )
                     var axis: HomeAdjustmentAxis? = null
                     var startingLevel = 0f
+                    var startingSpan = 0f
                     var finished = false
 
                     do {
                         val event = awaitPointerEvent(PointerEventPass.Initial)
                         val change = event.changes.firstOrNull { it.id == down.id } ?: break
                         val translation = change.position - down.position
+                        val pressed = event.changes.filter { it.pressed }
+
+                        if (axis == null && pressed.size >= 2) {
+                            startingLevel = latestState.value.settings.clockScale
+                            startingSpan = (pressed[0].position - pressed[1].position).getDistance()
+                                .coerceAtLeast(1f)
+                            axis = HomeAdjustmentAxis.CLOCK_SCALE
+                        }
 
                         if (axis == null && translation.getDistance() >= viewConfiguration.touchSlop) {
                             axis = if (abs(translation.y) > abs(translation.x)) {
@@ -500,12 +599,27 @@ private fun HomeGestureLayer(
                                     ),
                                 )
                             }
+                            HomeAdjustmentAxis.CLOCK_SCALE -> {
+                                event.changes.forEach { it.consume() }
+                                if (pressed.size >= 2) {
+                                    val currentSpan =
+                                        (pressed[0].position - pressed[1].position).getDistance()
+                                    latestOnClockScaleChanged.value(
+                                        HomeClockScalePolicy.scaled(
+                                            startingAt = startingLevel,
+                                            magnification = currentSpan / startingSpan,
+                                        ),
+                                    )
+                                }
+                            }
                             null -> Unit
                         }
 
                         if (!change.pressed) {
                             if (axis == HomeAdjustmentAxis.VERTICAL_BRIGHTNESS) {
                                 latestOnBrightnessAdjustmentFinished.value()
+                            } else if (axis == HomeAdjustmentAxis.HORIZONTAL_RADIO_VOLUME) {
+                                latestOnRadioVolumeAdjustmentFinished.value()
                             }
                             finished = true
                         }
@@ -513,6 +627,8 @@ private fun HomeGestureLayer(
 
                     if (!finished && axis == HomeAdjustmentAxis.VERTICAL_BRIGHTNESS) {
                         latestOnBrightnessAdjustmentFinished.value()
+                    } else if (!finished && axis == HomeAdjustmentAxis.HORIZONTAL_RADIO_VOLUME) {
+                        latestOnRadioVolumeAdjustmentFinished.value()
                     }
                 }
             },
@@ -537,6 +653,7 @@ private fun HomeGestureLayer(
 private enum class HomeAdjustmentAxis {
     VERTICAL_BRIGHTNESS,
     HORIZONTAL_RADIO_VOLUME,
+    CLOCK_SCALE,
 }
 
 @Composable
@@ -981,12 +1098,7 @@ internal fun WeatherGroupPanel(
     contentAlpha: Float,
     modifier: Modifier = Modifier,
 ) {
-    val cellSize = when {
-        isExpanded && isPortrait -> 98.dp
-        isExpanded -> 112.dp
-        isPortrait -> 88.dp
-        else -> 104.dp
-    }
+    val cellSize = if (isPortrait) 94.dp else 123.333.dp
     Surface(
         modifier = modifier.standPanelSurface(
             isDimmed = contentAlpha <= 0.2f,

@@ -66,7 +66,8 @@ class PlatformPoliciesTest {
     }
 
     @Test
-    fun cameraReadingFreshnessUsesTwentySecondMonotonicWindow() {
+    fun cameraReadingFreshnessUsesSixtySecondMonotonicWindow() {
+        assertEquals(60_000_000_000L, AmbientCameraPolicy.MaximumReadingAgeNanos)
         val measuredAt = 1_000_000_000L
         val reading = AmbientCameraReading(
             value = 0.15f,
@@ -88,6 +89,24 @@ class PlatformPoliciesTest {
             ),
         )
         assertFalse(AmbientCameraPolicy.isFresh(reading, measuredAt - 1L))
+    }
+
+    @Test
+    fun cameraRequiresOneSecondOfObservationBeforeCompleting() {
+        val startedAt = 4_000_000_000L
+        assertFalse(
+            AmbientCameraPolicy.hasMinimumObservationDuration(
+                startedAt,
+                startedAt + AmbientCameraPolicy.MinimumObservationNanos - 1L,
+            ),
+        )
+        assertTrue(
+            AmbientCameraPolicy.hasMinimumObservationDuration(
+                startedAt,
+                startedAt + AmbientCameraPolicy.MinimumObservationNanos,
+            ),
+        )
+        assertFalse(AmbientCameraPolicy.hasMinimumObservationDuration(startedAt, startedAt - 1L))
     }
 
     @Test
@@ -132,6 +151,14 @@ class PlatformPoliciesTest {
                 EnvironmentDisplayMode.MATE,
                 EnvironmentDisplayMode.OBJECT,
                 reading(0f, AmbientCameraPolicy.MaximumReadingAgeNanos),
+                now,
+            ),
+        )
+        assertTrue(AmbientCameraModePolicy.isRecentlyDark(reading(0.16f), now))
+        assertFalse(AmbientCameraModePolicy.isRecentlyDark(reading(0.17f), now))
+        assertFalse(
+            AmbientCameraModePolicy.isRecentlyDark(
+                reading(0.10f, AmbientCameraPolicy.MaximumReadingAgeNanos),
                 now,
             ),
         )

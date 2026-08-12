@@ -6,7 +6,10 @@
 package com.armsone.stand.ui
 
 import androidx.annotation.RawRes
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -27,6 +30,9 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -47,7 +53,6 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -64,10 +69,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
@@ -87,7 +96,6 @@ import com.armsone.stand.model.ClockVisualPolicy
 import com.armsone.stand.model.SettingsInformationArchitecture
 import com.armsone.stand.model.SettingsSectionKind
 import com.armsone.stand.model.StandDisplayTheme
-import com.armsone.stand.model.StandModePreference
 import com.armsone.stand.platform.AmbientCameraState
 import com.armsone.stand.platform.InternetRadioState
 import com.armsone.stand.ui.components.flipTextSplitMask
@@ -100,6 +108,7 @@ import kotlin.math.roundToInt
 fun SettingsScreen(
     state: StandUiState,
     onUpdate: ((AppSettings) -> AppSettings) -> Unit,
+    onToggleMode: () -> Unit,
     onRestoreRecommended: () -> Unit,
     onToggleInternetRadio: (String) -> Unit,
     onSaveInternetRadio: (String?, String, String) -> String?,
@@ -115,6 +124,7 @@ fun SettingsScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val uriHandler = LocalUriHandler.current
     var showResetConfirmation by remember { mutableStateOf(false) }
     var pendingRadioDeletionID by remember { mutableStateOf<String?>(null) }
     var selectedLicense by remember { mutableStateOf<ClockFontChoice?>(null) }
@@ -124,6 +134,13 @@ fun SettingsScreen(
     var radioDraftURL by remember { mutableStateOf("") }
     var radioValidationMessage by remember { mutableStateOf<String?>(null) }
     val settings = state.settings
+    val settingsBackground = Brush.linearGradient(
+        listOf(
+            lerp(Color(0xFF1D1614), MaterialTheme.colorScheme.primary, 0.20f),
+            Color(0xFF291D1A),
+            Color(0xFF161313),
+        ),
+    )
     val missingPermissionCount = listOf(
         settings.soundSensingEnabled && !state.hasMicrophonePermission,
         settings.weatherLocationEnabled && !state.hasApproximateLocationPermission,
@@ -141,8 +158,10 @@ fun SettingsScreen(
     }
 
     Scaffold(
-        modifier = modifier.fillMaxSize(),
-        containerColor = MaterialTheme.colorScheme.background,
+        modifier = modifier
+            .fillMaxSize()
+            .background(settingsBackground),
+        containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
                 title = { Text("S.tand 설정") },
@@ -152,44 +171,45 @@ fun SettingsScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
+                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
                 ),
             )
         },
     ) { innerPadding ->
-        LazyColumn(
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
-                .padding(horizontal = 16.dp),
-            contentPadding = WindowInsets.safeDrawing.asPaddingValues(),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+                .padding(innerPadding),
         ) {
-            item {
-                SettingsHero(
-                    state = state,
-                    onToggleMode = {
-                        onUpdate { current ->
-                            current.copy(
-                                modePreference = if (
-                                    state.experienceMode ==
-                                    com.armsone.stand.model.StandExperienceMode.OBJECT
-                                ) {
-                                    StandModePreference.MATE
-                                } else {
-                                    StandModePreference.OBJECT
-                                },
-                            )
+            val columnCount = if (maxWidth >= 720.dp) 2 else 1
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(columnCount),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp),
+                contentPadding = WindowInsets.safeDrawing.asPaddingValues(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    SettingsHero(
+                        state = state,
+                        onToggleMode = onToggleMode,
+                    )
+                }
+
+                items(
+                    count = SettingsInformationArchitecture.CardOrder.size,
+                    key = { index -> SettingsInformationArchitecture.CardOrder[index].name },
+                    span = { index ->
+                        if (SettingsInformationArchitecture.CardOrder[index] == SettingsSectionKind.INTERNET_RADIO) {
+                            GridItemSpan(maxLineSpan)
+                        } else {
+                            GridItemSpan(1)
                         }
                     },
-                )
-            }
-
-            items(
-                items = SettingsInformationArchitecture.CardOrder,
-                key = { section -> section.name },
-            ) { section ->
-                when (section) {
+                ) { index ->
+                    when (val section = SettingsInformationArchitecture.CardOrder[index]) {
                     SettingsSectionKind.INTERNET_RADIO -> SettingsCard(
                         title = "인터넷 라디오",
                         subtitle = if (settings.internetRadioChannels.isEmpty()) {
@@ -244,8 +264,14 @@ fun SettingsScreen(
                                     name = radioDraftName,
                                     url = radioDraftURL,
                                     error = radioValidationMessage,
-                                    onNameChange = { radioDraftName = it.take(30) },
-                                    onUrlChange = { radioDraftURL = it.take(2_048) },
+                                    onNameChange = {
+                                        radioDraftName = it.take(30)
+                                        radioValidationMessage = null
+                                    },
+                                    onUrlChange = {
+                                        radioDraftURL = it.take(2_048)
+                                        radioValidationMessage = null
+                                    },
                                     onSave = {
                                         radioValidationMessage = onSaveInternetRadio(
                                             channel.id,
@@ -266,8 +292,14 @@ fun SettingsScreen(
                                 name = radioDraftName,
                                 url = radioDraftURL,
                                 error = radioValidationMessage,
-                                onNameChange = { radioDraftName = it.take(30) },
-                                onUrlChange = { radioDraftURL = it.take(2_048) },
+                                onNameChange = {
+                                    radioDraftName = it.take(30)
+                                    radioValidationMessage = null
+                                },
+                                onUrlChange = {
+                                    radioDraftURL = it.take(2_048)
+                                    radioValidationMessage = null
+                                },
                                 onSave = {
                                     radioValidationMessage = onSaveInternetRadio(
                                         null,
@@ -333,7 +365,7 @@ fun SettingsScreen(
                             fontWeight = FontWeight.SemiBold,
                         )
                         Text(
-                            "시계를 더블 터치하면 테마가 바뀝니다.",
+                            "홈 화면을 더블 터치하면 테마가 바뀝니다.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -448,16 +480,20 @@ fun SettingsScreen(
                             state.audioRunning -> "소리 감지 중"
                             else -> "마이크 대기"
                         }
-                        Text(audioStatus, fontWeight = FontWeight.SemiBold)
-                        LinearProgressIndicator(
-                            progress = { state.audioLevel.coerceIn(0f, 1f) },
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                        Text(
-                            state.audioMessage ?: "현재 레벨 ${(state.audioLevel * 100).roundToInt()}%",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            SettingsAudioLevelMeter(state.audioLevel)
+                            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                Text(audioStatus, fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    state.audioMessage ?: "현재 레벨 ${(state.audioLevel * 100).roundToInt()}%",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
                         LabeledSwitch(
                             title = "다시 밝혀주기",
                             detail = "박수, 핑거스냅, 뒤척임과 기기 움직임에 반응",
@@ -493,7 +529,17 @@ fun SettingsScreen(
                         icon = Icons.Default.Info,
                     ) {
                         Text(
-                            "오디오는 이 기기에서 처리하고 로컬에만 저장합니다. 함께 있는 사람에게 녹음 사실을 먼저 알려 주세요.",
+                            "오디오는 이 기기에서 처리하고 로컬에만 저장합니다.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            "함께 있는 사람에게 녹음 사실을 먼저 알려 주세요.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            "충전 중인 기기와 플래시를 침구로 덮지 마세요.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -504,6 +550,12 @@ fun SettingsScreen(
                             style = MaterialTheme.typography.bodySmall,
                         )
                         Text("시스템 글꼴 + 번들 글꼴 9종", style = MaterialTheme.typography.bodySmall)
+                        TextButton(
+                            onClick = { uriHandler.openUri("https://open-meteo.com/") },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text("날씨 데이터 · Open-Meteo")
+                        }
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             ClockFontChoice.entries.filterNot {
                                 it == ClockFontChoice.SYSTEM_ROUNDED
@@ -519,26 +571,27 @@ fun SettingsScreen(
                             modifier = Modifier.fillMaxWidth(),
                         ) {
                             Icon(Icons.Default.RestartAlt, contentDescription = null)
-                            Text(" 추천 설정으로 초기화")
+                            Text(" 추천 설정 복원")
                         }
                     }
+                    }
                 }
-            }
 
-            item { Spacer(Modifier.height(18.dp)) }
+                item(span = { GridItemSpan(maxLineSpan) }) { Spacer(Modifier.height(18.dp)) }
+            }
         }
     }
 
     if (showResetConfirmation) {
         AlertDialog(
             onDismissRequest = { showResetConfirmation = false },
-            title = { Text("설정을 초기화할까요?") },
-            text = { Text("녹음 파일은 지우지 않고 화면과 감지 설정만 권장값으로 되돌립니다.") },
+            title = { Text("추천 설정으로 되돌릴까요?") },
+            text = { Text("저장한 라디오 채널을 포함해 앱 설정이 처음 모습으로 돌아갑니다.") },
             confirmButton = {
                 TextButton(onClick = {
                     showResetConfirmation = false
                     onRestoreRecommended()
-                }) { Text("초기화") }
+                }) { Text("추천 설정 복원") }
             },
             dismissButton = {
                 TextButton(onClick = { showResetConfirmation = false }) { Text("취소") }
@@ -597,6 +650,41 @@ private fun SettingsHero(
 }
 
 @Composable
+private fun SettingsAudioLevelMeter(level: Float) {
+    val safeLevel = level.coerceIn(0f, 1f)
+    val fillHeight by animateDpAsState(
+        targetValue = maxOf(4f, 58f * safeLevel).dp,
+        animationSpec = tween(120),
+        label = "audio-level",
+    )
+    Box(
+        modifier = Modifier
+            .width(12.dp)
+            .height(58.dp)
+            .background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(50))
+            .semantics {
+                contentDescription = "감지 레벨 ${(safeLevel * 100).roundToInt()}퍼센트"
+            },
+        contentAlignment = Alignment.BottomCenter,
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(fillHeight)
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            MaterialTheme.colorScheme.primary,
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.42f),
+                        ),
+                    ),
+                    RoundedCornerShape(50),
+                ),
+        )
+    }
+}
+
+@Composable
 private fun InlineRadioEditor(
     name: String,
     url: String,
@@ -607,6 +695,7 @@ private fun InlineRadioEditor(
     onDelete: (() -> Unit)?,
     onClose: () -> Unit,
 ) {
+    val clipboardManager = LocalClipboardManager.current
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -630,6 +719,16 @@ private fun InlineRadioEditor(
             isError = error != null,
             supportingText = error?.let { message -> { Text(message) } },
         )
+        TextButton(
+            onClick = {
+                clipboardManager.getText()?.text?.let { pasted ->
+                    onUrlChange(pasted.take(2_048))
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("복사한 주소 붙여넣기")
+        }
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -801,7 +900,7 @@ private fun SettingsCard(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface,
         ),
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(22.dp),
         border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.12f)),
         elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
     ) {

@@ -1,10 +1,10 @@
-# S.tand iOS 0.24.0 → Android 구현 기술 레시피
+# S.tand iOS 0.24.1 → Android 구현 기술 레시피
 
 기준일: 2026-08-12 KST
 
-iOS 기준: `ddda3ae167c996acb0f1814c9e64745f69e8b429`, `1.0.0 (0.24.0)`
+iOS 기준: `0f664b2`, `1.0.0 (0.24.1)`
 
-Android 현재 후보: versionName `0.0.1`, versionCode `25`, 빌드 표기 `0.0.25`
+Android 현재 후보: versionName `0.0.1`, versionCode `27`, 빌드 표기 `0.0.27`
 
 상위 전체 기준은 iOS `docs/ANDROID_IMPLEMENTATION_HANDOFF.md`다. 이 문서는 Android 구현 위치와
 검증 방법을 고정한다. 과거 `0.23.3` 레시피의 누락이나 완료 표시는 사용하지 않는다.
@@ -46,6 +46,7 @@ Compose가 저장소·센서를 직접 호출하지 않는다. 화면 이벤트�
 ## 3. 모드·앱 조명·홈 제스처
 
 - 저장 상태: `AUTOMATIC/OBJECT/MATE`, 실제 환경 `OBJECT/MATE`, 표시 `OBJECT/MATE/STARTLED`.
+- 일반 홈 전체 더블 터치는 테마를 순환하고, 전체 핀치는 시계 크기를 0.70~1.35로 조절한다.
 - 앱 조명 40% 경계, 35/80 원터치 2초 전환, 0/100% 1초 유지 잠금.
 - 95~100% 손떼기 역방향은 오브제 잠금을 취소하지 않는다.
 - 시스템 밝기는 초기 참고값으로만 읽고 쓰지 않는다.

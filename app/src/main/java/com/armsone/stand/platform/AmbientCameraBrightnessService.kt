@@ -40,13 +40,14 @@ data class AmbientCameraReading(
     val lensFacing: Int,
 ) {
     val isDark: Boolean
-        get() = value < AmbientCameraPolicy.DarkThreshold
+        get() = value <= AmbientCameraPolicy.DarkThreshold
 }
 
 object AmbientCameraPolicy {
     const val DarkThreshold = 0.16f
     const val BrightThreshold = 0.28f
-    const val MaximumReadingAgeNanos = 20_000_000_000L
+    const val MaximumReadingAgeNanos = 60_000_000_000L
+    const val MinimumObservationNanos = 1_000_000_000L
 
     fun adjustedBrightness(
         averageLuma: Float,
@@ -73,6 +74,9 @@ object AmbientCameraPolicy {
         if (reading == null || nowNanos < reading.measuredAtElapsedRealtimeNanos) return false
         return nowNanos - reading.measuredAtElapsedRealtimeNanos < MaximumReadingAgeNanos
     }
+
+    fun hasMinimumObservationDuration(startedAtNanos: Long, nowNanos: Long): Boolean =
+        nowNanos >= startedAtNanos && nowNanos - startedAtNanos >= MinimumObservationNanos
 
     private const val DEFAULT_EXPOSURE_NANOS = 16_666_667L
 }
@@ -128,6 +132,7 @@ class AmbientCameraBrightnessService(
     private var latestIso: Int? = null
     private var latestExposureNanos: Long? = null
     private var latestAeState: Int? = null
+    private var measurementStartedAtNanos = 0L
     private var activeLensFacing = CameraCharacteristics.LENS_FACING_FRONT
     private val timeout = Runnable { finishMeasurement(reading = makeReading(), failed = true) }
 
@@ -197,6 +202,7 @@ class AmbientCameraBrightnessService(
         latestIso = null
         latestExposureNanos = null
         latestAeState = null
+        measurementStartedAtNanos = SystemClock.elapsedRealtimeNanos()
 
         val selected = selectCamera(preferBackCamera)
         if (selected == null) {
@@ -308,7 +314,12 @@ class AmbientCameraBrightnessService(
             iso = latestIso,
             exposureTimeNanos = latestExposureNanos,
         )
-        if (samples.size >= REQUIRED_SAMPLES) {
+        if (samples.size >= REQUIRED_SAMPLES &&
+            AmbientCameraPolicy.hasMinimumObservationDuration(
+                measurementStartedAtNanos,
+                SystemClock.elapsedRealtimeNanos(),
+            )
+        ) {
             finishMeasurement(reading = makeReading(), failed = false)
         }
     }
@@ -361,6 +372,7 @@ class AmbientCameraBrightnessService(
         imageReader = null
         samples.clear()
         receivedFrameCount = 0
+        measurementStartedAtNanos = 0L
         if (reading != null) mutableReading.value = reading
         mutableState.value = when {
             !enabled -> AmbientCameraState.DISABLED
@@ -417,6 +429,6 @@ class AmbientCameraBrightnessService(
         private const val MINIMUM_WARMUP_FRAMES = 8
         private const val MAXIMUM_WARMUP_FRAMES = 20
         private const val REQUIRED_SAMPLES = 5
-        private const val MEASUREMENT_TIMEOUT_MILLIS = 3_000L
+        private const val MEASUREMENT_TIMEOUT_MILLIS = 1_500L
     }
 }

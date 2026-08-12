@@ -240,13 +240,13 @@ class MainActivity : ComponentActivity() {
                 AppDestination.HOME -> StandHomeScreen(
                     state = state,
                     onScreenTap = standViewModel::onScreenTap,
-                    onRevealControls = standViewModel::revealControls,
                     onToggleTheme = standViewModel::toggleTheme,
                     onOpenEditor = ::openScreenEditor,
                     onBrightnessAdjustmentStarted = standViewModel::beginBrightnessAdjustment,
                     onBrightnessLevelChanged = standViewModel::updateBrightnessLevel,
                     onBrightnessAdjustmentFinished = standViewModel::endBrightnessAdjustment,
                     onInternetRadioVolumeChanged = standViewModel::updateInternetRadioVolume,
+                    onClockScaleChanged = standViewModel::updateClockScale,
                     onToggleTorch = standViewModel::toggleTorchEnabled,
                     onCycleMode = standViewModel::cycleModePreference,
                     onToggleSession = standViewModel::toggleNightSession,
@@ -273,6 +273,7 @@ class MainActivity : ComponentActivity() {
                 AppDestination.SETTINGS -> SettingsScreen(
                     state = state,
                     onUpdate = standViewModel::updateSettings,
+                    onToggleMode = standViewModel::onScreenTap,
                     onRestoreRecommended = standViewModel::restoreRecommendedSettings,
                     onToggleInternetRadio = standViewModel::toggleInternetRadio,
                     onSaveInternetRadio = standViewModel::saveInternetRadioChannel,
@@ -329,6 +330,7 @@ class MainActivity : ComponentActivity() {
                         onMergeSelected = standViewModel::mergeRecordings,
                         onMergeToday = standViewModel::mergeToday,
                         onDeleteSelected = standViewModel::deleteRecordings,
+                        onDeleteAll = standViewModel::deleteAllRecordings,
                     )
                 }
 
@@ -375,6 +377,7 @@ class MainActivity : ComponentActivity() {
                         secondaryReturnDestination = AppDestination.RADIO_MANAGEMENT
                         destination = AppDestination.RADIO
                     },
+                    onDelete = standViewModel::deleteInternetRadioChannel,
                     onMove = standViewModel::moveInternetRadioChannel,
                     onOpenBrowser = {
                         browserReturnDestination = AppDestination.RADIO_MANAGEMENT

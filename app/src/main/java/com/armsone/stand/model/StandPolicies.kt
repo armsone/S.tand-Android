@@ -18,7 +18,7 @@ object SimplifiedBrightnessModePolicy {
     const val MATE_UPPER_BOUND = 0.4f
     const val MATE_TAP_LEVEL = 0.35f
     const val OBJECT_TAP_LEVEL = 0.8f
-    const val VERTICAL_DRAG_TRAVEL_RATIO = 0.25f
+    const val VERTICAL_DRAG_TRAVEL_RATIO = 0.5f
     const val ENDPOINT_LOCK_DELAY_MILLIS = 1_000L
     const val OBJECT_LOCK_RELEASE_LEVEL = 0.95f
     const val MATE_LOCK_RELEASE_LEVEL = 0.05f
@@ -51,8 +51,8 @@ object SimplifiedBrightnessModePolicy {
             currentPreference == StandModePreference.MATE &&
                 requested <= MATE_LOCK_RELEASE_LEVEL ->
                 BrightnessAdjustment(0f, StandModePreference.MATE)
-            requested == 0f || requested == 1f ->
-                BrightnessAdjustment(requested, StandModePreference.AUTOMATIC)
+            requested == 0f -> BrightnessAdjustment(0f, StandModePreference.MATE)
+            requested == 1f -> BrightnessAdjustment(1f, StandModePreference.AUTOMATIC)
             else -> BrightnessAdjustment(requested, StandModePreference.AUTOMATIC)
         }
     }
@@ -80,6 +80,21 @@ object HoldDurationAdjustment {
     }
 }
 
+object HomeClockScalePolicy {
+    const val MINIMUM_SCALE = 0.7f
+    const val MAXIMUM_SCALE = 1.35f
+
+    fun clamped(scale: Float): Float = when {
+        !scale.isFinite() -> 1f
+        else -> scale.coerceIn(MINIMUM_SCALE, MAXIMUM_SCALE)
+    }
+
+    fun scaled(startingAt: Float, magnification: Float): Float {
+        val safeMagnification = magnification.takeIf { it.isFinite() && it > 0f } ?: 1f
+        return clamped(clamped(startingAt) * safeMagnification)
+    }
+}
+
 object StandAutomaticDimmingPolicy {
     fun shouldFade(
         automaticDimmingEnabled: Boolean,
@@ -97,10 +112,11 @@ object SleepCareMonitoringPolicy {
 object SleepMovementLightingPolicy {
     fun torchLevel(
         torchEnabled: Boolean,
+        roomIsDark: Boolean,
         environmentMode: EnvironmentDisplayMode,
     ): Double {
-        if (environmentMode != EnvironmentDisplayMode.MATE) return 0.0
-        return if (torchEnabled) 1.0 else 0.0
+        if (environmentMode != EnvironmentDisplayMode.MATE || !roomIsDark) return 0.0
+        return if (torchEnabled) 1.0 else 0.1
     }
 }
 
@@ -108,11 +124,12 @@ object LampTorchLightingPolicy {
     fun maximumLevel(
         torchEnabled: Boolean,
         isMovementTriggered: Boolean,
+        roomIsDark: Boolean,
         environmentMode: EnvironmentDisplayMode,
     ): Double {
         if (environmentMode != EnvironmentDisplayMode.MATE) return 0.0
         if (!isMovementTriggered) return 0.0
-        return SleepMovementLightingPolicy.torchLevel(torchEnabled, environmentMode)
+        return SleepMovementLightingPolicy.torchLevel(torchEnabled, roomIsDark, environmentMode)
     }
 }
 

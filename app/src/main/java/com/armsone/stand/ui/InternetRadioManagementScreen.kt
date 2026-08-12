@@ -16,6 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.SwapVert
@@ -44,6 +45,7 @@ fun InternetRadioManagementScreen(
     onToggle: (String) -> Unit,
     onAdd: () -> Unit,
     onEdit: (String) -> Unit,
+    onDelete: (String) -> Unit,
     onMove: (String, Int) -> Unit,
     onOpenBrowser: () -> Unit,
     onBack: () -> Unit,
@@ -136,6 +138,13 @@ fun InternetRadioManagementScreen(
                                     Icon(
                                         Icons.Default.Edit,
                                         contentDescription = "${channel.displayName} 수정",
+                                    )
+                                }
+                                IconButton(onClick = { onDelete(channel.id) }) {
+                                    Icon(
+                                        Icons.Default.Delete,
+                                        contentDescription = "${channel.displayName} 삭제",
+                                        tint = MaterialTheme.colorScheme.error,
                                     )
                                 }
                             }

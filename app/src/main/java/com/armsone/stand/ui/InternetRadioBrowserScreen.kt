@@ -34,6 +34,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -205,7 +206,7 @@ fun InternetRadioBrowserScreen(
                 },
                 modifier = Modifier
                     .weight(1f)
-                    .height(48.dp)
+                    .heightIn(min = 56.dp)
                     .onFocusChanged { addressFieldIsFocused = it.isFocused },
                 placeholder = { Text("웹 주소 입력", maxLines = 1) },
                 singleLine = true,
@@ -446,7 +447,10 @@ fun InternetRadioBrowserScreen(
                             }
                         }
                         webView = this
-                        loadUrl(InternetRadioBrowserPolicy.homepage)
+                        loadUrl(
+                            addressText.takeIf(InternetRadioBrowserPolicy::isSecureWebAddress)
+                                ?: InternetRadioBrowserPolicy.homepage,
+                        )
                     }
                 },
                 modifier = Modifier.fillMaxSize(),
@@ -503,7 +507,7 @@ private fun BrowserToolbarButton(
 ) {
     Surface(
         modifier = modifier
-            .size(44.dp)
+            .size(48.dp)
             .combinedClickable(
                 enabled = enabled,
                 role = Role.Button,

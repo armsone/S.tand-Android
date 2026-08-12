@@ -29,6 +29,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.unit.dp
 import com.armsone.stand.model.InternetRadioConfiguration
 
@@ -42,6 +43,7 @@ fun InternetRadioScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val clipboardManager = LocalClipboardManager.current
     var name by remember(configuration, initialUrl) {
         mutableStateOf(configuration?.displayName.orEmpty())
     }
@@ -95,6 +97,17 @@ fun InternetRadioScreen(
                 supportingText = error?.let { message -> { Text(message) } },
                 shape = RoundedCornerShape(16.dp),
             )
+            OutlinedButton(
+                onClick = {
+                    clipboardManager.getText()?.text?.let { pasted ->
+                        url = pasted.take(2_048)
+                        error = null
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("복사한 주소 붙여넣기")
+            }
             OutlinedButton(
                 onClick = onOpenBrowser,
                 modifier = Modifier.fillMaxWidth(),

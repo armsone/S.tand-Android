@@ -117,7 +117,6 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
     private var lampJob: Job? = null
     private var brightnessTapJob: Job? = null
     private var brightnessEndpointLockJob: Job? = null
-    private var controlsJob: Job? = null
     private var modeTransitionJob: Job? = null
     private var ambientCameraSamplingJob: Job? = null
 
@@ -297,7 +296,6 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
         lampJob?.cancel()
         brightnessTapJob?.cancel()
         brightnessEndpointLockJob?.cancel()
-        controlsJob?.cancel()
         modeTransitionJob?.cancel()
         ambientCameraSamplingJob?.cancel()
         ambientCamera.cancel()
@@ -364,7 +362,7 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
             it.copy(
                 isSessionActive = true,
                 batteryProtectionActive = false,
-                controlsVisible = false,
+                controlsVisible = true,
             )
         }
         if (foreground.get()) {
@@ -383,7 +381,6 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
         lampJob?.cancel()
         brightnessTapJob?.cancel()
         brightnessEndpointLockJob?.cancel()
-        controlsJob?.cancel()
         modeTransitionJob?.cancel()
         movementTriggeredLamp = false
         brightnessAdjustmentActive = false
@@ -435,11 +432,7 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
         brightnessPreference = adjustment.preference
         applyBrightnessPreview(adjustment.level, adjustment.preference)
 
-        val endpointPreference = when (adjustment.level) {
-            0f -> StandModePreference.MATE
-            1f -> StandModePreference.OBJECT
-            else -> null
-        }
+        val endpointPreference = StandModePreference.OBJECT.takeIf { adjustment.level == 1f }
         if (endpointPreference == null || adjustment.preference == endpointPreference) {
             brightnessEndpointLockJob?.cancel()
             brightnessEndpointLockJob = null
@@ -528,18 +521,6 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun revealControls() {
-        if (!mutableUiState.value.isSessionActive) return
-        controlsJob?.cancel()
-        mutableUiState.update { it.copy(controlsVisible = true) }
-        controlsJob = viewModelScope.launch {
-            delay(CONTROLS_HIDE_DELAY_MILLIS)
-            mutableUiState.update { current ->
-                if (current.isSessionActive) current.copy(controlsVisible = false) else current
-            }
-        }
-    }
-
     fun toggleTheme() {
         settingsRepository.update { current ->
             current.copy(displayTheme = current.displayTheme.next())
@@ -557,6 +538,12 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
 
     fun updateInternetRadioVolume(level: Float) {
         internetRadioPlayer.updateVolume(level)
+    }
+
+    fun updateClockScale(scale: Float) {
+        settingsRepository.update { current ->
+            current.copy(clockScale = com.armsone.stand.model.HomeClockScalePolicy.clamped(scale))
+        }
     }
 
     fun toggleInternetRadio(channelID: String) {
@@ -846,6 +833,24 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun deleteAllRecordings() {
+        runRecordingOperation {
+            val before = recordingRepository.recordings.value
+            val succeeded = recordingRepository.deleteAll()
+            val deletedFiles = before.map(RecordingClip::file).filterNot { it.exists() }
+            if (deletedFiles.isNotEmpty()) {
+                runCatching { recordingSessionStore.removeReferences(deletedFiles) }
+            }
+            val remaining = recordingRepository.reload()
+            refreshRecordingSessionGroups(remaining)
+            if (succeeded && remaining.isEmpty()) {
+                "저장된 수면 소리를 모두 삭제했습니다."
+            } else {
+                "일부 녹음을 삭제하지 못했습니다."
+            }
+        }
+    }
+
     fun mergeRecordings(clips: List<RecordingClip>, deleteSources: Boolean) {
         mergeRecordingsInternal(
             clips = clips,
@@ -1065,7 +1070,6 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
         if (batteryProtectionLatched && !mutableUiState.value.isSessionActive) return
         batteryProtectionLatched = true
         lampJob?.cancel()
-        controlsJob?.cancel()
         modeTransitionJob?.cancel()
         ambientCameraSamplingJob?.cancel()
         movementTriggeredLamp = false
@@ -1377,6 +1381,10 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
         val maximumLevel = LampTorchLightingPolicy.maximumLevel(
             torchEnabled = state.settings.torchEnabled,
             isMovementTriggered = movementTriggeredLamp,
+            roomIsDark = AmbientCameraModePolicy.isRecentlyDark(
+                ambientCamera.reading.value,
+                SystemClock.elapsedRealtimeNanos(),
+            ),
             environmentMode = state.environmentMode,
         )
         if (maximumLevel <= 0.0) {
@@ -1429,7 +1437,6 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
         lampJob?.cancel()
         brightnessTapJob?.cancel()
         brightnessEndpointLockJob?.cancel()
-        controlsJob?.cancel()
         modeTransitionJob?.cancel()
         audioMonitor.close()
         sensorMonitor.close()
@@ -1449,10 +1456,9 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
     )
 
     companion object {
-        private const val CONTROLS_HIDE_DELAY_MILLIS = 8_000L
         private const val LAMP_FRAME_MILLIS = 50L
         private const val TAP_BRIGHTNESS_FRAME_MILLIS = 50L
         private const val MANUAL_DIM_DURATION_MILLIS = 1_500f
-        private const val AMBIENT_CAMERA_SAMPLE_INTERVAL_MILLIS = 30_000L
+        private const val AMBIENT_CAMERA_SAMPLE_INTERVAL_MILLIS = 45_000L
     }
 }

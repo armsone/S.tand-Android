@@ -28,7 +28,12 @@ class SettingsRepository(context: Context) {
 
     fun update(transform: (AppSettings) -> AppSettings) {
         mutableSettings.update { current ->
-            transform(current).normalized().also(::persist)
+            transform(current).normalized().also { updated ->
+                persist(
+                    updated,
+                    preservedUnreadableStrings = unreadableStringPayloads(current, updated),
+                )
+            }
         }
     }
 
@@ -45,17 +50,42 @@ class SettingsRepository(context: Context) {
         return CurrentExperienceMigration.apply(loaded).also { migrated ->
             persist(
                 migrated,
-                preservedUnreadableLayouts = unreadableLayoutPayloads(),
+                preservedUnreadableStrings = unreadableStringPayloads(loaded, migrated),
             )
             preferences.edit { putBoolean(CURRENT_EXPERIENCE_MIGRATION_KEY, true) }
         }
     }
 
-    private fun unreadableLayoutPayloads(): Map<String, String> = buildMap {
-        listOf(PORTRAIT_LAYOUT_KEY, LANDSCAPE_LAYOUT_KEY).forEach { key ->
-            val raw = stringValue(key)
-            if (!raw.isNullOrBlank() && !ScreenLayoutCodec.isDecodable(raw)) put(key, raw)
-        }
+    private fun unreadableStringPayloads(
+        before: AppSettings,
+        after: AppSettings,
+    ): Map<String, String> = buildMap {
+        preserveUnreadableLayout(PORTRAIT_LAYOUT_KEY, before.portraitLayout == after.portraitLayout)
+        preserveUnreadableLayout(LANDSCAPE_LAYOUT_KEY, before.landscapeLayout == after.landscapeLayout)
+        preserveUnknownEnum<ClockFontChoice>(CLOCK_FONT_KEY, before.clockFont == after.clockFont)
+        preserveUnknownEnum<ClockHourMode>(CLOCK_HOUR_MODE_KEY, before.clockHourMode == after.clockHourMode)
+        preserveUnknownEnum<StandDisplayTheme>(DISPLAY_THEME_KEY, before.displayTheme == after.displayTheme)
+        preserveUnknownEnum<OrientationPreference>(ORIENTATION_KEY,
+            before.orientationPreference == after.orientationPreference,
+        )
+        preserveUnknownEnum<StandModePreference>(MODE_PREFERENCE_KEY,
+            before.modePreference == after.modePreference,
+        )
+    }
+
+    private fun MutableMap<String, String>.preserveUnreadableLayout(key: String, unchanged: Boolean) {
+        if (!unchanged) return
+        val raw = stringValue(key)
+        if (!raw.isNullOrBlank() && !ScreenLayoutCodec.isDecodable(raw)) put(key, raw)
+    }
+
+    private inline fun <reified T : Enum<T>> MutableMap<String, String>.preserveUnknownEnum(
+        key: String,
+        unchanged: Boolean,
+    ) {
+        if (!unchanged) return
+        val raw = stringValue(key) ?: return
+        if (enumValues<T>().none { it.name == raw }) put(key, raw)
     }
 
     private fun load(): AppSettings {
@@ -153,28 +183,28 @@ class SettingsRepository(context: Context) {
 
     private fun persist(
         value: AppSettings,
-        preservedUnreadableLayouts: Map<String, String> = emptyMap(),
+        preservedUnreadableStrings: Map<String, String> = emptyMap(),
     ) {
         preferences.edit {
             putFloat("lampIntensity", value.lampIntensity)
             putFloat("silhouetteIntensity", value.silhouetteIntensity)
             putFloat("clockScale", value.clockScale)
-            putString("clockFont", value.clockFont.name)
-            putString("clockHourMode", value.clockHourMode.name)
-            putString("displayTheme", value.displayTheme.name)
+            putString(CLOCK_FONT_KEY, value.clockFont.name)
+            putString(CLOCK_HOUR_MODE_KEY, value.clockHourMode.name)
+            putString(DISPLAY_THEME_KEY, value.displayTheme.name)
             putString(PORTRAIT_LAYOUT_KEY, ScreenLayoutCodec.encode(value.portraitLayout))
             putString(LANDSCAPE_LAYOUT_KEY, ScreenLayoutCodec.encode(value.landscapeLayout))
-            preservedUnreadableLayouts.forEach(::putString)
+            preservedUnreadableStrings.forEach(::putString)
             putFloat("brightnessModeThreshold", value.brightnessModeThreshold)
             putFloat("holdDurationSeconds", value.holdDurationSeconds)
             putFloat("fadeDurationSeconds", value.fadeDurationSeconds)
             putBoolean("automaticDimmingEnabled", value.automaticDimmingEnabled)
             putFloat("soundThresholdDB", value.soundThresholdDB)
             putBoolean("recordingEnabled", value.recordingEnabled)
-            putString("orientationPreference", value.orientationPreference.name)
+            putString(ORIENTATION_KEY, value.orientationPreference.name)
             putBoolean("torchEnabled", value.torchEnabled)
             putBoolean("multiStimulusWakeEnabled", value.multiStimulusWakeEnabled)
-            putString("modePreference", value.modePreference.name)
+            putString(MODE_PREFERENCE_KEY, value.modePreference.name)
             putBoolean("ambientSensingEnabled", value.ambientSensingEnabled)
             putBoolean("cameraAmbientSensingEnabled", value.cameraAmbientSensingEnabled)
             putBoolean("soundSensingEnabled", value.soundSensingEnabled)
@@ -210,6 +240,11 @@ class SettingsRepository(context: Context) {
     private companion object {
         const val PORTRAIT_LAYOUT_KEY = "portraitLayout"
         const val LANDSCAPE_LAYOUT_KEY = "landscapeLayout"
+        const val CLOCK_FONT_KEY = "clockFont"
+        const val CLOCK_HOUR_MODE_KEY = "clockHourMode"
+        const val DISPLAY_THEME_KEY = "displayTheme"
+        const val ORIENTATION_KEY = "orientationPreference"
+        const val MODE_PREFERENCE_KEY = "modePreference"
         const val RADIO_NAME_KEY = "internetRadioName"
         const val RADIO_URL_KEY = "internetRadioUrl"
         const val RADIO_ID_PREFIX = "internetRadioId."
