@@ -3,6 +3,7 @@ package com.armsone.stand.update
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
+import android.util.Log
 import java.io.Closeable
 import java.io.File
 import java.io.IOException
@@ -73,6 +74,11 @@ class GitHubAppUpdateService(
             mutableState.value = result.fold(
                 onSuccess = { AppUpdateState.Ready(release, it) },
                 onFailure = {
+                    Log.w(
+                        LOG_TAG,
+                        "GitHub update download or verification failed: ${it.message}",
+                        it,
+                    )
                     AppUpdateState.Available(
                         release = release,
                         message = "업데이트를 받지 못했습니다. 인터넷 연결을 확인해 주세요.",
@@ -145,9 +151,7 @@ class GitHubAppUpdateService(
             if (total <= 0L || (release.assetSizeBytes > 0L && total != release.assetSizeBytes)) {
                 throw IOException("APK size does not match the release")
             }
-            if (!verifyDownloadedApk(partial, release.versionCode)) {
-                throw IOException("APK identity or signature does not match S.tand")
-            }
+            verifyDownloadedApk(partial, release.versionCode)
             destination.delete()
             if (!partial.renameTo(destination)) throw IOException("Cannot finalize APK download")
             return destination
@@ -158,38 +162,42 @@ class GitHubAppUpdateService(
     }
 
     @Suppress("DEPRECATION")
-    private fun verifyDownloadedApk(apkFile: File, expectedVersionCode: Int): Boolean {
+    private fun verifyDownloadedApk(apkFile: File, expectedVersionCode: Int) {
         val packageManager = applicationContext.packageManager
-        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            PackageManager.GET_SIGNING_CERTIFICATES
-        } else {
-            PackageManager.GET_SIGNATURES
+        // GET_SIGNING_CERTIFICATES returns an empty archive signer list on Samsung Android 10.
+        // GET_SIGNATURES remains available from minSdk 26 and returns the actual APK certificate
+        // for both installed and archive packages, which is sufficient while this app uses one
+        // stable signing certificate without rotation.
+        val flags = PackageManager.GET_SIGNATURES
+        val archive = packageManager.getPackageArchiveInfo(apkFile.absolutePath, flags)
+            ?: throw IOException("Android could not parse the downloaded APK")
+        if (archive.packageName != applicationContext.packageName) {
+            throw IOException("Downloaded APK package name does not match S.tand")
         }
-        val archive = packageManager.getPackageArchiveInfo(apkFile.absolutePath, flags) ?: return false
-        if (archive.packageName != applicationContext.packageName) return false
         val archiveVersion = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             archive.longVersionCode
         } else {
             archive.versionCode.toLong()
         }
         if (archiveVersion != expectedVersionCode.toLong() || archiveVersion <= currentVersionCode) {
-            return false
+            throw IOException(
+                "Downloaded APK version $archiveVersion does not match expected $expectedVersionCode",
+            )
         }
         val installed = packageManager.getPackageInfo(applicationContext.packageName, flags)
-        val installedSignatures = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            installed.signingInfo?.apkContentsSigners.orEmpty()
-        } else {
-            installed.signatures.orEmpty()
-        }
-        val archiveSignatures = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            archive.signingInfo?.apkContentsSigners.orEmpty()
-        } else {
-            archive.signatures.orEmpty()
-        }
+        val installedSignatures = installed.signatures.orEmpty()
+        val archiveSignatures = archive.signatures.orEmpty()
         val installedCertificateSet = installedSignatures.map { it.toCharsString() }.toSet()
         val archiveCertificateSet = archiveSignatures.map { it.toCharsString() }.toSet()
-        return installedCertificateSet.isNotEmpty() &&
-            installedCertificateSet == archiveCertificateSet
+        if (installedCertificateSet.isEmpty()) {
+            throw IOException("Android returned no certificate for the installed app")
+        }
+        if (archiveCertificateSet.isEmpty()) {
+            throw IOException("Android returned no certificate for the downloaded APK")
+        }
+        if (installedCertificateSet != archiveCertificateSet) {
+            throw IOException("Downloaded APK certificate does not match the installed app")
+        }
     }
 
     private fun openConnection(url: URL): HttpURLConnection {
@@ -213,6 +221,7 @@ class GitHubAppUpdateService(
         const val NETWORK_TIMEOUT_MILLIS = 15_000
         const val MAX_RELEASE_JSON_CHARS = 1_000_000
         const val MAX_APK_BYTES = 200L * 1_024L * 1_024L
+        const val LOG_TAG = "S.tandUpdate"
     }
 }
 

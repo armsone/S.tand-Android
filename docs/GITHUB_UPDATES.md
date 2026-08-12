@@ -26,6 +26,8 @@ S.tand Android는 Google Play 대신 GitHub Release의 APK를 확인한다. 단�
 
 Android 10도 APK를 검사할 수 있도록 다운로드 중인 임시 파일명은 `.partial.apk`로 끝나야 한다.
 `.apk.part`는 최신 Android에서는 열리지만 Android 10 PackageManager가 APK로 인식하지 않는다.
+또한 Samsung Android 10은 archive의 `GET_SIGNING_CERTIFICATES` 결과를 비워 반환하므로, minSdk 26
+전체에서 제공되는 `GET_SIGNATURES`로 설치본과 archive의 단일 인증서 전체 일치를 확인한다.
 
 ## 서명 보관
 
