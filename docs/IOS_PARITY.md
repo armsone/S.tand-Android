@@ -96,7 +96,7 @@ UI 검증은 보류했다.
 | 설정 복구·마이그레이션 | **부분 구현** | 레거시/기본값·payload decodability 테스트 통과 | 해당 없음 | 업데이트 시나리오 대기 | 최초 migration에서 디코딩 불가 layout 원본을 보존하고 실제 설정 변경 때 대체. 실제 과거 APK 업데이트 검증 대기 |
 | 수명주기·배터리·개인정보 | 부분 구현 | 수명주기·배터리 정책과 file timestamp 우선/fallback 통과 | 대기 | 최신 소스 대기 | 백업 제외, 실제 권한·로컬 저장·외부 전송과 file timestamp 근거 문서화. Play Console 제출·네트워크 관찰 대기 |
 | 접근성·큰 글자 | **부분 구현** | 직접 JVM 대상 아님 | 계측 대기 | TalkBack/큰 글자 대기 | 편집 패널 5% 이동/10% 크기 custom action과 홈 조명 adjustable/custom action 구현. 동적 글자 브라우저 배치와 실제 TalkBack 검증 대기 |
-| GitHub 업데이트 | Android 전용 구현 | 태그·저장소·자산 정책 통과 | 안내 화면 계측 통과 | 폴더블 28→29 실제 업데이트 성공. 태블릿 Android 10 임시 파일 확장자 차이 수정 | iOS에는 없는 Android 배포 방식. APK package/version/현재 서명 검증 후 Android 설치 화면 사용 |
+| GitHub 업데이트 | Android 전용 구현 | 태그·저장소·자산 정책 통과 | 안내 화면 계측 통과 | 폴더블·태블릿 30→32 원터치 업데이트·실행·녹음 유지 확인 | iOS에는 없는 Android 배포 방식. APK package/version/현재 서명 검증 후 Android 설치 화면 사용 |
 
 ## 구현 누락
 
@@ -151,3 +151,6 @@ UI 검증은 보류했다.
 - 로컬 JVM 테스트·`assembleDebug`·`lintDebug` 성공.
 - 계측 테스트 7개를 `SM-T500`과 `SM-F968N`에서 각각 실행해 실패 0을 확인했다.
 - 두 기기에 같은 APK를 데이터 유지 설치하고 versionCode 28과 MainActivity 실행을 확인했다.
+- GitHub `android-v32` Release를 공개하고, `SM-F968N`과 Android 10 `SM-T500`의 versionCode 30
+  설치본에서 업데이트 안내→다운로드→서명 검사→설치를 진행해 versionCode 32와 기존 녹음 파일
+  유지를 확인했다. 최초 사용자는 Android의 `이 출처 허용`을 한 번 켜야 한다.
