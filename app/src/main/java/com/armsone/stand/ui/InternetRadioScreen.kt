@@ -143,8 +143,8 @@ fun InternetRadioScreen(
     if (confirmsDeletion) {
         AlertDialog(
             onDismissRequest = { confirmsDeletion = false },
-            title = { Text("라디오 채널을 삭제할까요?") },
-            text = { Text("홈의 라디오 패널에서도 이 채널이 제거됩니다.") },
+            title = { Text("${configuration?.displayName.orEmpty()}을 삭제할까요?") },
+            text = { Text("삭제한 채널 주소는 되돌릴 수 없습니다.") },
             confirmButton = {
                 Button(
                     onClick = {
@@ -152,7 +152,7 @@ fun InternetRadioScreen(
                         onDelete()
                         onBack()
                     },
-                ) { Text("삭제") }
+                ) { Text("채널 삭제") }
             },
             dismissButton = {
                 OutlinedButton(onClick = { confirmsDeletion = false }) { Text("취소") }

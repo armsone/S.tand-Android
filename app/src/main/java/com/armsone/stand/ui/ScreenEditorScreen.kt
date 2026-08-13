@@ -112,6 +112,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import com.armsone.stand.model.FloatOffset
+import com.armsone.stand.model.FloatInsets
 import com.armsone.stand.model.FloatRect
 import com.armsone.stand.model.FloatSize
 import com.armsone.stand.model.ClockFontChoice
@@ -187,6 +188,16 @@ fun ScreenEditorScreen(
         val visibleIntensity = state.settings.lampIntensity.coerceIn(0.15f, 1f)
         val contentAlpha = (0.28f + visibleIntensity * 0.72f).coerceIn(0.28f, 1f)
         val density = LocalDensity.current
+        val protectedInsets = FloatInsets(
+            top = with(density) { (if (isPortrait) 82.dp else 70.dp).toPx() },
+            bottom = with(density) {
+                when {
+                    showFontPalette && isPortrait -> 230.dp.toPx()
+                    showFontPalette -> 160.dp.toPx()
+                    else -> 100.dp.toPx()
+                }
+            },
+        )
         val backgroundRadiusPx = with(density) {
             hypot(maxWidth.toPx(), maxHeight.toPx()) * 0.75f
         }
@@ -211,6 +222,7 @@ fun ScreenEditorScreen(
             isPortrait = isPortrait,
             isExpanded = expanded,
             contentAlpha = contentAlpha,
+            protectedInsets = protectedInsets,
             selectedPanel = selectedPanel,
             onSelectedPanelChange = { key ->
                 selectedPanel = key
@@ -354,6 +366,7 @@ private fun PanelCanvas(
     isPortrait: Boolean,
     isExpanded: Boolean,
     contentAlpha: Float,
+    protectedInsets: FloatInsets,
     selectedPanel: EditorPanelKey,
     onSelectedPanelChange: (EditorPanelKey) -> Unit,
     onClockClick: () -> Unit,
@@ -413,6 +426,7 @@ private fun PanelCanvas(
                     transform = layout.transformFor(key),
                     canvasSize = canvas,
                     screenScale = state.settings.clockScale,
+                    protectedInsets = protectedInsets,
                     selected = selectedPanel == key,
                     onClick = when {
                         key == EditorPanelKey.Clock -> onClockClick
@@ -544,6 +558,7 @@ private fun PanelCanvas(
                     transform = layout.transformFor(key),
                     canvasSize = canvas,
                     screenScale = state.settings.clockScale,
+                    protectedInsets = protectedInsets,
                     selected = selectedPanel == key,
                     onClick = { onSelectedPanelChange(key) },
                     onGestureSelect = { onSelectedPanelChange(key) },
@@ -594,6 +609,7 @@ private fun BoxScope.EditablePanelNode(
     transform: PanelTransform,
     canvasSize: FloatSize,
     screenScale: Float,
+    protectedInsets: FloatInsets,
     selected: Boolean,
     onClick: () -> Unit,
     onGestureSelect: () -> Unit = onClick,
@@ -611,12 +627,24 @@ private fun BoxScope.EditablePanelNode(
     val transformGestureSession = remember(key) { PanelTransformGestureSession() }
     val safeScreenScale = screenScale.takeIf { it.isFinite() && it > 0f } ?: 1f
 
-    LaunchedEffect(transform) {
-        workingTransform = transform
+    fun clamp(updated: PanelTransform): PanelTransform = PanelEditingPolicy.clampedTransform(
+        transform = updated.copy(scale = PanelEditingPolicy.clampScale(updated.scale)),
+        panelSize = measuredSize,
+        canvasSize = canvasSize,
+        insets = protectedInsets,
+        screenScale = screenScale,
+    )
+
+    LaunchedEffect(transform, measuredSize, canvasSize, protectedInsets, screenScale) {
+        val clamped = clamp(transform)
+        workingTransform = clamped
+        if (clamped != transform && measuredSize.width > 0f && measuredSize.height > 0f) {
+            latestOnTransformChange(clamped)
+        }
     }
 
     fun applyAccessibleTransform(updated: PanelTransform) {
-        val safe = updated.copy(scale = PanelEditingPolicy.clampScale(updated.scale))
+        val safe = clamp(updated)
         workingTransform = safe
         latestOnTransformEnd.value?.invoke(safe) ?: latestOnTransformChange(safe)
     }
@@ -688,7 +716,7 @@ private fun BoxScope.EditablePanelNode(
                         panelSize = measuredSize,
                         canvasSize = canvasSize,
                     )
-                    workingTransform = snapped
+                    workingTransform = clamp(snapped)
                     transformGestureSession.markChanged()
                 }
             }
@@ -772,7 +800,7 @@ private fun BoxScope.EditablePanelNode(
                                 ),
                             ),
                         )
-                        workingTransform = proposed
+                        workingTransform = clamp(proposed)
                     }
                 },
             contentAlignment = Alignment.Center,

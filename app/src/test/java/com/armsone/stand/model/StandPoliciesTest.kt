@@ -7,6 +7,44 @@ import org.junit.Test
 
 class StandPoliciesTest {
     @Test
+    fun startleWaitsForTheFullMinuteAfterMateEntry() {
+        val enteredAt = 1_000L
+
+        assertFalse(StartleActivationPolicy.canActivate(null, enteredAt + 120_000L))
+        assertFalse(StartleActivationPolicy.canActivate(enteredAt, enteredAt + 59_999L))
+        assertTrue(StartleActivationPolicy.canActivate(enteredAt, enteredAt + 60_000L))
+    }
+
+    @Test
+    fun mateEntryDeadlineDoesNotMoveUntilObjectRoundTrip() {
+        val enteredAt = StartleActivationPolicy.entryTimeAfterTransition(
+            previous = EnvironmentDisplayMode.OBJECT,
+            current = EnvironmentDisplayMode.MATE,
+            existingEntryTimeMillis = null,
+            nowMillis = 1_000L,
+        )
+        assertEquals(1_000L, enteredAt)
+        assertEquals(
+            enteredAt,
+            StartleActivationPolicy.entryTimeAfterTransition(
+                previous = EnvironmentDisplayMode.MATE,
+                current = EnvironmentDisplayMode.MATE,
+                existingEntryTimeMillis = enteredAt,
+                nowMillis = 30_000L,
+            ),
+        )
+        assertEquals(
+            null,
+            StartleActivationPolicy.entryTimeAfterTransition(
+                previous = EnvironmentDisplayMode.MATE,
+                current = EnvironmentDisplayMode.OBJECT,
+                existingEntryTimeMillis = enteredAt,
+                nowMillis = 31_000L,
+            ),
+        )
+    }
+
+    @Test
     fun homeClockScaleMatchesTheIosPinchRange() {
         assertEquals(0.7f, HomeClockScalePolicy.scaled(1f, 0.1f), 0f)
         assertEquals(1.35f, HomeClockScalePolicy.scaled(1f, 3f), 0f)

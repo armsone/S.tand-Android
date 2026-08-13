@@ -126,7 +126,7 @@ class MainActivity : ComponentActivity() {
         showPermissionReviewOnThisLaunch = savedInstanceState
             ?.takeIf { state -> state.containsKey(STATE_SHOW_PERMISSION_REVIEW_ON_THIS_LAUNCH) }
             ?.getBoolean(STATE_SHOW_PERMISSION_REVIEW_ON_THIS_LAUNCH)
-            ?: schedulePermissionReviewForLaunch()
+            ?: permissionReviewForCurrentProcess()
         acceptRadioShareDraft(intent)
 
         setContent {
@@ -155,6 +155,11 @@ class MainActivity : ComponentActivity() {
         val hasMicrophonePermission = hasPermission(Manifest.permission.RECORD_AUDIO)
         val hasLocationPermission = hasPermission(Manifest.permission.ACCESS_COARSE_LOCATION)
         val hasCameraPermission = hasPermission(Manifest.permission.CAMERA)
+        if (hasMicrophonePermission && hasLocationPermission && hasCameraPermission) {
+            showPermissionReviewOnThisLaunch = false
+            processPermissionReviewDecision = false
+            clearPermissionReminderSchedule()
+        }
         standViewModel.onAppForeground(
             hasMicrophonePermission = hasMicrophonePermission,
             hasLocationPermission = hasLocationPermission,
@@ -331,7 +336,7 @@ class MainActivity : ComponentActivity() {
                 AppDestination.SETTINGS -> SettingsScreen(
                     state = state,
                     onUpdate = standViewModel::updateSettings,
-                    onToggleMode = standViewModel::onScreenTap,
+                    onModePreferenceSelected = standViewModel::setModePreference,
                     onRestoreRecommended = standViewModel::restoreRecommendedSettings,
                     onToggleInternetRadio = standViewModel::toggleInternetRadio,
                     onSaveInternetRadio = standViewModel::saveInternetRadioChannel,
@@ -575,6 +580,7 @@ class MainActivity : ComponentActivity() {
         val shouldStartSession = startSessionAfterPermissionSequence
         startSessionAfterPermissionSequence = false
         showPermissionReviewOnThisLaunch = false
+        processPermissionReviewDecision = false
         if (shouldStartSession && !standViewModel.uiState.value.isSessionActive) {
             standViewModel.toggleNightSession()
         }
@@ -691,6 +697,20 @@ class MainActivity : ComponentActivity() {
             } ?: remove(KEY_LAUNCHES_UNTIL_PERMISSION_REMINDER)
         }.apply()
         return decision.shouldShow
+    }
+
+    private fun permissionReviewForCurrentProcess(): Boolean {
+        processPermissionReviewDecision?.let { decision -> return decision }
+        return schedulePermissionReviewForLaunch().also { decision ->
+            processPermissionReviewDecision = decision
+        }
+    }
+
+    private fun clearPermissionReminderSchedule() {
+        getSharedPreferences(PERMISSION_REMINDER_PREFERENCES, MODE_PRIVATE)
+            .edit()
+            .remove(KEY_LAUNCHES_UNTIL_PERMISSION_REMINDER)
+            .apply()
     }
 
     private fun syncViewModelPermissions() {
@@ -888,5 +908,6 @@ class MainActivity : ComponentActivity() {
         private const val PERMISSION_REMINDER_PREFERENCES = "permission_reminder"
         private const val KEY_LAUNCHES_UNTIL_PERMISSION_REMINDER =
             "launches_until_permission_reminder"
+        private var processPermissionReviewDecision: Boolean? = null
     }
 }

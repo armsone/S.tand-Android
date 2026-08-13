@@ -47,12 +47,12 @@ import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Cloud
-import androidx.compose.material.icons.filled.FlashlightOn
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.StopCircle
 import androidx.compose.material.icons.filled.Thunderstorm
@@ -355,69 +355,62 @@ private fun StandStartContent(
         modifier = modifier
             .fillMaxWidth()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp, vertical = 12.dp),
+            .padding(horizontal = 22.dp, vertical = 30.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(22.dp),
     ) {
-        Image(
-            painter = painterResource(R.drawable.stand_brand_icon),
+        Icon(
+            imageVector = Icons.Default.Security,
             contentDescription = null,
-            modifier = Modifier.size(64.dp),
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(42.dp),
         )
         Text(
-            text = "시작 전에 권한을 확인할게요",
+            text = "시작하기 전에",
             color = Color.White.copy(alpha = 0.92f),
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center,
         )
         Text(
-            text = "왜 필요한지 먼저 확인한 뒤 한 번에 진행합니다. 허용하지 않아도 앱은 시작되며, 허용한 기능만 작동합니다.",
-            color = Color.White.copy(alpha = 0.62f),
+            text = "S.tand가 필요한 이유를 먼저 알려드릴게요.",
+            color = Color.White.copy(alpha = 0.60f),
             style = MaterialTheme.typography.bodyMedium,
             textAlign = TextAlign.Center,
             modifier = Modifier.widthIn(max = 520.dp),
         )
         Surface(
-            color = Color.White.copy(alpha = 0.08f),
-            shape = RoundedCornerShape(18.dp),
-            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
+            color = Color.White.copy(alpha = 0.07f),
+            shape = RoundedCornerShape(16.dp),
+            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.09f)),
             modifier = Modifier
                 .fillMaxWidth()
-                .widthIn(max = 520.dp),
+                .widthIn(max = 560.dp),
         ) {
             Column(
-                modifier = Modifier.padding(horizontal = 18.dp, vertical = 8.dp),
+                modifier = Modifier.padding(vertical = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 PermissionReasonRow(
-                    icon = Icons.Default.FlashlightOn,
-                    title = "플래시",
-                    reason = "화들짝 모드에서 어두운 방을 잠깐 밝힙니다.",
-                    isGranted = state.hasCameraPermission,
-                )
-                PermissionReasonRow(
                     icon = Icons.Default.CameraAlt,
-                    title = "카메라",
-                    reason = "방 밝기만 측정합니다. 사진·영상은 저장하거나 전송하지 않습니다.",
-                    isGranted = state.hasCameraPermission,
+                    title = "카메라와 플래시",
+                    reason = "방 밝기를 확인하고, 어두울 때 화들짝 모드에서만 잠깐 밝힙니다. 사진·영상은 저장하거나 전송하지 않습니다.",
                 )
                 PermissionReasonRow(
                     icon = Icons.Default.Mic,
                     title = "마이크",
-                    reason = "잠꼬대·코골이를 감지하고 필요한 소리를 기기에만 저장합니다.",
-                    isGranted = state.hasMicrophonePermission,
+                    reason = "잠꼬대·코골이를 감지하고 필요한 소리만 이 기기에 저장합니다.",
                 )
                 PermissionReasonRow(
                     icon = Icons.Default.LocationOn,
                     title = "위치 정보",
-                    reason = "대략적인 위치로 현재 날씨를 찾습니다. 정확한 위치는 요청하지 않습니다.",
-                    isGranted = state.hasApproximateLocationPermission,
+                    reason = "현재 날씨에만 사용하며 가능한 최소 정확도와 필요한 범위만 요청합니다.",
                 )
             }
         }
         Text(
-            text = "플래시와 카메라는 Android의 같은 카메라 권한을 사용합니다. 버튼을 누르면 필요한 권한창만 차례로 표시됩니다.",
-            color = Color.White.copy(alpha = 0.52f),
+            text = "허용하지 않아도 앱은 시작됩니다. 허용한 기능만 작동합니다.",
+            color = Color.White.copy(alpha = 0.58f),
             style = MaterialTheme.typography.bodySmall,
             textAlign = TextAlign.Center,
             modifier = Modifier.widthIn(max = 520.dp),
@@ -511,49 +504,43 @@ private fun PermissionReasonRow(
     icon: ImageVector,
     title: String,
     reason: String,
-    isGranted: Boolean,
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 9.dp),
+            .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = Color.White.copy(alpha = 0.84f),
-            modifier = Modifier.size(21.dp),
-        )
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .background(
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.13f),
+                    RoundedCornerShape(10.dp),
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(18.dp),
+            )
+        }
         Column(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Text(
-                    text = title,
-                    color = Color.White.copy(alpha = 0.92f),
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Text(
-                    text = if (isGranted) "허용됨" else "확인 필요",
-                    color = if (isGranted) {
-                        Color(0xFF9FD6A8)
-                    } else {
-                        Color.White.copy(alpha = 0.48f)
-                    },
-                    style = MaterialTheme.typography.labelSmall,
-                )
-            }
+            Text(
+                text = title,
+                color = Color.White.copy(alpha = 0.92f),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+            )
             Text(
                 text = reason,
-                color = Color.White.copy(alpha = 0.60f),
+                color = Color.White.copy(alpha = 0.72f),
                 style = MaterialTheme.typography.bodySmall,
             )
         }

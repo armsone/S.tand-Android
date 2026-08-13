@@ -10,10 +10,10 @@ enum class SettingsSectionKind {
 
 object SettingsInformationArchitecture {
     val CardOrder: List<SettingsSectionKind> = listOf(
-        SettingsSectionKind.INTERNET_RADIO,
         SettingsSectionKind.SCREEN_AND_CLOCK,
         SettingsSectionKind.PERMISSIONS,
         SettingsSectionKind.SLEEP_SOUNDS,
         SettingsSectionKind.INFORMATION,
+        SettingsSectionKind.INTERNET_RADIO,
     )
 }

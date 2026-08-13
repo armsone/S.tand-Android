@@ -109,6 +109,27 @@ object SleepCareMonitoringPolicy {
     ): Boolean = isSessionActive && environmentMode == EnvironmentDisplayMode.MATE
 }
 
+object StartleActivationPolicy {
+    const val DELAY_MILLIS = 60_000L
+
+    fun canActivate(
+        mateModeEnteredAtMillis: Long?,
+        nowMillis: Long,
+    ): Boolean = mateModeEnteredAtMillis != null &&
+        nowMillis - mateModeEnteredAtMillis >= DELAY_MILLIS
+
+    fun entryTimeAfterTransition(
+        previous: EnvironmentDisplayMode,
+        current: EnvironmentDisplayMode,
+        existingEntryTimeMillis: Long?,
+        nowMillis: Long,
+    ): Long? = when {
+        previous == current -> existingEntryTimeMillis
+        current == EnvironmentDisplayMode.MATE -> nowMillis
+        else -> null
+    }
+}
+
 object SleepMovementLightingPolicy {
     fun torchLevel(
         torchEnabled: Boolean,

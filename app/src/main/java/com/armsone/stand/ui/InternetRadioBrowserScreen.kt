@@ -28,6 +28,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -37,6 +38,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -172,89 +174,135 @@ fun InternetRadioBrowserScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
+    val navigationButton: @Composable () -> Unit = {
+        BrowserToolbarButton(
+            icon = if (popupReturnAddress != null) {
+                Icons.Default.Close
+            } else {
+                Icons.AutoMirrored.Filled.ArrowBack
+            },
+            label = if (popupReturnAddress != null) "팝업 닫기" else "이전 페이지",
+            enabled = popupReturnAddress != null || canGoBack,
+            onClick = ::handleBackOrClose,
+            onLongClick = ::pauseAndClose,
+        )
+    }
+    val addressField: @Composable (Modifier) -> Unit = { fieldModifier ->
+        OutlinedTextField(
+            value = addressText,
+            onValueChange = {
+                addressText = it.take(InternetRadioBrowserPolicy.MAXIMUM_ADDRESS_LENGTH)
+                errorMessage = null
+            },
+            modifier = fieldModifier
+                .widthIn(min = 88.dp)
+                .heightIn(min = 56.dp)
+                .onFocusChanged { addressFieldIsFocused = it.isFocused },
+            placeholder = { Text("웹 주소 입력", maxLines = 1) },
+            singleLine = true,
+            shape = RoundedCornerShape(24.dp),
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Uri,
+                imeAction = ImeAction.Go,
+            ),
+            keyboardActions = KeyboardActions(onGo = { loadSecureAddress(addressText) }),
+        )
+    }
+    val primaryButton: @Composable () -> Unit = {
+        BrowserToolbarButton(
+            icon = if (isLoading) Icons.Default.Stop else Icons.Default.Search,
+            label = if (isLoading) "로딩 중지" else "주소로 이동",
+            primary = true,
+            onClick = {
+                if (isLoading) {
+                    webView?.stopLoading()
+                    isLoading = false
+                    loadProgress = 0f
+                } else {
+                    loadSecureAddress(addressText)
+                }
+            },
+            onLongClick = {
+                val copiedAddress = clipboard.getText()?.text?.trim().orEmpty()
+                if (copiedAddress.isEmpty()) {
+                    errorMessage = "복사한 웹 주소가 없습니다."
+                } else {
+                    addressText = copiedAddress.take(InternetRadioBrowserPolicy.MAXIMUM_ADDRESS_LENGTH)
+                    loadSecureAddress(addressText)
+                }
+            },
+        )
+    }
+    val refreshButton: @Composable () -> Unit = {
+        BrowserToolbarButton(
+            icon = Icons.Default.Refresh,
+            label = "새로고침",
+            enabled = webView?.url != null,
+            onClick = {
+                errorMessage = null
+                webView?.reload()
+            },
+        )
+    }
+    val favoriteButton: @Composable () -> Unit = {
+        BrowserToolbarButton(
+            icon = if (showsFavorites) Icons.Default.Star else Icons.Outlined.StarOutline,
+            label = if (showsFavorites) "즐겨찾기 닫기" else "즐겨찾기 열기",
+            selected = showsFavorites,
+            onClick = { showsFavorites = !showsFavorites },
+        )
+    }
+    val closeButton: @Composable () -> Unit = {
+        BrowserToolbarButton(
+            icon = Icons.Default.Close,
+            label = "브라우저 닫기",
+            onClick = ::pauseAndClose,
+        )
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
             .background(BrowserBackground),
     ) {
-        Row(
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 12.dp, vertical = 9.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(7.dp),
         ) {
-            BrowserToolbarButton(
-                icon = if (popupReturnAddress != null || !canGoBack) {
-                    Icons.Default.Close
-                } else {
-                    Icons.AutoMirrored.Filled.ArrowBack
-                },
-                label = when {
-                    popupReturnAddress != null -> "팝업 닫기"
-                    canGoBack -> "이전 페이지"
-                    else -> "브라우저 닫기"
-                },
-                onClick = ::handleBackOrClose,
-                onLongClick = ::pauseAndClose,
-            )
-            OutlinedTextField(
-                value = addressText,
-                onValueChange = {
-                    addressText = it.take(InternetRadioBrowserPolicy.MAXIMUM_ADDRESS_LENGTH)
-                    errorMessage = null
-                },
-                modifier = Modifier
-                    .weight(1f)
-                    .heightIn(min = 56.dp)
-                    .onFocusChanged { addressFieldIsFocused = it.isFocused },
-                placeholder = { Text("웹 주소 입력", maxLines = 1) },
-                singleLine = true,
-                shape = RoundedCornerShape(24.dp),
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Uri,
-                    imeAction = ImeAction.Go,
-                ),
-                keyboardActions = KeyboardActions(onGo = { loadSecureAddress(addressText) }),
-            )
-            BrowserToolbarButton(
-                icon = if (isLoading) Icons.Default.Stop else Icons.Default.Search,
-                label = if (isLoading) "로딩 중지" else "주소로 이동",
-                primary = true,
-                onClick = {
-                    if (isLoading) {
-                        webView?.stopLoading()
-                        isLoading = false
-                        loadProgress = 0f
-                    } else {
-                        loadSecureAddress(addressText)
+            if (maxWidth >= 600.dp) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(7.dp),
+                ) {
+                    navigationButton()
+                    addressField(Modifier.weight(1f))
+                    primaryButton()
+                    refreshButton()
+                    favoriteButton()
+                    closeButton()
+                }
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(7.dp),
+                    ) {
+                        navigationButton()
+                        addressField(Modifier.weight(1f))
+                        primaryButton()
                     }
-                },
-                onLongClick = {
-                    val copiedAddress = clipboard.getText()?.text?.trim().orEmpty()
-                    if (copiedAddress.isEmpty()) {
-                        errorMessage = "복사한 웹 주소가 없습니다."
-                    } else {
-                        addressText = copiedAddress.take(InternetRadioBrowserPolicy.MAXIMUM_ADDRESS_LENGTH)
-                        loadSecureAddress(addressText)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(7.dp, Alignment.End),
+                    ) {
+                        refreshButton()
+                        favoriteButton()
+                        closeButton()
                     }
-                },
-            )
-            BrowserToolbarButton(
-                icon = Icons.Default.Refresh,
-                label = "새로고침",
-                enabled = webView?.url != null,
-                onClick = {
-                    errorMessage = null
-                    webView?.reload()
-                },
-            )
-            BrowserToolbarButton(
-                icon = if (showsFavorites) Icons.Default.Star else Icons.Outlined.StarOutline,
-                label = if (showsFavorites) "즐겨찾기 닫기" else "즐겨찾기 열기",
-                selected = showsFavorites,
-                onClick = { showsFavorites = !showsFavorites },
-            )
+                }
+            }
         }
 
         if (isLoading) {

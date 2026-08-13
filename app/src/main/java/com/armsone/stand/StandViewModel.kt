@@ -22,6 +22,7 @@ import com.armsone.stand.model.SimplifiedBrightnessModePolicy
 import com.armsone.stand.model.StandDisplayTheme
 import com.armsone.stand.model.StandExperienceMode
 import com.armsone.stand.model.StandModePreference
+import com.armsone.stand.model.StartleActivationPolicy
 import com.armsone.stand.model.SleepCareMonitoringPolicy
 import com.armsone.stand.model.StandAutomaticDimmingPolicy
 import com.armsone.stand.platform.AmbientLightReading
@@ -107,6 +108,7 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
     private var monitoringPausedForPlayback = false
     private var batteryProtectionLatched = false
     private var movementTriggeredLamp = false
+    private var mateModeEnteredAtElapsedRealtimeMillis: Long? = null
     private var pendingModeTarget: EnvironmentDisplayMode? = null
     private var activeRecordingSessionId: UUID? = null
     private var activeStartleEventId: UUID? = null
@@ -506,6 +508,7 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
             )
         }
         if (previousMode != mode) {
+            recordEnvironmentModeTransition(previousMode, mode)
             syncDeviceSensorMonitoring()
             syncRecordingSessionForDisplayMode()
             syncSleepCareMonitoring()
@@ -762,6 +765,10 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
             StandModePreference.MATE -> StandModePreference.AUTOMATIC
         }
         settingsRepository.update { it.copy(modePreference = next) }
+    }
+
+    fun setModePreference(preference: StandModePreference) {
+        settingsRepository.update { current -> current.copy(modePreference = preference) }
     }
 
     fun toggleTorchEnabled() {
@@ -1173,6 +1180,7 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
                 experienceMode = currentExperience(mode, it.lampPhase),
             )
         }
+        recordEnvironmentModeTransition(previous, mode)
         syncDeviceSensorMonitoring()
         syncRecordingSessionForDisplayMode()
         syncSleepCareMonitoring()
@@ -1184,6 +1192,13 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
     private fun activateLamp(triggeredByMovement: Boolean) {
         val state = mutableUiState.value
         if (!state.isSessionActive || batteryProtectionLatched) return
+        if (triggeredByMovement && !StartleActivationPolicy.canActivate(
+                mateModeEnteredAtMillis = mateModeEnteredAtElapsedRealtimeMillis,
+                nowMillis = SystemClock.elapsedRealtime(),
+            )
+        ) {
+            return
+        }
         lampJob?.cancel()
         if (triggeredByMovement) {
             if (activeRecordingSessionId == null) syncRecordingSessionForDisplayMode()
@@ -1255,6 +1270,18 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
                 delay(LAMP_FRAME_MILLIS)
             }
         }
+    }
+
+    private fun recordEnvironmentModeTransition(
+        previous: EnvironmentDisplayMode,
+        current: EnvironmentDisplayMode,
+    ) {
+        mateModeEnteredAtElapsedRealtimeMillis = StartleActivationPolicy.entryTimeAfterTransition(
+            previous = previous,
+            current = current,
+            existingEntryTimeMillis = mateModeEnteredAtElapsedRealtimeMillis,
+            nowMillis = SystemClock.elapsedRealtime(),
+        )
     }
 
     private fun dimLampNow() {

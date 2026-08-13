@@ -56,6 +56,10 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -96,6 +100,7 @@ import com.armsone.stand.model.ClockVisualPolicy
 import com.armsone.stand.model.SettingsInformationArchitecture
 import com.armsone.stand.model.SettingsSectionKind
 import com.armsone.stand.model.StandDisplayTheme
+import com.armsone.stand.model.StandModePreference
 import com.armsone.stand.platform.AmbientCameraState
 import com.armsone.stand.platform.InternetRadioState
 import com.armsone.stand.ui.components.flipTextSplitMask
@@ -108,7 +113,7 @@ import kotlin.math.roundToInt
 fun SettingsScreen(
     state: StandUiState,
     onUpdate: ((AppSettings) -> AppSettings) -> Unit,
-    onToggleMode: () -> Unit,
+    onModePreferenceSelected: (StandModePreference) -> Unit,
     onRestoreRecommended: () -> Unit,
     onToggleInternetRadio: (String) -> Unit,
     onSaveInternetRadio: (String?, String, String) -> String?,
@@ -186,15 +191,15 @@ fun SettingsScreen(
                 columns = GridCells.Fixed(columnCount),
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 16.dp),
+                    .padding(horizontal = if (maxWidth >= 720.dp) 24.dp else 14.dp),
                 contentPadding = WindowInsets.safeDrawing.asPaddingValues(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     SettingsHero(
                         state = state,
-                        onToggleMode = onToggleMode,
+                        onModePreferenceSelected = onModePreferenceSelected,
                     )
                 }
 
@@ -600,10 +605,14 @@ fun SettingsScreen(
     }
 
     pendingRadioDeletionID?.let { channelID ->
+        val channelName = settings.internetRadioChannels
+            .firstOrNull { it.id == channelID }
+            ?.displayName
+            .orEmpty()
         AlertDialog(
             onDismissRequest = { pendingRadioDeletionID = null },
-            title = { Text("라디오 채널을 삭제할까요?") },
-            text = { Text("홈의 라디오 패널에서도 이 채널이 제거됩니다.") },
+            title = { Text("${channelName}을 삭제할까요?") },
+            text = { Text("삭제한 채널 주소는 되돌릴 수 없습니다.") },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -611,7 +620,7 @@ fun SettingsScreen(
                         editingRadioID = null
                         pendingRadioDeletionID = null
                     },
-                ) { Text("삭제") }
+                ) { Text("채널 삭제") }
             },
             dismissButton = {
                 TextButton(onClick = { pendingRadioDeletionID = null }) { Text("취소") }
@@ -627,22 +636,56 @@ fun SettingsScreen(
 @Composable
 private fun SettingsHero(
     state: StandUiState,
-    onToggleMode: () -> Unit,
+    onModePreferenceSelected: (StandModePreference) -> Unit,
 ) {
     SettingsCard(
         title = "S.tand",
         subtitle = "낮에는 오브제 · 밤에는 매이트",
         icon = Icons.Default.DarkMode,
     ) {
-        TextButton(
-            onClick = onToggleMode,
-            enabled = state.isSessionActive,
-            modifier = Modifier.fillMaxWidth(),
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 44.dp)
+                .semantics(mergeDescendants = true) {
+                    contentDescription = if (state.isSessionActive) {
+                        "현재 상태, ${state.experienceMode.title}"
+                    } else {
+                        "현재 상태, S.tand 멈춤"
+                    }
+                },
+            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+            shape = RoundedCornerShape(14.dp),
         ) {
-            Text(if (state.isSessionActive) state.experienceMode.title else "S.tand 멈춤")
+            Box(
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(if (state.isSessionActive) state.experienceMode.title else "S.tand 멈춤")
+            }
         }
         Text(
-            "현재 모드를 누르면 홈 화면의 원터치처럼 오브제와 매이트를 전환합니다.",
+            "화면 모드 유지",
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+        )
+        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+            StandModePreference.entries.forEachIndexed { index, preference ->
+                SegmentedButton(
+                    selected = state.settings.modePreference == preference,
+                    onClick = { onModePreferenceSelected(preference) },
+                    enabled = state.isSessionActive,
+                    shape = SegmentedButtonDefaults.itemShape(
+                        index = index,
+                        count = StandModePreference.entries.size,
+                    ),
+                ) {
+                    Text(preference.title)
+                }
+            }
+        }
+        Text(
+            "자동 전환 또는 오브제와 매이트 모드 유지를 선택합니다.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

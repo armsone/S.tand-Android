@@ -8,11 +8,11 @@ class SettingsInformationArchitectureTest {
     fun `settings cards follow the current iOS product order`() {
         assertEquals(
             listOf(
-                SettingsSectionKind.INTERNET_RADIO,
                 SettingsSectionKind.SCREEN_AND_CLOCK,
                 SettingsSectionKind.PERMISSIONS,
                 SettingsSectionKind.SLEEP_SOUNDS,
                 SettingsSectionKind.INFORMATION,
+                SettingsSectionKind.INTERNET_RADIO,
             ),
             SettingsInformationArchitecture.CardOrder,
         )
