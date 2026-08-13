@@ -5,13 +5,13 @@ S.tand iOS 앱을 Android에 맞게 옮기는 Kotlin·Jetpack Compose 프로젝�
 ## 현재 기준
 
 - Android 앱 버전: `0.0.1`
-- 사용자용 빌드 표기: `0.0.26`
-- Android `versionCode`: `26`
+- 사용자용 빌드 표기: `0.0.37`
+- Android `versionCode`: `37`
 - applicationId: `com.armsone.stand`
 - 최소 SDK: 26
 - 대상/컴파일 SDK: 37
 - UI: 단일 Activity + Jetpack Compose
-- iOS 읽기 전용 기준: 형제 저장소 `../S.tand`, commit `5b7c16ba65ec8217ef461c381c763633776b46f6`
+- iOS 읽기 전용 기준: 형제 저장소 `../S.tand`, commit `33711c009b7568779504a73685d616d6ec115db0`
 
 전체 기능 차이와 검증 상태는 [iOS 동등성 문서](docs/IOS_PARITY.md)를 확인하세요. 권한·저장·외부
 전송 근거는 [Android 개인정보·Data Safety 문서](docs/ANDROID_DATA_SAFETY.md)에 기록합니다.

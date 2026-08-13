@@ -187,7 +187,25 @@ fun StandHomeScreen(
         }
         val gradientColors = lampGradientColors(state.settings.displayTheme, visibleIntensity)
 
-        HomeGestureLayer(
+        if (showPermissionReview && !state.isSessionActive && !state.isFaceDown) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.radialGradient(
+                            colors = gradientColors,
+                            radius = backgroundRadiusPx,
+                        ),
+                    ),
+            )
+            StandStartContent(
+                state = state,
+                showPermissionReview = true,
+                onStart = onToggleSession,
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else {
+            HomeGestureLayer(
             state = state,
             onScreenTap = onScreenTap,
             onOpenEditor = onOpenEditor,
@@ -331,6 +349,7 @@ fun StandHomeScreen(
                     modifier = Modifier.align(Alignment.Center),
                 )
             }
+        }
         }
     }
 }

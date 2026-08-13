@@ -8,6 +8,42 @@ import org.junit.Test
 
 class PermissionReminderPolicyTest {
     @Test
+    fun newProcessUsesFreshDecisionInsteadOfRestoredActivityVisibility() {
+        assertTrue(
+            PermissionReminderPolicy.activityVisibility(
+                isFirstActivityInProcess = true,
+                processDecision = true,
+                restoredVisibility = false,
+            ),
+        )
+        assertFalse(
+            PermissionReminderPolicy.activityVisibility(
+                isFirstActivityInProcess = true,
+                processDecision = false,
+                restoredVisibility = true,
+            ),
+        )
+    }
+
+    @Test
+    fun activityRecreationKeepsVisibilityChosenForTheCurrentProcess() {
+        assertFalse(
+            PermissionReminderPolicy.activityVisibility(
+                isFirstActivityInProcess = false,
+                processDecision = true,
+                restoredVisibility = false,
+            ),
+        )
+        assertTrue(
+            PermissionReminderPolicy.activityVisibility(
+                isFirstActivityInProcess = false,
+                processDecision = false,
+                restoredVisibility = true,
+            ),
+        )
+    }
+
+    @Test
     fun firstMissingPermissionLaunchShowsAndSchedulesRandomInterval() {
         val decision = PermissionReminderPolicy.decide(
             hasMissingPermission = true,

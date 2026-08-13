@@ -1,7 +1,7 @@
 # Android 개인정보·Data Safety 근거
 
-검토일: 2026-08-12 KST
-소스 기준: versionName `0.0.1`, versionCode `36`, 빌드 `0.0.36`
+검토일: 2026-08-14 KST
+소스 기준: versionName `0.0.1`, versionCode `37`, 빌드 `0.0.37`
 
 이 문서는 Android 소스와 Play Console Data Safety 신고가 어긋나지 않도록 실제 권한, 저장,
 기기 밖 전송 경로를 기록한다. 이 문서 자체가 Play Console 신고를 제출하거나 외부 서비스의
@@ -23,6 +23,8 @@
 권한 순서를 끝낸 뒤 앱은 시작되고, 허용한 기능만 작동한다.
 권한이 하나라도 없으면 최초 확인 때 안내하고, 이후에는 기기에만 저장한 무작위 3~7회 실행 간격으로
 다시 안내한다. 화면 회전이나 같은 실행 중 화면 재진입은 실행 횟수에 중복 산입하지 않는다.
+자동 앱 시작과 일반 기능 갱신은 권한창을 띄우지 않는다. 사용자가 첫 화면의 시작 버튼이나 설정의
+권한 복구 버튼을 직접 누른 경우에만 Android 권한창을 연다.
 
 계정, 광고 SDK, 분석 SDK, 자체 백엔드와 클라우드 업로드는 없다. Manifest의
 `allowBackup=false`, `fullBackupContent=false`와 `data_extraction_rules.xml`은 앱의 파일,

@@ -36,12 +36,10 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.armsone.stand.model.EnvironmentDisplayMode
 import com.armsone.stand.model.LampPhase
 import com.armsone.stand.model.OrientationPreference
 import com.armsone.stand.model.PermissionReminderPolicy
 import com.armsone.stand.model.RadioShareImportPolicy
-import com.armsone.stand.model.StandExperienceMode
 import com.armsone.stand.model.ScreenLayoutCodec
 import com.armsone.stand.model.ClockFontChoice
 import com.armsone.stand.model.ClockHourMode
@@ -54,7 +52,6 @@ import com.armsone.stand.ui.InternetRadioScreen
 import com.armsone.stand.ui.InternetRadioBrowserScreen
 import com.armsone.stand.ui.InternetRadioManagementScreen
 import com.armsone.stand.ui.StandHomeScreen
-import com.armsone.stand.ui.StandUiState
 import com.armsone.stand.ui.theme.STandTheme
 import com.armsone.stand.update.AppUpdateState
 import com.armsone.stand.update.GitHubAppUpdateService
@@ -71,8 +68,6 @@ class MainActivity : ComponentActivity() {
     }
     private var pendingUpdateInstallFile: File? = null
 
-    private var cameraPermissionAttempted = false
-    private var cameraPermissionQueued = false
     private var pendingPermissionRequest: PermissionRequest? = null
     private var startSessionAfterPermissionSequence = false
     private val permissionSequenceRemaining = ArrayDeque<PermissionRequest>()
@@ -94,24 +89,13 @@ class MainActivity : ComponentActivity() {
             standViewModel.onCameraPermissionResult(granted)
         }
 
-        when {
-            completedRequest == PermissionRequest.CAMERA -> cameraPermissionQueued = false
-        }
         if (startSessionAfterPermissionSequence) {
             continuePermissionReviewSequence()
-        } else {
-            launchQueuedCameraPermissionIfNeeded()
         }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        cameraPermissionAttempted = savedInstanceState
-            ?.getBoolean(STATE_CAMERA_PERMISSION_ATTEMPTED)
-            ?: false
-        cameraPermissionQueued = savedInstanceState
-            ?.getBoolean(STATE_CAMERA_PERMISSION_QUEUED)
-            ?: false
         pendingPermissionRequest = savedInstanceState
             ?.getString(STATE_PENDING_PERMISSION)
             ?.let { name -> PermissionRequest.entries.firstOrNull { it.name == name } }
@@ -123,10 +107,16 @@ class MainActivity : ComponentActivity() {
             .orEmpty()
             .mapNotNull { name -> PermissionRequest.entries.firstOrNull { it.name == name } }
             .forEach(permissionSequenceRemaining::addLast)
-        showPermissionReviewOnThisLaunch = savedInstanceState
+        val isFirstActivityInProcess = processPermissionReviewDecision == null
+        val processPermissionReview = permissionReviewForCurrentProcess()
+        val restoredPermissionReview = savedInstanceState
             ?.takeIf { state -> state.containsKey(STATE_SHOW_PERMISSION_REVIEW_ON_THIS_LAUNCH) }
             ?.getBoolean(STATE_SHOW_PERMISSION_REVIEW_ON_THIS_LAUNCH)
-            ?: permissionReviewForCurrentProcess()
+        showPermissionReviewOnThisLaunch = PermissionReminderPolicy.activityVisibility(
+            isFirstActivityInProcess = isFirstActivityInProcess,
+            processDecision = processPermissionReview,
+            restoredVisibility = restoredPermissionReview,
+        )
         acceptRadioShareDraft(intent)
 
         setContent {
@@ -194,8 +184,6 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
-        outState.putBoolean(STATE_CAMERA_PERMISSION_ATTEMPTED, cameraPermissionAttempted)
-        outState.putBoolean(STATE_CAMERA_PERMISSION_QUEUED, cameraPermissionQueued)
         pendingPermissionRequest?.let {
             outState.putString(STATE_PENDING_PERMISSION, it.name)
         }
@@ -278,9 +266,6 @@ class MainActivity : ComponentActivity() {
         }
         LaunchedEffect(state.settings.orientationPreference) {
             applyOrientationPreference(state.settings.orientationPreference)
-        }
-        LaunchedEffect(torchUseRequested(state)) {
-            if (torchUseRequested(state)) requestCameraPermissionForTorch()
         }
         LaunchedEffect(appUpdateState) {
             val ready = appUpdateState as? AppUpdateState.Ready ?: return@LaunchedEffect
@@ -559,9 +544,6 @@ class MainActivity : ComponentActivity() {
         }
 
         startSessionAfterPermissionSequence = true
-        if (permissionSequenceRemaining.contains(PermissionRequest.CAMERA)) {
-            cameraPermissionAttempted = true
-        }
         continuePermissionReviewSequence()
     }
 
@@ -584,36 +566,6 @@ class MainActivity : ComponentActivity() {
         if (shouldStartSession && !standViewModel.uiState.value.isSessionActive) {
             standViewModel.toggleNightSession()
         }
-        launchQueuedCameraPermissionIfNeeded()
-    }
-
-    private fun requestCameraPermissionForTorch() {
-        if (hasPermission(Manifest.permission.CAMERA) || cameraPermissionAttempted) return
-        cameraPermissionAttempted = true
-
-        if (pendingPermissionRequest != null) {
-            cameraPermissionQueued = true
-        } else {
-            launchPermission(
-                request = PermissionRequest.CAMERA,
-                permission = Manifest.permission.CAMERA,
-            )
-        }
-    }
-
-    private fun launchQueuedCameraPermissionIfNeeded() {
-        if (!cameraPermissionQueued) return
-        cameraPermissionQueued = false
-
-        if (hasPermission(Manifest.permission.CAMERA)) return
-        if (!torchUseRequested(standViewModel.uiState.value)) {
-            cameraPermissionAttempted = false
-            return
-        }
-        launchPermission(
-            request = PermissionRequest.CAMERA,
-            permission = Manifest.permission.CAMERA,
-        )
     }
 
     private fun retryPermission(request: PermissionRequest) {
@@ -627,7 +579,6 @@ class MainActivity : ComponentActivity() {
             showToast("진행 중인 권한 요청을 먼저 완료해 주세요.")
             return
         }
-        if (request == PermissionRequest.CAMERA) cameraPermissionAttempted = true
         launchPermission(
             request = request,
             permission = permission,
@@ -638,10 +589,7 @@ class MainActivity : ComponentActivity() {
         request: PermissionRequest,
         permission: String,
     ) {
-        if (pendingPermissionRequest != null) {
-            if (request == PermissionRequest.CAMERA) cameraPermissionQueued = true
-            return
-        }
+        if (pendingPermissionRequest != null) return
 
         pendingPermissionRequest = request
         runCatching { permissionLauncher.launch(permission) }
@@ -650,12 +598,6 @@ class MainActivity : ComponentActivity() {
                 syncViewModelPermissions()
                 if (startSessionAfterPermissionSequence) {
                     continuePermissionReviewSequence()
-                } else when {
-                    request == PermissionRequest.CAMERA -> {
-                        cameraPermissionQueued = false
-                        cameraPermissionAttempted = false
-                    }
-                    else -> launchQueuedCameraPermissionIfNeeded()
                 }
             }
     }
@@ -872,13 +814,6 @@ class MainActivity : ComponentActivity() {
         Build.VERSION.SDK_INT < Build.VERSION_CODES.O ||
             packageManager.canRequestPackageInstalls()
 
-    private fun torchUseRequested(state: StandUiState): Boolean =
-        state.isSessionActive &&
-            state.environmentMode == EnvironmentDisplayMode.MATE &&
-            state.lampPhase != LampPhase.OFF &&
-            (state.settings.torchEnabled ||
-                state.experienceMode == StandExperienceMode.STARTLED)
-
     private enum class AppDestination {
         HOME,
         SETTINGS,
@@ -896,8 +831,6 @@ class MainActivity : ComponentActivity() {
         private const val AI_SHOT_URI = "hanclip://aishot"
         private const val DEFAULT_AUDIO_MIME_TYPE = "audio/*"
         private const val APK_MIME_TYPE = "application/vnd.android.package-archive"
-        private const val STATE_CAMERA_PERMISSION_ATTEMPTED = "camera_permission_attempted"
-        private const val STATE_CAMERA_PERMISSION_QUEUED = "camera_permission_queued"
         private const val STATE_PENDING_PERMISSION = "pending_permission"
         private const val STATE_START_SESSION_AFTER_PERMISSION_SEQUENCE =
             "start_session_after_permission_sequence"

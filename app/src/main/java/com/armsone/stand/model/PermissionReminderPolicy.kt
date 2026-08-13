@@ -9,6 +9,16 @@ object PermissionReminderPolicy {
     const val MINIMUM_LAUNCH_INTERVAL = 3
     const val MAXIMUM_LAUNCH_INTERVAL = 7
 
+    fun activityVisibility(
+        isFirstActivityInProcess: Boolean,
+        processDecision: Boolean,
+        restoredVisibility: Boolean?,
+    ): Boolean = if (isFirstActivityInProcess) {
+        processDecision
+    } else {
+        restoredVisibility ?: processDecision
+    }
+
     fun decide(
         hasMissingPermission: Boolean,
         launchesUntilReminder: Int?,
