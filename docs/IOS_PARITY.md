@@ -181,7 +181,8 @@ UI 검증은 보류했다.
 - Android versionName `0.0.1`, versionCode `36`, 빌드 표기 `0.0.36`.
 - 로컬 JVM 테스트·`assembleDebug`·`lintDebug` 성공.
 - `SM-F968N`과 `SM-T500`에 versionCode 36을 데이터 유지 설치하고 MainActivity 실행과 설치
-  버전을 확인했다. 36번은 아직 GitHub Release로 공개하지 않았다.
+  버전을 확인했다. GitHub `android-v36` Release를 공개하고 APK 이름·크기·SHA-256 digest와
+  기존 v35 APK의 서명 인증서 일치를 확인했다.
 - 홈 날씨 패널 더블 터치 계측 테스트를 `SM-T500`에서 실행해 실패 0을 확인했다.
   `SM-F968N`은 빈 공간 실기기 더블 터치로 테마 변경을 확인했고, 같은 계측 테스트는 테스트 서비스
   미설치로 시작 전에 중단됐다.
