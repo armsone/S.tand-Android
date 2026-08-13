@@ -9,7 +9,7 @@ iOS 기준: `main` / `ab4520ffcd3f1145f3a24a1515a002ee651e5258`
 iOS 버전: `1.0.0 (0.26.0)`
 
 보이소는 이 기준 커밋의 v1 구현을 출발점으로 사용하되, 이후 사용자가 확정한 QR·메시·인터넷
-중계와 `볼사람·말할사람` 표현은 `BOYISO_V2_PROTOCOL.md`를 우선한다.
+중계와 `볼 사람·말할 사람` 표현은 `BOYISO_V2_PROTOCOL.md`를 우선한다.
 
 이 문서는 작업 시작용 요약이다. 구현·검수의 단일 전체 기준은 iOS 저장소의
 `docs/ANDROID_IMPLEMENTATION_HANDOFF.md`이며, Android 실행 명세는

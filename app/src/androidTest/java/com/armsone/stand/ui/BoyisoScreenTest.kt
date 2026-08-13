@@ -12,8 +12,10 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import com.armsone.stand.boyiso.BoyisoConfiguration
+import com.armsone.stand.boyiso.BoyisoDevice
 import com.armsone.stand.boyiso.BoyisoRole
 import com.armsone.stand.boyiso.BoyisoState
+import com.armsone.stand.model.EnvironmentDisplayMode
 import com.armsone.stand.ui.theme.STandTheme
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -50,8 +52,8 @@ class BoyisoScreenTest {
             }
         }
 
-        composeRule.onNodeWithText("볼사람").assertIsDisplayed()
-        composeRule.onNodeWithText("말할사람").assertIsDisplayed()
+        composeRule.onNodeWithText("볼 사람").assertIsDisplayed()
+        composeRule.onNodeWithText("말할 사람").assertIsDisplayed()
         composeRule.onNodeWithText("2. 내 이름").assertIsDisplayed()
         composeRule.onAllNodesWithText("연결 시작").assertCountEquals(0)
         composeRule.onNode(hasClickAction() and hasText("공간 만들기", substring = true)).performClick()
@@ -96,11 +98,95 @@ class BoyisoScreenTest {
         composeRule.onNodeWithText("사람을 기다리고 있습니다.").assertIsDisplayed()
         composeRule.onNodeWithText("우리 공간 QR코드").assertIsDisplayed()
         composeRule.onNodeWithText("QR 사진 보내기", substring = true).performScrollTo().performClick()
-        composeRule.onNodeWithText("같은 공간안에 있는 사람").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("함께 연결된 사람").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("총 1명").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("볼 사람 1명").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("말할 사람 0명").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("아직 없음").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("공간에서 나오기").performScrollTo().performClick()
 
         assertEquals(1, shareCount)
         assertEquals(1, leaveCount)
+    }
+
+    @Test
+    fun connectedPeopleIncludeMeAndSeparateViewerAndSpeakerGroups() {
+        composeRule.setContent {
+            STandTheme {
+                BoyisoScreen(
+                    state = BoyisoState(
+                        localDeviceId = "local",
+                        configuration = BoyisoConfiguration(
+                            role = BoyisoRole.VIEWER,
+                            roomId = "room",
+                            roomKey = "12345678901234567890123456789012",
+                            deviceName = "엄마",
+                        ),
+                        running = true,
+                        devices = listOf(
+                            BoyisoDevice(
+                                id = "viewer",
+                                name = "아빠",
+                                role = BoyisoRole.VIEWER,
+                                batteryPercent = 82,
+                                monitoring = false,
+                                lastSeenMillis = 1L,
+                                displayMode = EnvironmentDisplayMode.MATE,
+                                sessionActive = true,
+                            ),
+                            BoyisoDevice(
+                                id = "speaker",
+                                name = "침실폰",
+                                role = BoyisoRole.SPEAKER,
+                                batteryPercent = 71,
+                                monitoring = true,
+                                lastSeenMillis = 1L,
+                                displayMode = EnvironmentDisplayMode.MATE,
+                                sessionActive = true,
+                            ),
+                            BoyisoDevice(
+                                id = "speaker",
+                                name = "침실폰",
+                                role = BoyisoRole.SPEAKER,
+                                batteryPercent = 71,
+                                monitoring = true,
+                                lastSeenMillis = 2L,
+                                displayMode = EnvironmentDisplayMode.MATE,
+                                sessionActive = true,
+                            ),
+                            BoyisoDevice(
+                                id = "local",
+                                name = "엄마",
+                                role = BoyisoRole.VIEWER,
+                                batteryPercent = 90,
+                                monitoring = false,
+                                lastSeenMillis = 2L,
+                                displayMode = EnvironmentDisplayMode.MATE,
+                                sessionActive = true,
+                            ),
+                        ),
+                    ),
+                    invitationUri = null,
+                    onUpdateConfiguration = {},
+                    onCreateRoom = {},
+                    onScanInvitation = {},
+                    onShareInvitation = {},
+                    onStart = {},
+                    onLeaveRoom = {},
+                    onTokTok = {},
+                    onBack = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("함께 연결된 사람").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("총 3명").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("볼 사람 2명").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("말할 사람 1명").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("엄마").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("나").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("침실폰").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("감지 중").performScrollTo().assertIsDisplayed()
     }
 
     @Test
@@ -111,8 +197,9 @@ class BoyisoScreenTest {
             }
         }
 
-        composeRule.onNodeWithContentDescription("침실폰 기기에서 큰소리가 계속 들립니다")
-            .assertIsDisplayed()
-        composeRule.onNodeWithText("침실폰 기기에서 큰소리가 들려요").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("침실폰, 말할 사람의 소리가 감지되었습니다")
+            .assertExists()
+        composeRule.onNodeWithText("침실폰").assertIsDisplayed()
+        composeRule.onNodeWithText("말할 사람의 소리가 감지되었습니다.").assertIsDisplayed()
     }
 }

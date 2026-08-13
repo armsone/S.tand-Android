@@ -2,18 +2,18 @@ package com.armsone.stand.ui
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
@@ -32,9 +32,9 @@ fun CryingChildAlertOverlay(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(Color(0xFF07142E))
+            .background(Color(0xFFFFF4DA))
             .semantics {
-                contentDescription = "$senderName 기기에서 큰소리가 계속 들립니다"
+                contentDescription = "$senderName, 말할 사람의 소리가 감지되었습니다"
             },
     ) {
         Image(
@@ -43,38 +43,34 @@ fun CryingChildAlertOverlay(
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize(),
         )
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        0f to Color.Transparent,
-                        0.62f to Color.Transparent,
-                        1f to Color.Black.copy(alpha = 0.82f),
-                    ),
-                ),
-        )
-        Column(
+        Surface(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .padding(horizontal = 28.dp, vertical = 34.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+                .padding(horizontal = 22.dp, vertical = 28.dp),
+            shape = RoundedCornerShape(24.dp),
+            color = Color.White.copy(alpha = 0.92f),
+            shadowElevation = 8.dp,
         ) {
-            Text(
-                text = "$senderName 기기에서 큰소리가 들려요",
-                color = Color.White,
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center,
-            )
-            Text(
-                text = "주변을 확인해 주세요",
-                color = Color.White.copy(alpha = 0.82f),
-                style = MaterialTheme.typography.titleMedium,
-                textAlign = TextAlign.Center,
-            )
+            Column(
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(
+                    text = senderName,
+                    color = Color(0xFF80520B),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                )
+                Text(
+                    text = "말할 사람의 소리가 감지되었습니다.",
+                    color = Color(0xFF2E2415),
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                )
+            }
         }
     }
 }

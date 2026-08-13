@@ -4,7 +4,7 @@
 
 iOS 기준: `33711c009b7568779504a73685d616d6ec115db0`, `1.0.0 (0.25.1)`
 
-Android 현재 후보: versionName `0.0.1`, versionCode `44`, 빌드 표기 `0.0.44`
+Android 현재 후보: versionName `0.0.1`, versionCode `45`, 빌드 표기 `0.0.45`
 
 상위 전체 기준은 iOS `docs/ANDROID_IMPLEMENTATION_HANDOFF.md`다. 이 문서는 Android 구현 위치와
 검증 방법을 고정한다. 과거 `0.23.3` 레시피의 누락이나 완료 표시는 사용하지 않는다.

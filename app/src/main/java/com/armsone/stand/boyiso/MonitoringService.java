@@ -377,6 +377,7 @@ public final class MonitoringService extends Service implements LanTransport.Lis
         Intent update = new Intent(ACTION_STATE).setPackage(getPackageName());
         update.putExtra("running", running);
         update.putExtra("role", role);
+        update.putExtra("localSourceId", sourceId);
         update.putExtra("lanCount", lanCount);
         update.putExtra("bleCount", bleCount);
         update.putExtra("internetCount", internetCount);
@@ -450,12 +451,12 @@ public final class MonitoringService extends Service implements LanTransport.Lis
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         String text = override;
         if (text == null) {
-            if (ROLE_GUEST.equals(role)) text = "말할사람 기기에서 소리를 살피는 중";
+            if (ROLE_GUEST.equals(role)) text = "말할 사람 기기에서 소리를 살피는 중";
             else {
                 long speakerCount = sourceLatest.values().stream()
                         .filter(event -> ROLE_GUEST.equals(event.role)).count();
-                text = speakerCount == 0 ? "말할사람 기기 연결을 기다리는 중"
-                        : speakerCount + "대의 말할사람 기기를 살피는 중";
+                text = speakerCount == 0 ? "말할 사람 기기 연결을 기다리는 중"
+                        : speakerCount + "대의 말할 사람 기기를 살피는 중";
             }
         }
         return new Notification.Builder(this, CHANNEL_ID)

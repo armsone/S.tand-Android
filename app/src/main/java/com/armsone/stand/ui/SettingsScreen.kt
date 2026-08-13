@@ -477,7 +477,7 @@ fun SettingsScreen(
 
                     SettingsSectionKind.BOYISO -> SettingsCard(
                         title = "보이소",
-                        subtitle = "볼사람과 말할사람을 QR로 연결합니다.",
+                        subtitle = "볼 사람과 말할 사람을 QR로 연결합니다.",
                         icon = Icons.Default.Pets,
                     ) {
                         Text(
@@ -485,7 +485,7 @@ fun SettingsScreen(
                             fontWeight = FontWeight.SemiBold,
                         )
                         Text(
-                            "한 공간에 볼사람과 말할사람을 여러 대 연결하고 톡톡을 보낼 수 있습니다.",
+                            "한 공간에 볼 사람과 말할 사람을 여러 대 연결하고 톡톡을 보낼 수 있습니다.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )

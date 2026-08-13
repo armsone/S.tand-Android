@@ -150,7 +150,7 @@ class StandHomeScreenTest {
                     onOpenAiShot = {},
                     onOpenSettings = {},
                     onOpenBoyiso = { openCount += 1 },
-                    boyisoStatus = "말할사람",
+                    boyisoStatus = "말할 사람",
                     boyisoCanSendTokTok = true,
                     onSendBoyisoTokTok = { tokTokCount += 1 },
                     onToggleRadio = {},
@@ -159,7 +159,7 @@ class StandHomeScreenTest {
             }
         }
 
-        composeRule.onNodeWithText("말할사람").assertIsDisplayed()
+        composeRule.onNodeWithText("말할 사람").assertIsDisplayed()
         composeRule.onNodeWithText("보이소").performTouchInput { click() }
         composeRule.waitForIdle()
 

@@ -130,7 +130,7 @@ class MainActivity : ComponentActivity() {
             configuration.role == BoyisoRole.SPEAKER &&
             !hasPermission(Manifest.permission.RECORD_AUDIO)
         ) {
-            showToast("말할사람에는 마이크 권한이 필요합니다.")
+            showToast("말할 사람에는 마이크 권한이 필요합니다.")
         } else {
             startBoyiso()
         }
@@ -372,7 +372,7 @@ class MainActivity : ComponentActivity() {
                     cryingChimeSequence = event.timestampMillis
                 }
                 lastCryingEventTimestamp = event.timestampMillis
-                activeCryingChildSender = event.sourceName.ifBlank { "말할사람" }
+                activeCryingChildSender = event.sourceName.ifBlank { "말할 사람" }
                 try {
                     delay(CRYING_ALERT_VISIBLE_MILLIS)
                 } finally {

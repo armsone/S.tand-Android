@@ -4,5 +4,5 @@
     <string name="app_name">S.tand</string>
     <string name="stand_widget_description">S.tand 빠른 실행</string>
     <string name="boyiso_notification_channel_name">보이소 연결</string>
-    <string name="boyiso_notification_channel_description">볼사람과 말할사람의 연결 상태를 알립니다.</string>
+    <string name="boyiso_notification_channel_description">볼 사람과 말할 사람의 연결 상태를 알립니다.</string>
 </resources>

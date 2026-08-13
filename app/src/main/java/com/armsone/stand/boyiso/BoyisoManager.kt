@@ -18,13 +18,13 @@ import kotlinx.coroutines.flow.asStateFlow
 enum class BoyisoRole(val wireValue: String, val title: String, val description: String) {
     VIEWER(
         wireValue = MonitoringService.ROLE_HOST,
-        title = "볼사람",
-        description = "말할사람 기기의 소리와 연결 상태를 확인합니다.",
+        title = "볼 사람",
+        description = "말할 사람 기기의 소리 알림과 연결 상태를 확인합니다.",
     ),
     SPEAKER(
         wireValue = MonitoringService.ROLE_GUEST,
-        title = "말할사람",
-        description = "이 기기에서 소리를 감지해 볼사람 기기로 전달합니다.",
+        title = "말할 사람",
+        description = "이 기기에서 소리와 큰 뒤척임을 살펴 알립니다.",
     ),
     ;
 
@@ -66,6 +66,7 @@ data class BoyisoEventSummary(
 
 data class BoyisoState(
     val configuration: BoyisoConfiguration,
+    val localDeviceId: String = "",
     val running: Boolean = false,
     val lanConnectionCount: Int = 0,
     val bluetoothConnectionCount: Int = 0,
@@ -85,8 +86,8 @@ data class BoyisoState(
             issueMessage != null -> issueMessage
             configuration.role == BoyisoRole.SPEAKER && microphoneMonitoring -> "말할 준비됨"
             configuration.role == BoyisoRole.SPEAKER -> "마이크 대기"
-            devices.none { it.role == BoyisoRole.SPEAKER } -> "말할사람 연결 대기"
-            else -> "말할사람 ${devices.count { it.role == BoyisoRole.SPEAKER }}대 연결"
+            devices.none { it.role == BoyisoRole.SPEAKER } -> "말할 사람 연결 대기"
+            else -> "말할 사람 ${devices.count { it.role == BoyisoRole.SPEAKER }}대 연결"
         }
 }
 
@@ -249,7 +250,7 @@ class BoyisoManager(context: Context) : AutoCloseable {
         val devices = ids.mapIndexed { index, id ->
             BoyisoDevice(
                 id = id,
-                name = names.getOrNull(index).orEmpty().ifBlank { "말할사람 기기" },
+                name = names.getOrNull(index).orEmpty().ifBlank { "말할 사람 기기" },
                 role = BoyisoRole.fromWireValue(roles.getOrNull(index)),
                 batteryPercent = batteries.getOrNull(index)?.takeIf { it >= 0 },
                 monitoring = monitoring.getOrNull(index) ?: false,
@@ -260,6 +261,7 @@ class BoyisoManager(context: Context) : AutoCloseable {
         }
         _state.value = _state.value.copy(
             configuration = currentConfiguration.copy(role = role),
+            localDeviceId = intent.getStringExtra("localSourceId").orEmpty(),
             running = intent.getBooleanExtra("running", false),
             lanConnectionCount = intent.getIntExtra("lanCount", 0),
             bluetoothConnectionCount = intent.getIntExtra("bleCount", 0),
