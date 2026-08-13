@@ -13,6 +13,12 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.media.MediaPlayer
+import android.media.AudioManager
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
+import android.os.VibrationAttributes
 import android.provider.Settings
 import android.view.WindowManager
 import android.widget.Toast
@@ -26,6 +32,8 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
@@ -37,36 +45,54 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.armsone.stand.model.LampPhase
+import com.armsone.stand.model.EnvironmentDisplayMode
 import com.armsone.stand.model.OrientationPreference
 import com.armsone.stand.model.PermissionReminderPolicy
 import com.armsone.stand.model.RadioShareImportPolicy
 import com.armsone.stand.model.ScreenLayoutCodec
 import com.armsone.stand.model.ClockFontChoice
 import com.armsone.stand.model.ClockHourMode
+import com.armsone.stand.boyiso.BoyisoManager
+import com.armsone.stand.boyiso.BoyisoQrCode
+import com.armsone.stand.boyiso.BoyisoRole
+import com.armsone.stand.boyiso.BoyisoStartlePolicy
 import com.armsone.stand.recording.RecordingClip
 import com.armsone.stand.ui.RecordingsScreen
 import com.armsone.stand.ui.AppUpdateDialog
 import com.armsone.stand.ui.ScreenEditorScreen
 import com.armsone.stand.ui.SettingsScreen
+import com.armsone.stand.ui.BoyisoScreen
 import com.armsone.stand.ui.InternetRadioScreen
 import com.armsone.stand.ui.InternetRadioBrowserScreen
 import com.armsone.stand.ui.InternetRadioManagementScreen
 import com.armsone.stand.ui.StandHomeScreen
+import com.armsone.stand.ui.TokTokGreetingOverlay
+import com.armsone.stand.ui.CryingChildAlertOverlay
 import com.armsone.stand.ui.theme.STandTheme
 import com.armsone.stand.update.AppUpdateState
 import com.armsone.stand.update.GitHubAppUpdateService
 import java.io.File
+import java.io.FileOutputStream
 import java.util.ArrayDeque
+import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
+import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
+import com.google.mlkit.vision.barcode.common.Barcode
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.delay
 import kotlin.random.Random
 
 class MainActivity : ComponentActivity() {
     private val standViewModel: StandViewModel by viewModels()
     private val pendingRadioShareUrl = MutableStateFlow<String?>(null)
+    private val boyisoManagerDelegate = lazy { BoyisoManager(this) }
+    private val boyisoManager by boyisoManagerDelegate
+    private val pendingBoyisoInvitationVersion = MutableStateFlow(0L)
     private val appUpdateService by lazy {
         GitHubAppUpdateService(this, BuildConfig.VERSION_CODE)
     }
     private var pendingUpdateInstallFile: File? = null
+    private var pendingBoyisoStart = false
 
     private var pendingPermissionRequest: PermissionRequest? = null
     private var startSessionAfterPermissionSequence = false
@@ -94,6 +120,22 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private val boyisoPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) {
+        if (!pendingBoyisoStart) return@registerForActivityResult
+        pendingBoyisoStart = false
+        val configuration = boyisoManager.state.value.configuration
+        if (
+            configuration.role == BoyisoRole.SPEAKER &&
+            !hasPermission(Manifest.permission.RECORD_AUDIO)
+        ) {
+            showToast("말할사람에는 마이크 권한이 필요합니다.")
+        } else {
+            startBoyiso()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         pendingPermissionRequest = savedInstanceState
@@ -118,6 +160,7 @@ class MainActivity : ComponentActivity() {
             restoredVisibility = restoredPermissionReview,
         )
         acceptRadioShareDraft(intent)
+        acceptBoyisoInvitation(intent)
 
         setContent {
             STandApp()
@@ -137,10 +180,12 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         acceptRadioShareDraft(intent)
+        acceptBoyisoInvitation(intent)
     }
 
     override fun onStart() {
         super.onStart()
+        BoyisoManager.isAppVisible = true
         startObservingSystemBrightness()
         val hasMicrophonePermission = hasPermission(Manifest.permission.RECORD_AUDIO)
         val hasLocationPermission = hasPermission(Manifest.permission.ACCESS_COARSE_LOCATION)
@@ -164,6 +209,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onStop() {
+        BoyisoManager.isAppVisible = false
         stopObservingSystemBrightness()
         standViewModel.onAppBackground()
         restoreTransientWindowState()
@@ -172,6 +218,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         appUpdateService.close()
+        if (boyisoManagerDelegate.isInitialized()) boyisoManager.close()
         super.onDestroy()
     }
 
@@ -209,14 +256,28 @@ class MainActivity : ComponentActivity() {
         val recordingSessionGroups by
             standViewModel.recordingSessionGroups.collectAsStateWithLifecycle()
         val sharedRadioUrl by pendingRadioShareUrl.collectAsStateWithLifecycle()
+        val boyisoInvitationVersion by
+            pendingBoyisoInvitationVersion.collectAsStateWithLifecycle()
+        val boyisoState by boyisoManager.state.collectAsStateWithLifecycle()
+        val latestStandState by rememberUpdatedState(state)
+        val latestBoyisoState by rememberUpdatedState(boyisoState)
         val appUpdateState by appUpdateService.state.collectAsStateWithLifecycle()
         var ignoredUpdateVersion by rememberSaveable { mutableStateOf<Int?>(null) }
+        var lastShownTokTokTimestamp by rememberSaveable { mutableStateOf(0L) }
+        var lastHandledBoyisoStartleTimestamp by rememberSaveable { mutableStateOf(0L) }
+        var lastCryingEventTimestamp by rememberSaveable { mutableStateOf(0L) }
+        var cryingChimeSequence by rememberSaveable { mutableStateOf(0L) }
+        var activeTokTokSender by remember { mutableStateOf<String?>(null) }
+        var activeCryingChildSender by remember { mutableStateOf<String?>(null) }
         var destination by rememberSaveable { mutableStateOf(AppDestination.HOME) }
         var secondaryReturnDestination by rememberSaveable {
             mutableStateOf(AppDestination.HOME)
         }
         var browserReturnDestination by rememberSaveable {
             mutableStateOf(AppDestination.SETTINGS)
+        }
+        var boyisoReturnDestination by rememberSaveable {
+            mutableStateOf(AppDestination.HOME)
         }
         var radioEditorChannelID by rememberSaveable { mutableStateOf<String?>(null) }
         var editorIsPortrait by rememberSaveable { mutableStateOf(true) }
@@ -230,6 +291,97 @@ class MainActivity : ComponentActivity() {
                 radioEditorChannelID = null
                 destination = AppDestination.RADIO
             }
+        }
+        LaunchedEffect(boyisoInvitationVersion) {
+            if (boyisoInvitationVersion > 0L) {
+                boyisoReturnDestination = AppDestination.HOME
+                destination = AppDestination.BOYISO
+            }
+        }
+        LaunchedEffect(boyisoState.running, boyisoState.configuration.role) {
+            standViewModel.setBoyisoSpeakerActive(
+                boyisoState.running && boyisoState.configuration.role == BoyisoRole.SPEAKER,
+            )
+        }
+        LaunchedEffect(
+            boyisoState.running,
+            state.environmentMode,
+            state.isSessionActive,
+        ) {
+            boyisoManager.updateLocalStandState(
+                mode = state.environmentMode,
+                sessionActive = state.isSessionActive,
+            )
+        }
+        LaunchedEffect(Unit) {
+            standViewModel.localMovementEvents.collect {
+                val currentBoyiso = latestBoyisoState
+                val currentStand = latestStandState
+                if (currentBoyiso.running && BoyisoStartlePolicy.shouldRelayMovement(
+                        localRole = currentBoyiso.configuration.role,
+                        localSessionActive = currentStand.isSessionActive,
+                        localMode = currentStand.environmentMode,
+                        connectedDevices = currentBoyiso.devices,
+                    )
+                ) {
+                    standViewModel.activateBoyisoStartle()
+                    boyisoManager.sendMovement()
+                }
+            }
+        }
+        LaunchedEffect(boyisoState.latestEvent) {
+            val event = boyisoState.latestEvent ?: return@LaunchedEffect
+            if (event.kind == "toktok" && event.timestampMillis > lastShownTokTokTimestamp) {
+                lastShownTokTokTimestamp = event.timestampMillis
+                activeTokTokSender = event.sourceName.ifBlank { "연결된 사람" }
+                val player = MediaPlayer.create(this@MainActivity, R.raw.boyiso_toktok)
+                try {
+                    vibrateTokTok()
+                    player?.start()
+                    delay(3_000)
+                } finally {
+                    player?.release()
+                    activeTokTokSender = null
+                }
+            }
+            if (event.timestampMillis <= lastHandledBoyisoStartleTimestamp) {
+                return@LaunchedEffect
+            }
+            val isSpeakerSoundForViewer = event.kind == "sound" &&
+                BoyisoStartlePolicy.shouldActivateForSound(
+                    localRole = boyisoState.configuration.role,
+                    localSessionActive = state.isSessionActive,
+                    localMode = state.environmentMode,
+                )
+            val isLargeSpeakerSound = isSpeakerSoundForViewer &&
+                BoyisoStartlePolicy.shouldShowCryingChild(event)
+            val isSharedMovement = event.kind == "movement" &&
+                BoyisoStartlePolicy.shouldActivateForMovement(
+                    localSessionActive = state.isSessionActive,
+                    localMode = state.environmentMode,
+                )
+            if (isSpeakerSoundForViewer || isSharedMovement) {
+                lastHandledBoyisoStartleTimestamp = event.timestampMillis
+                standViewModel.activateBoyisoStartle()
+            }
+            if (isLargeSpeakerSound) {
+                if (
+                    lastCryingEventTimestamp == 0L ||
+                    event.timestampMillis - lastCryingEventTimestamp > CRYING_ALERT_GAP_MILLIS
+                ) {
+                    cryingChimeSequence = event.timestampMillis
+                }
+                lastCryingEventTimestamp = event.timestampMillis
+                activeCryingChildSender = event.sourceName.ifBlank { "말할사람" }
+                try {
+                    delay(CRYING_ALERT_VISIBLE_MILLIS)
+                } finally {
+                    activeCryingChildSender = null
+                }
+            }
+        }
+        LaunchedEffect(cryingChimeSequence) {
+            if (cryingChimeSequence > 0L) playBoyisoChimeTwice()
         }
 
         fun openScreenEditor() {
@@ -257,6 +409,7 @@ class MainActivity : ComponentActivity() {
                 AppDestination.RADIO_MANAGEMENT,
                 -> secondaryReturnDestination
                 AppDestination.BROWSER -> browserReturnDestination
+                AppDestination.BOYISO -> boyisoReturnDestination
                 else -> AppDestination.HOME
             }
         }
@@ -310,6 +463,13 @@ class MainActivity : ComponentActivity() {
                     },
                     onOpenAiShot = ::openAiShot,
                     onOpenSettings = { destination = AppDestination.SETTINGS },
+                    onOpenBoyiso = {
+                        boyisoReturnDestination = AppDestination.HOME
+                        destination = AppDestination.BOYISO
+                    },
+                    boyisoStatus = boyisoState.homeStatusText,
+                    boyisoCanSendTokTok = boyisoState.devices.isNotEmpty(),
+                    onSendBoyisoTokTok = boyisoManager::sendTokTok,
                     onToggleRadio = standViewModel::toggleInternetRadio,
                     onEditRadio = { channelID ->
                         radioEditorChannelID = channelID
@@ -338,6 +498,11 @@ class MainActivity : ComponentActivity() {
                         secondaryReturnDestination = AppDestination.SETTINGS
                         destination = AppDestination.RECORDINGS
                     },
+                    onOpenBoyiso = {
+                        boyisoReturnDestination = AppDestination.SETTINGS
+                        destination = AppDestination.BOYISO
+                    },
+                    boyisoStatus = boyisoState.statusText,
                     onRequestMicrophonePermission = {
                         retryPermission(PermissionRequest.MICROPHONE)
                     },
@@ -355,6 +520,19 @@ class MainActivity : ComponentActivity() {
                     },
                     onOpenAppSettings = ::openAppSettings,
                     onBack = { destination = AppDestination.HOME },
+                )
+
+                AppDestination.BOYISO -> BoyisoScreen(
+                    state = boyisoState,
+                    invitationUri = boyisoManager.invitationUri()?.toString(),
+                    onUpdateConfiguration = boyisoManager::updateConfiguration,
+                    onCreateRoom = boyisoManager::createRoom,
+                    onScanInvitation = ::scanBoyisoInvitation,
+                    onShareInvitation = ::shareBoyisoInvitation,
+                    onStart = ::requestBoyisoStart,
+                    onLeaveRoom = ::leaveBoyisoRoom,
+                    onTokTok = boyisoManager::sendTokTok,
+                    onBack = { destination = boyisoReturnDestination },
                 )
 
                 AppDestination.RECORDINGS -> {
@@ -520,6 +698,12 @@ class MainActivity : ComponentActivity() {
                     },
                     onLater = { ignoredUpdateVersion = updateVersion },
                 )
+            }
+            activeTokTokSender?.let { sender ->
+                TokTokGreetingOverlay(senderName = sender)
+            }
+            activeCryingChildSender?.let { sender ->
+                CryingChildAlertOverlay(senderName = sender)
             }
         }
     }
@@ -814,6 +998,167 @@ class MainActivity : ComponentActivity() {
         Build.VERSION.SDK_INT < Build.VERSION_CODES.O ||
             packageManager.canRequestPackageInstalls()
 
+    private fun vibrateTokTok() {
+        val audioManager = getSystemService(AudioManager::class.java)
+        if (audioManager?.ringerMode == AudioManager.RINGER_MODE_SILENT) return
+        val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            getSystemService(VibratorManager::class.java)?.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            getSystemService(VIBRATOR_SERVICE) as? Vibrator
+        } ?: return
+        if (!vibrator.hasVibrator()) return
+        val effect = VibrationEffect.createWaveform(longArrayOf(0, 80, 70, 120), -1)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            vibrator.vibrate(
+                effect,
+                VibrationAttributes.createForUsage(VibrationAttributes.USAGE_NOTIFICATION),
+            )
+        } else {
+            vibrator.vibrate(effect)
+        }
+    }
+
+    private suspend fun playBoyisoChimeTwice() {
+        repeat(2) {
+            val player = MediaPlayer.create(this, R.raw.boyiso_toktok) ?: return
+            try {
+                player.start()
+                delay(BOYISO_CHIME_INTERVAL_MILLIS)
+            } finally {
+                player.release()
+            }
+        }
+    }
+
+    private fun acceptBoyisoInvitation(intent: Intent?) {
+        val uri = intent?.data ?: return
+        if (uri.scheme != "stand" || uri.host != "boyiso") return
+        if (boyisoManager.acceptInvitation(uri)) {
+            showToast("보이소 QR을 확인했습니다.")
+        }
+        pendingBoyisoInvitationVersion.value += 1L
+    }
+
+    private fun scanBoyisoInvitation() {
+        val options = GmsBarcodeScannerOptions.Builder()
+            .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
+            .enableAutoZoom()
+            .build()
+        GmsBarcodeScanning.getClient(this, options)
+            .startScan()
+            .addOnSuccessListener { barcode ->
+                val uri = barcode.rawValue?.let(Uri::parse)
+                if (uri != null && boyisoManager.acceptInvitation(uri)) {
+                    pendingBoyisoInvitationVersion.value += 1L
+                    showToast("같은 보이소 공간에 참여했습니다.")
+                } else {
+                    showToast("보이소 초대 QR이 아닙니다.")
+                }
+            }
+            .addOnFailureListener { showToast("QR을 읽지 못했습니다. 다시 시도해 주세요.") }
+    }
+
+    private fun shareBoyisoInvitation() {
+        val uri = boyisoManager.invitationUri() ?: return
+        val imageFile = runCatching {
+            val shareDirectory = File(cacheDir, "boyiso-share").also { directory ->
+                check(directory.exists() || directory.mkdirs())
+            }
+            File(shareDirectory, "boyiso-invitation.png").also { file ->
+                FileOutputStream(file, false).use { output ->
+                    check(
+                        BoyisoQrCode.create(uri.toString()).compress(
+                            android.graphics.Bitmap.CompressFormat.PNG,
+                            100,
+                            output,
+                        ),
+                    )
+                }
+            }
+        }.getOrElse {
+            showToast("QR 사진을 만들지 못했습니다.")
+            return
+        }
+        val contentUri = runCatching {
+            FileProvider.getUriForFile(this, "$packageName.fileprovider", imageFile)
+        }.getOrElse {
+            showToast("QR 사진을 공유할 수 없습니다.")
+            return
+        }
+        val mimeType = "image/png"
+        val share = Intent(Intent.ACTION_SEND).apply {
+            type = mimeType
+            putExtra(Intent.EXTRA_STREAM, contentUri)
+            putExtra(Intent.EXTRA_TEXT, "보이소에서 이 QR 사진을 찍고 같은 공간에 들어오세요.")
+            clipData = ClipData(
+                ClipDescription("보이소 초대 QR", arrayOf(mimeType)),
+                ClipData.Item(contentUri),
+            )
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        val chooser = Intent.createChooser(share, "QR 사진 보내기")
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        runCatching { startActivity(chooser) }
+            .onFailure { showToast("QR 사진을 보낼 앱이 없습니다.") }
+    }
+
+    private fun requestBoyisoStart() {
+        val configuration = boyisoManager.state.value.configuration
+        val missing = buildList {
+            if (
+                configuration.role == BoyisoRole.SPEAKER &&
+                !hasPermission(Manifest.permission.RECORD_AUDIO)
+            ) {
+                add(Manifest.permission.RECORD_AUDIO)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                if (!hasPermission(Manifest.permission.BLUETOOTH_SCAN)) {
+                    add(Manifest.permission.BLUETOOTH_SCAN)
+                }
+                if (!hasPermission(Manifest.permission.BLUETOOTH_CONNECT)) {
+                    add(Manifest.permission.BLUETOOTH_CONNECT)
+                }
+                if (!hasPermission(Manifest.permission.BLUETOOTH_ADVERTISE)) {
+                    add(Manifest.permission.BLUETOOTH_ADVERTISE)
+                }
+            } else if (!hasPermission(Manifest.permission.ACCESS_FINE_LOCATION)) {
+                add(Manifest.permission.ACCESS_FINE_LOCATION)
+            }
+            if (
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                !hasPermission(Manifest.permission.POST_NOTIFICATIONS)
+            ) {
+                add(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+        if (missing.isEmpty()) {
+            startBoyiso()
+        } else {
+            pendingBoyisoStart = true
+            boyisoPermissionLauncher.launch(missing.toTypedArray())
+        }
+    }
+
+    private fun startBoyiso() {
+        val speaking = boyisoManager.state.value.configuration.role == BoyisoRole.SPEAKER
+        standViewModel.setBoyisoSpeakerActive(speaking)
+        runCatching(boyisoManager::start).onFailure { error ->
+            standViewModel.setBoyisoSpeakerActive(false)
+            showToast(error.message ?: "보이소 연결을 시작하지 못했습니다.")
+        }
+    }
+
+    private fun stopBoyiso() {
+        boyisoManager.stop()
+        standViewModel.setBoyisoSpeakerActive(false)
+    }
+
+    private fun leaveBoyisoRoom() {
+        boyisoManager.leaveRoom()
+        standViewModel.setBoyisoSpeakerActive(false)
+    }
+
     private enum class AppDestination {
         HOME,
         SETTINGS,
@@ -822,6 +1167,7 @@ class MainActivity : ComponentActivity() {
         RADIO,
         RADIO_MANAGEMENT,
         BROWSER,
+        BOYISO,
     }
 
     private enum class PermissionRequest { MICROPHONE, LOCATION, CAMERA }
@@ -830,6 +1176,9 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_RADIO_SHARE_URL = "com.armsone.stand.extra.RADIO_SHARE_URL"
         private const val AI_SHOT_URI = "hanclip://aishot"
         private const val DEFAULT_AUDIO_MIME_TYPE = "audio/*"
+        private const val BOYISO_CHIME_INTERVAL_MILLIS = 1_250L
+        private const val CRYING_ALERT_VISIBLE_MILLIS = 3_000L
+        private const val CRYING_ALERT_GAP_MILLIS = 2_500L
         private const val APK_MIME_TYPE = "application/vnd.android.package-archive"
         private const val STATE_PENDING_PERMISSION = "pending_permission"
         private const val STATE_START_SESSION_AFTER_PERMISSION_SEQUENCE =

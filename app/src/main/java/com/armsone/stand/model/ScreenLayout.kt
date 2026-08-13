@@ -28,12 +28,14 @@ enum class StandControlKind(val rawValue: String) {
     RECORDINGS("recordings"),
     AI_SHOT("aiShot"),
     SETTINGS("settings"),
+    BOYISO("boyiso"),
     ;
 
     companion object {
         val DefaultOrder: List<StandControlKind> = listOf(
             RECORDINGS,
             SETTINGS,
+            BOYISO,
         )
 
         fun fromRawValue(rawValue: String): StandControlKind? =

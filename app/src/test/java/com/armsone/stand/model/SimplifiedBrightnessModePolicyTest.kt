@@ -40,7 +40,7 @@ class SimplifiedBrightnessModePolicyTest {
             SimplifiedBrightnessModePolicy.stabilizedAdjustment(1f, StandModePreference.AUTOMATIC),
         )
         assertEquals(
-            BrightnessAdjustment(0f, StandModePreference.MATE),
+            BrightnessAdjustment(0f, StandModePreference.AUTOMATIC),
             SimplifiedBrightnessModePolicy.stabilizedAdjustment(0f, StandModePreference.AUTOMATIC),
         )
     }

@@ -54,7 +54,11 @@ class ScreenLayoutTest {
     @Test
     fun controlOrderNormalizationRemovesDuplicatesAndCompletesMissingKinds() {
         assertEquals(
-            listOf(StandControlKind.SETTINGS, StandControlKind.RECORDINGS),
+            listOf(
+                StandControlKind.SETTINGS,
+                StandControlKind.RECORDINGS,
+                StandControlKind.BOYISO,
+            ),
             StandControlKind.normalizedOrder(
                 listOf(
                     StandControlKind.SETTINGS,
@@ -68,7 +72,11 @@ class ScreenLayoutTest {
             StandControlKind.normalizedOrder(null),
         )
         assertEquals(
-            listOf(StandControlKind.SETTINGS, StandControlKind.RECORDINGS),
+            listOf(
+                StandControlKind.SETTINGS,
+                StandControlKind.RECORDINGS,
+                StandControlKind.BOYISO,
+            ),
             StandControlKind.normalizedRawOrder(
                 listOf(
                     "settings",

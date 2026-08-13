@@ -61,7 +61,7 @@ class ScreenLayoutCodecTest {
     fun unknownDuplicateAndMissingControlKindsAreNormalized() {
         val encoded = ScreenLayoutCodec.encode(StandScreenLayout.Portrait)
         val altered = encoded.replace(
-            oldValue = "controlOrder=recordings,settings",
+            oldValue = "controlOrder=recordings,settings,boyiso",
             newValue =
                 "controlOrder=settings,futureControl,orientation,aiShot,settings,flashlight",
         )
@@ -72,7 +72,11 @@ class ScreenLayoutCodecTest {
         )
 
         assertEquals(
-            listOf(StandControlKind.SETTINGS, StandControlKind.RECORDINGS),
+            listOf(
+                StandControlKind.SETTINGS,
+                StandControlKind.RECORDINGS,
+                StandControlKind.BOYISO,
+            ),
             decoded.controlOrder,
         )
     }
@@ -161,7 +165,11 @@ class ScreenLayoutCodecTest {
         assertNotSame(landscape, normalized.landscapeLayout)
         assertEquals(PanelTransform(x = 0f, y = 0f, scale = 2f), normalized.portraitLayout.clock)
         assertEquals(
-            listOf(StandControlKind.SETTINGS, StandControlKind.RECORDINGS),
+            listOf(
+                StandControlKind.SETTINGS,
+                StandControlKind.RECORDINGS,
+                StandControlKind.BOYISO,
+            ),
             normalized.portraitLayout.controlOrder,
         )
         assertEquals(listOf(7, 1, 1), normalized.landscapeLayout.weatherGroupIds)

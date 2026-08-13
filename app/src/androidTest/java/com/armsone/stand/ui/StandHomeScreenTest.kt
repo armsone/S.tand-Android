@@ -2,13 +2,20 @@ package com.armsone.stand.ui
 
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.doubleClick
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performTouchInput
 import com.armsone.stand.model.LampPhase
+import com.armsone.stand.model.StandModePreference
+import com.armsone.stand.model.AppSettings
+import com.armsone.stand.model.EnvironmentDisplayMode
+import com.armsone.stand.model.StandExperienceMode
 import com.armsone.stand.ui.theme.STandTheme
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -42,6 +49,10 @@ class StandHomeScreenTest {
                     onOpenRecordings = {},
                     onOpenAiShot = {},
                     onOpenSettings = {},
+                    onOpenBoyiso = {},
+                    boyisoStatus = "설정 필요",
+                    boyisoCanSendTokTok = false,
+                    onSendBoyisoTokTok = {},
                     onToggleRadio = {},
                     onEditRadio = {},
                 )
@@ -98,6 +109,10 @@ class StandHomeScreenTest {
                     onOpenRecordings = {},
                     onOpenAiShot = {},
                     onOpenSettings = {},
+                    onOpenBoyiso = {},
+                    boyisoStatus = "설정 필요",
+                    boyisoCanSendTokTok = false,
+                    onSendBoyisoTokTok = {},
                     onToggleRadio = {},
                     onEditRadio = {},
                 )
@@ -108,5 +123,182 @@ class StandHomeScreenTest {
         composeRule.waitForIdle()
 
         assertEquals(1, themeToggleCount)
+    }
+
+    @Test
+    fun connectedBoyisoTapSendsTokTokAndLongPressOpensSettings() {
+        var openCount = 0
+        var tokTokCount = 0
+
+        composeRule.setContent {
+            STandTheme {
+                StandHomeScreen(
+                    state = StandUiState(),
+                    onScreenTap = {},
+                    onToggleTheme = {},
+                    onOpenEditor = {},
+                    onBrightnessAdjustmentStarted = {},
+                    onBrightnessLevelChanged = {},
+                    onBrightnessAdjustmentFinished = {},
+                    onInternetRadioVolumeChanged = {},
+                    onClockScaleChanged = {},
+                    onToggleTorch = {},
+                    onCycleMode = {},
+                    onToggleSession = {},
+                    onToggleOrientation = {},
+                    onOpenRecordings = {},
+                    onOpenAiShot = {},
+                    onOpenSettings = {},
+                    onOpenBoyiso = { openCount += 1 },
+                    boyisoStatus = "말할사람",
+                    boyisoCanSendTokTok = true,
+                    onSendBoyisoTokTok = { tokTokCount += 1 },
+                    onToggleRadio = {},
+                    onEditRadio = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("말할사람").assertIsDisplayed()
+        composeRule.onNodeWithText("보이소").performTouchInput { click() }
+        composeRule.waitForIdle()
+
+        assertEquals(0, openCount)
+        assertEquals(1, tokTokCount)
+
+        composeRule.onNodeWithText("보이소").performTouchInput { longClick() }
+        composeRule.waitForIdle()
+
+        assertEquals(1, openCount)
+        assertEquals(1, tokTokCount)
+    }
+
+    @Test
+    fun disconnectedBoyisoTapAndLongPressBothOpenSettings() {
+        var openCount = 0
+        var tokTokCount = 0
+
+        composeRule.setContent {
+            STandTheme {
+                StandHomeScreen(
+                    state = StandUiState(),
+                    onScreenTap = {},
+                    onToggleTheme = {},
+                    onOpenEditor = {},
+                    onBrightnessAdjustmentStarted = {},
+                    onBrightnessLevelChanged = {},
+                    onBrightnessAdjustmentFinished = {},
+                    onInternetRadioVolumeChanged = {},
+                    onClockScaleChanged = {},
+                    onToggleTorch = {},
+                    onCycleMode = {},
+                    onToggleSession = {},
+                    onToggleOrientation = {},
+                    onOpenRecordings = {},
+                    onOpenAiShot = {},
+                    onOpenSettings = {},
+                    onOpenBoyiso = { openCount += 1 },
+                    boyisoStatus = "연결 안 됨",
+                    boyisoCanSendTokTok = false,
+                    onSendBoyisoTokTok = { tokTokCount += 1 },
+                    onToggleRadio = {},
+                    onEditRadio = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("보이소").performTouchInput { click() }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("보이소").performTouchInput { longClick() }
+        composeRule.waitForIdle()
+
+        assertEquals(2, openCount)
+        assertEquals(0, tokTokCount)
+    }
+
+    @Test
+    fun mateModeLockShowsCentralLockOnClock() {
+        composeRule.setContent {
+            STandTheme {
+                StandHomeScreen(
+                    state = StandUiState(
+                        settings = AppSettings.Recommended.copy(
+                            modePreference = StandModePreference.MATE,
+                        ),
+                        isSessionActive = true,
+                        environmentMode = EnvironmentDisplayMode.MATE,
+                        experienceMode = StandExperienceMode.MATE,
+                        lampPhase = LampPhase.OFF,
+                    ),
+                    onScreenTap = {},
+                    onToggleTheme = {},
+                    onOpenEditor = {},
+                    onBrightnessAdjustmentStarted = {},
+                    onBrightnessLevelChanged = {},
+                    onBrightnessAdjustmentFinished = {},
+                    onInternetRadioVolumeChanged = {},
+                    onClockScaleChanged = {},
+                    onToggleTorch = {},
+                    onCycleMode = {},
+                    onToggleSession = {},
+                    onToggleOrientation = {},
+                    onOpenRecordings = {},
+                    onOpenAiShot = {},
+                    onOpenSettings = {},
+                    onOpenBoyiso = {},
+                    boyisoStatus = "연결 안 됨",
+                    boyisoCanSendTokTok = false,
+                    onSendBoyisoTokTok = {},
+                    onToggleRadio = {},
+                    onEditRadio = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithContentDescription("매이트 모드 잠금").assertIsDisplayed()
+        composeRule.onNodeWithText("매이트 모드 잠금").assertIsDisplayed()
+    }
+
+    @Test
+    fun startledModeTemporarilyHidesMateLockFromClock() {
+        composeRule.setContent {
+            STandTheme {
+                StandHomeScreen(
+                    state = StandUiState(
+                        settings = AppSettings.Recommended.copy(
+                            modePreference = StandModePreference.MATE,
+                        ),
+                        isSessionActive = true,
+                        environmentMode = EnvironmentDisplayMode.MATE,
+                        experienceMode = StandExperienceMode.STARTLED,
+                        lampPhase = LampPhase.HOLDING,
+                    ),
+                    onScreenTap = {},
+                    onToggleTheme = {},
+                    onOpenEditor = {},
+                    onBrightnessAdjustmentStarted = {},
+                    onBrightnessLevelChanged = {},
+                    onBrightnessAdjustmentFinished = {},
+                    onInternetRadioVolumeChanged = {},
+                    onClockScaleChanged = {},
+                    onToggleTorch = {},
+                    onCycleMode = {},
+                    onToggleSession = {},
+                    onToggleOrientation = {},
+                    onOpenRecordings = {},
+                    onOpenAiShot = {},
+                    onOpenSettings = {},
+                    onOpenBoyiso = {},
+                    boyisoStatus = "연결됨",
+                    boyisoCanSendTokTok = true,
+                    onSendBoyisoTokTok = {},
+                    onToggleRadio = {},
+                    onEditRadio = {},
+                )
+            }
+        }
+
+        composeRule.onAllNodesWithContentDescription("매이트 모드 잠금").assertCountEquals(0)
+        composeRule.onNodeWithText("화들짝 모드").assertIsDisplayed()
     }
 }

@@ -58,7 +58,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.launchIn
@@ -91,6 +94,8 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
         StandUiState(settings = settingsRepository.settings.value),
     )
     val uiState: StateFlow<StandUiState> = mutableUiState.asStateFlow()
+    private val mutableLocalMovementEvents = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val localMovementEvents: SharedFlow<Unit> = mutableLocalMovementEvents.asSharedFlow()
     val recordings: StateFlow<List<RecordingClip>> = recordingRepository.recordings
     private val mutableRecordingSessionGroups = MutableStateFlow<List<RecordingSessionGroup>>(
         emptyList(),
@@ -106,6 +111,7 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
     private var cameraPermissionGranted = false
     private var didAutomaticallyStart = false
     private var monitoringPausedForPlayback = false
+    private var boyisoSpeakerActive = false
     private var batteryProtectionLatched = false
     private var movementTriggeredLamp = false
     private var mateModeEnteredAtElapsedRealtimeMillis: Long? = null
@@ -147,6 +153,7 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
                     state.environmentMode == EnvironmentDisplayMode.MATE &&
                     state.settings.multiStimulusWakeEnabled
                 ) {
+                    mutableLocalMovementEvents.tryEmit(Unit)
                     activateLamp(triggeredByMovement = true)
                 }
             }
@@ -435,7 +442,11 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
         brightnessPreference = adjustment.preference
         applyBrightnessPreview(adjustment.level, adjustment.preference)
 
-        val endpointPreference = StandModePreference.OBJECT.takeIf { adjustment.level == 1f }
+        val endpointPreference = when (adjustment.level) {
+            1f -> StandModePreference.OBJECT
+            0f -> StandModePreference.MATE
+            else -> null
+        }
         if (endpointPreference == null || adjustment.preference == endpointPreference) {
             brightnessEndpointLockJob?.cancel()
             brightnessEndpointLockJob = null
@@ -814,6 +825,18 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
         syncSleepCareMonitoring()
     }
 
+    fun setBoyisoSpeakerActive(active: Boolean) {
+        if (boyisoSpeakerActive == active) return
+        boyisoSpeakerActive = active
+        syncSleepCareMonitoring()
+    }
+
+    fun activateBoyisoStartle() {
+        val state = mutableUiState.value
+        if (!state.isSessionActive || state.environmentMode != EnvironmentDisplayMode.MATE) return
+        activateLamp(triggeredByMovement = true, bypassStartleDelay = true)
+    }
+
     fun deleteRecording(clip: RecordingClip): Boolean {
         val deleted = recordingRepository.delete(clip)
         if (deleted) {
@@ -1038,6 +1061,7 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
             state.environmentMode == EnvironmentDisplayMode.MATE &&
             state.settings.multiStimulusWakeEnabled
         ) {
+            mutableLocalMovementEvents.tryEmit(Unit)
             activateLamp(triggeredByMovement = true)
         }
     }
@@ -1189,10 +1213,13 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun activateLamp(triggeredByMovement: Boolean) {
+    private fun activateLamp(
+        triggeredByMovement: Boolean,
+        bypassStartleDelay: Boolean = false,
+    ) {
         val state = mutableUiState.value
         if (!state.isSessionActive || batteryProtectionLatched) return
-        if (triggeredByMovement && !StartleActivationPolicy.canActivate(
+        if (triggeredByMovement && !bypassStartleDelay && !StartleActivationPolicy.canActivate(
                 mateModeEnteredAtMillis = mateModeEnteredAtElapsedRealtimeMillis,
                 nowMillis = SystemClock.elapsedRealtime(),
             )
@@ -1342,6 +1369,7 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
                         environmentMode = state.environmentMode,
                     ) &&
                     !monitoringPausedForPlayback &&
+                    !boyisoSpeakerActive &&
                     internetRadioPlayer.state.value !is InternetRadioState.Loading &&
                     internetRadioPlayer.state.value !is InternetRadioState.Playing &&
                     internetRadioPlayer.state.value !is InternetRadioState.Reconnecting &&

@@ -39,6 +39,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Pets
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.RestartAlt
@@ -121,6 +122,8 @@ fun SettingsScreen(
     onManageInternetRadios: () -> Unit,
     onOpenInternetRadioBrowser: () -> Unit,
     onOpenRecordings: () -> Unit,
+    onOpenBoyiso: () -> Unit,
+    boyisoStatus: String,
     onRequestMicrophonePermission: () -> Unit,
     onRequestApproximateLocationPermission: () -> Unit,
     onRequestCameraPermission: () -> Unit,
@@ -469,6 +472,28 @@ fun SettingsScreen(
                             ) {
                                 Text("시스템 앱 권한 설정 열기")
                             }
+                        }
+                    }
+
+                    SettingsSectionKind.BOYISO -> SettingsCard(
+                        title = "보이소",
+                        subtitle = "볼사람과 말할사람을 QR로 연결합니다.",
+                        icon = Icons.Default.Pets,
+                    ) {
+                        Text(
+                            boyisoStatus,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            "한 공간에 볼사람과 말할사람을 여러 대 연결하고 톡톡을 보낼 수 있습니다.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        TextButton(
+                            onClick = onOpenBoyiso,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text("보이소 연결 설정")
                         }
                     }
 

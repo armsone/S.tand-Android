@@ -16,7 +16,11 @@ class AppPoliciesTest {
         assertEquals(ClockHourMode.TWELVE, settings.clockHourMode)
         assertEquals(OrientationPreference.AUTOMATIC, settings.orientationPreference)
         assertEquals(
-            listOf(StandControlKind.RECORDINGS, StandControlKind.SETTINGS),
+            listOf(
+                StandControlKind.RECORDINGS,
+                StandControlKind.SETTINGS,
+                StandControlKind.BOYISO,
+            ),
             settings.portraitLayout.controlOrder,
         )
     }

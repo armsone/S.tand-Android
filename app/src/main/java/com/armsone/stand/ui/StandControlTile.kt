@@ -12,6 +12,7 @@ import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.FlashlightOn
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Pets
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.StopCircle
@@ -37,7 +38,10 @@ internal data class StandControlPresentation(
     val icon: ImageVector,
 )
 
-internal fun StandControlKind.presentation(state: StandUiState): StandControlPresentation =
+internal fun StandControlKind.presentation(
+    state: StandUiState,
+    boyisoStatus: String = "설정 필요",
+): StandControlPresentation =
     when (this) {
         StandControlKind.FLASHLIGHT -> StandControlPresentation(
             title = "플래시",
@@ -97,6 +101,12 @@ internal fun StandControlKind.presentation(state: StandUiState): StandControlPre
             title = "설정 열기",
             status = "화면·감지",
             icon = Icons.Default.Settings,
+        )
+
+        StandControlKind.BOYISO -> StandControlPresentation(
+            title = "보이소",
+            status = boyisoStatus,
+            icon = Icons.Default.Pets,
         )
     }
 

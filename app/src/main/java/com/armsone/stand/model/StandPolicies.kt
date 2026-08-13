@@ -51,7 +51,7 @@ object SimplifiedBrightnessModePolicy {
             currentPreference == StandModePreference.MATE &&
                 requested <= MATE_LOCK_RELEASE_LEVEL ->
                 BrightnessAdjustment(0f, StandModePreference.MATE)
-            requested == 0f -> BrightnessAdjustment(0f, StandModePreference.MATE)
+            requested == 0f -> BrightnessAdjustment(0f, StandModePreference.AUTOMATIC)
             requested == 1f -> BrightnessAdjustment(1f, StandModePreference.AUTOMATIC)
             else -> BrightnessAdjustment(requested, StandModePreference.AUTOMATIC)
         }

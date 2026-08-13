@@ -111,6 +111,8 @@ import com.armsone.stand.model.PanelTransform
 import com.armsone.stand.model.StandDisplayTheme
 import com.armsone.stand.model.StandControlKind
 import com.armsone.stand.model.StandScreenLayout
+import com.armsone.stand.model.StandModePreference
+import com.armsone.stand.model.StandExperienceMode
 import com.armsone.stand.model.SimplifiedBrightnessModePolicy
 import com.armsone.stand.model.WeatherPiece
 import com.armsone.stand.platform.InternetRadioState
@@ -148,6 +150,10 @@ fun StandHomeScreen(
     onOpenRecordings: () -> Unit,
     onOpenAiShot: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenBoyiso: () -> Unit,
+    boyisoStatus: String,
+    boyisoCanSendTokTok: Boolean,
+    onSendBoyisoTokTok: () -> Unit,
     onToggleRadio: (String) -> Unit,
     onEditRadio: (String) -> Unit,
     modifier: Modifier = Modifier,
@@ -302,6 +308,10 @@ fun StandHomeScreen(
                     onOpenRecordings = onOpenRecordings,
                     onOpenAiShot = onOpenAiShot,
                     onOpenSettings = onOpenSettings,
+                    onOpenBoyiso = onOpenBoyiso,
+                    boyisoStatus = boyisoStatus,
+                    boyisoCanSendTokTok = boyisoCanSendTokTok,
+                    onSendBoyisoTokTok = onSendBoyisoTokTok,
                 )
             }
 
@@ -914,7 +924,9 @@ private fun Header(state: StandUiState, contentAlpha: Float) {
             Icon(
                 imageVector = if (!state.isSessionActive) {
                     Icons.Default.StopCircle
-                } else if (state.settings.modePreference == com.armsone.stand.model.StandModePreference.OBJECT) {
+                } else if (state.experienceMode == StandExperienceMode.STARTLED) {
+                    Icons.Default.Thunderstorm
+                } else if (state.settings.modePreference != StandModePreference.AUTOMATIC) {
                     Icons.Default.Lock
                 } else {
                     Icons.Default.Bedtime
@@ -926,8 +938,12 @@ private fun Header(state: StandUiState, contentAlpha: Float) {
             Text(
                 text = when {
                     !state.isSessionActive -> "자동 기능 꺼짐"
+                    state.experienceMode == StandExperienceMode.STARTLED ->
+                        StandExperienceMode.STARTLED.title
                     state.settings.modePreference == com.armsone.stand.model.StandModePreference.OBJECT ->
                         "오브제 모드 잠금"
+                    state.settings.modePreference == StandModePreference.MATE ->
+                        "매이트 모드 잠금"
                     else -> state.experienceMode.title
                 },
                 color = Color.White.copy(alpha = contentAlpha * 0.62f),
@@ -1024,6 +1040,32 @@ private fun DashboardCanvas(
                     )
                     .panelTransform(layout.clock, canvasWidth.value, canvasHeight.value),
             )
+
+            if (
+                state.settings.modePreference == StandModePreference.MATE &&
+                state.experienceMode != StandExperienceMode.STARTLED
+            ) {
+                val lockSize = if (isPortrait) 92.dp else 116.dp
+                Surface(
+                    shape = CircleShape,
+                    color = Color.Black.copy(alpha = 0.74f),
+                    border = BorderStroke(2.dp, Color.White.copy(alpha = contentAlpha * 0.38f)),
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .panelTransform(layout.clock, canvasWidth.value, canvasHeight.value)
+                        .size(lockSize)
+                        .semantics { contentDescription = "매이트 모드 잠금" },
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.Lock,
+                            contentDescription = null,
+                            tint = Color.White.copy(alpha = contentAlpha.coerceAtLeast(0.7f)),
+                            modifier = Modifier.size(lockSize * 0.66f),
+                        )
+                    }
+                }
+            }
 
             ClockSeconds(
                 clockFont = state.settings.clockFont,
@@ -1451,6 +1493,10 @@ private fun HomeControls(
     onOpenRecordings: () -> Unit,
     onOpenAiShot: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenBoyiso: () -> Unit,
+    boyisoStatus: String,
+    boyisoCanSendTokTok: Boolean,
+    onSendBoyisoTokTok: () -> Unit,
 ) {
     val controlOrder = if (isPortrait) {
         state.settings.portraitLayout.controlOrder
@@ -1471,7 +1517,7 @@ private fun HomeControls(
                 )
                 return@forEach
             }
-            val action = when (kind) {
+            val defaultAction = when (kind) {
                 StandControlKind.FLASHLIGHT -> onToggleTorch
                 StandControlKind.BRIGHTNESS -> onCycleMode
                 StandControlKind.STOP_DETECTION -> onToggleSession
@@ -1479,8 +1525,18 @@ private fun HomeControls(
                 StandControlKind.RECORDINGS -> onOpenRecordings
                 StandControlKind.AI_SHOT -> onOpenAiShot
                 StandControlKind.SETTINGS -> onOpenSettings
+                StandControlKind.BOYISO -> onOpenBoyiso
             }
-            HomeControl(presentation = kind.presentation(state), onClick = action)
+            HomeControl(
+                presentation = kind.presentation(state, boyisoStatus = boyisoStatus),
+                onClick = if (kind == StandControlKind.BOYISO && boyisoCanSendTokTok) {
+                    onSendBoyisoTokTok
+                } else {
+                    defaultAction
+                },
+                onLongClick = onOpenBoyiso.takeIf { kind == StandControlKind.BOYISO },
+                onLongClickLabel = if (kind == StandControlKind.BOYISO) "보이소 설정 열기" else null,
+            )
         }
     }
 }
@@ -1621,9 +1677,10 @@ private fun soundThresholdFraction(soundThresholdDb: Float): Float =
 private fun HomeControl(
     presentation: StandControlPresentation,
     onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
+    onLongClickLabel: String? = null,
 ) {
     Surface(
-        onClick = onClick,
         color = Color.Transparent,
         shape = RoundedCornerShape(14.dp),
         shadowElevation = 0.dp,
@@ -1633,6 +1690,11 @@ private fun HomeControl(
                 isDimmed = false,
                 cornerRadius = 14.dp,
                 splitGap = 2.dp,
+            )
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick,
+                onLongClickLabel = onLongClickLabel,
             ),
     ) {
         StandControlTileContent(
