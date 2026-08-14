@@ -160,6 +160,28 @@ class BoyisoScreenTest {
                                 transportPaths = setOf("BLE"),
                             ),
                             BoyisoDevice(
+                                id = "speaker",
+                                name = "침실폰",
+                                role = BoyisoRole.SPEAKER,
+                                batteryPercent = 71,
+                                monitoring = true,
+                                lastSeenMillis = 3L,
+                                displayMode = EnvironmentDisplayMode.MATE,
+                                sessionActive = true,
+                                transportPaths = setOf("INTERNET"),
+                            ),
+                            BoyisoDevice(
+                                id = "speaker-2",
+                                name = "침실폰",
+                                role = BoyisoRole.SPEAKER,
+                                batteryPercent = 64,
+                                monitoring = false,
+                                lastSeenMillis = 3L,
+                                displayMode = EnvironmentDisplayMode.MATE,
+                                sessionActive = true,
+                                transportPaths = setOf("INTERNET"),
+                            ),
+                            BoyisoDevice(
                                 id = "local",
                                 name = "엄마",
                                 role = BoyisoRole.VIEWER,
@@ -186,15 +208,22 @@ class BoyisoScreenTest {
         }
 
         composeRule.onNodeWithText("함께 연결된 사람").performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithText("총 3명").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("총 4명").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithContentDescription("볼 사람 2명").performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("말할 사람 1명").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("말할 사람 2명").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("엄마").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("나").performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithText("침실폰").performScrollTo().assertIsDisplayed()
+        composeRule.onAllNodesWithText("침실폰").assertCountEquals(2)
         composeRule.onNodeWithText("감지 중").performScrollTo().assertIsDisplayed()
         composeRule.onAllNodesWithText("Wi‑Fi").assertCountEquals(2)
         composeRule.onAllNodesWithText("Bluetooth").assertCountEquals(2)
+        composeRule.onAllNodesWithText("인터넷").assertCountEquals(2)
+        composeRule.onNodeWithContentDescription(
+            "침실폰, 말할 사람, 감지 중, 배터리 71퍼센트, Wi‑Fi 및 Bluetooth 및 인터넷",
+        ).performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithContentDescription(
+            "침실폰, 말할 사람, 대기 중, 배터리 64퍼센트, 인터넷",
+        ).performScrollTo().assertIsDisplayed()
     }
 
     @Test

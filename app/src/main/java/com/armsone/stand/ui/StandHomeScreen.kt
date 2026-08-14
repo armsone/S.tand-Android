@@ -402,7 +402,7 @@ private fun StandStartContent(
             textAlign = TextAlign.Center,
         )
         Text(
-            text = "S.tand가 필요한 이유를 먼저 알려드릴게요.",
+            text = "에스텐드가 필요한 이유를 먼저 알려드릴게요.",
             color = Color.White.copy(alpha = 0.60f),
             style = MaterialTheme.typography.bodyMedium,
             textAlign = TextAlign.Center,
@@ -454,9 +454,9 @@ private fun StandStartContent(
                 .widthIn(min = 220.dp)
                 .semantics {
                     contentDescription = if (allPermissionsGranted) {
-                        "S.tand 시작"
+                        "에스텐드 시작"
                     } else {
-                        "권한 확인하고 S.tand 시작"
+                        "권한 확인하고 에스텐드 시작"
                     }
                 },
         ) {
@@ -468,7 +468,7 @@ private fun StandStartContent(
                 Icon(Icons.Default.LightMode, contentDescription = null)
                 Text(
                     text = if (allPermissionsGranted) {
-                        "S.tand 시작"
+                        "에스텐드 시작"
                     } else {
                         "권한 확인하고 시작"
                     },
@@ -495,7 +495,7 @@ private fun RegularStartContent(
             modifier = Modifier.size(76.dp),
         )
         Text(
-            text = "S.tand가 곁에 있을게요",
+            text = "에스텐드가 곁에 있을게요",
             color = Color.White.copy(alpha = 0.92f),
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
@@ -514,7 +514,7 @@ private fun RegularStartContent(
             shape = RoundedCornerShape(16.dp),
             modifier = Modifier
                 .height(52.dp)
-                .semantics { contentDescription = "S.tand 시작" },
+                .semantics { contentDescription = "에스텐드 시작" },
         ) {
             Row(
                 modifier = Modifier.padding(horizontal = 22.dp),
@@ -522,7 +522,7 @@ private fun RegularStartContent(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Icon(Icons.Default.LightMode, contentDescription = null)
-                Text("S.tand 시작", fontWeight = FontWeight.Bold)
+                Text("에스텐드 시작", fontWeight = FontWeight.Bold)
             }
         }
     }
@@ -966,7 +966,7 @@ private fun Header(state: StandUiState, contentAlpha: Float) {
                     .graphicsLayer { alpha = contentAlpha },
             )
             Text(
-                text = "S.tand",
+                text = "에스텐드",
                 color = Color.White.copy(alpha = contentAlpha * 0.82f),
                 fontWeight = FontWeight.SemiBold,
             )

@@ -4,11 +4,13 @@
 
 iOS 기준: `main` / `33711c009b7568779504a73685d616d6ec115db0`, `1.0.0 (0.25.1)`
 
-Android 기준: 작업 트리의 versionName `0.0.1`, versionCode `46`, 빌드 `0.0.46`
+Android 기준: 작업 트리의 versionName `0.0.1`, versionCode `47`, 빌드 `0.0.47`
 
 ## 보이소 v2 진행 상태 (2026-08-14)
 
 - 사용자 최신 지시로 기존 8자리 코드 방식보다 `docs/BOYISO_V2_PROTOCOL.md`를 우선한다.
+- 앱 표시는 **에스텐드(S.tand)**, 돌봄 연결 서비스 표시는 **보이소(BOISO)**로 구분한다. 보이소
+  화면과 설정의 보조 설명은 `BOISO · 보이는 소리`이며, 홈 버튼과 알림은 한글 `보이소`를 우선한다.
 - 사용자 표시는 `볼 사람·말할 사람`으로 통일하고 내부 wire value만 `host·guest`를 유지한다.
 - Android에 설정 카드, 홈의 설정 오른쪽 보이소 버튼, QR 생성·촬영, 다중 기기 목록,
   LAN·BLE 메시 relay, 선택적 WSS relay, 톡톡 3초 인사·알림 자산을 구현했다.
@@ -214,10 +216,10 @@ UI 검증은 보류했다.
 
 ## 현재 설치 후보·버전 상태
 
-- Android versionName `0.0.1`, versionCode `46`, 빌드 표기 `0.0.46`.
-- 전체 JVM 테스트·`assembleDebug`·`lintDebug` 성공.
-- `SM-F968N`과 `SM-T500`에 versionCode 46를 데이터 유지 설치하고 MainActivity 실행과 설치
-  버전을 확인했다.
+- Android versionName `0.0.1`, versionCode `47`, 빌드 표기 `0.0.47`.
+- versionCode 47에서 `testDebugUnitTest`·`assembleDebug`·`compileDebugAndroidTestKotlin`이 성공했다.
+- `SM-F968N`과 `SM-T500`의 직전 versionCode 46 설치·실행은 확인됐고, versionCode 47의 기기
+  설치·실행은 다음 설치 단계에서 확인한다.
 - `SM-T500`에서 역할·이름·공간 선택, 모든 참여자의 QR 공유, source ID·연결 경로 기준
   역할별 참여자 목록, 연결 중 이름 수정, 밝은 화들짝 알림 문구의 Boyiso 화면 계측 테스트
   5개가 통과했다. `SM-F968N`과 `SM-T500` 모두 화면이 꺼진 상태에서 foreground service

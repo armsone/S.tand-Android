@@ -925,7 +925,7 @@ class MainActivity : ComponentActivity() {
             type = mimeType
             putExtra(Intent.EXTRA_STREAM, contentUri)
             clipData = ClipData(
-                ClipDescription("S.tand 녹음", arrayOf(mimeType)),
+                ClipDescription("에스텐드 녹음", arrayOf(mimeType)),
                 ClipData.Item(contentUri),
             )
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)

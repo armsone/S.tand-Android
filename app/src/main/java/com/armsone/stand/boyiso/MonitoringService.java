@@ -452,8 +452,8 @@ public final class MonitoringService extends Service implements LanTransport.Lis
         channel.setDescription(getString(com.armsone.stand.R.string.boyiso_notification_channel_description));
         getSystemService(NotificationManager.class).createNotificationChannel(channel);
         NotificationChannel tokTok = new NotificationChannel(TOKTOK_CHANNEL_ID,
-                "톡톡", NotificationManager.IMPORTANCE_HIGH);
-        tokTok.setDescription("연결된 사람이 보내는 짧은 톡톡 인사를 알립니다.");
+                "보이소 톡톡", NotificationManager.IMPORTANCE_HIGH);
+        tokTok.setDescription("보이소에서 연결된 사람이 보내는 짧은 톡톡 인사를 알립니다.");
         tokTok.enableVibration(true);
         tokTok.setVibrationPattern(new long[]{0, 80, 70, 120});
         android.net.Uri tokTokSound = android.net.Uri.parse(
@@ -506,7 +506,7 @@ public final class MonitoringService extends Service implements LanTransport.Lis
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         Notification notification = new Notification.Builder(this, TOKTOK_CHANNEL_ID)
                 .setSmallIcon(android.R.drawable.ic_dialog_info)
-                .setContentTitle("톡톡")
+                .setContentTitle("보이소 · 톡톡")
                 .setContentText(senderName + "에서 인사를 보냈어요")
                 .setAutoCancel(true)
                 .setCategory(Notification.CATEGORY_MESSAGE)

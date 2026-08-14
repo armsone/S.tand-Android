@@ -172,7 +172,7 @@ fun SettingsScreen(
         containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
-                title = { Text("S.tand 설정") },
+                title = { Text("에스텐드 설정") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "뒤로")
@@ -477,7 +477,7 @@ fun SettingsScreen(
 
                     SettingsSectionKind.BOYISO -> SettingsCard(
                         title = "보이소",
-                        subtitle = "볼 사람과 말할 사람을 QR로 연결합니다.",
+                        subtitle = "BOISO · 보이는 소리",
                         icon = Icons.Default.Pets,
                     ) {
                         Text(
@@ -485,7 +485,7 @@ fun SettingsScreen(
                             fontWeight = FontWeight.SemiBold,
                         )
                         Text(
-                            "한 공간에 볼 사람과 말할 사람을 여러 대 연결하고 톡톡을 보낼 수 있습니다.",
+                            "볼 사람과 말할 사람을 QR로 연결하고 톡톡을 보낼 수 있습니다.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -493,7 +493,7 @@ fun SettingsScreen(
                             onClick = onOpenBoyiso,
                             modifier = Modifier.fillMaxWidth(),
                         ) {
-                            Text("보이소 연결 설정")
+                            Text("보이소 열기")
                         }
                     }
 
@@ -574,7 +574,7 @@ fun SettingsScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
-                        Text("S.tand ${BuildConfig.VERSION_NAME}")
+                        Text("에스텐드 · S.tand ${BuildConfig.VERSION_NAME}")
                         Text(
                             "빌드 ${BuildConfig.BUILD_NUMBER} · versionCode ${BuildConfig.VERSION_CODE}",
                             style = MaterialTheme.typography.bodySmall,
@@ -664,7 +664,7 @@ private fun SettingsHero(
     onModePreferenceSelected: (StandModePreference) -> Unit,
 ) {
     SettingsCard(
-        title = "S.tand",
+        title = "에스텐드",
         subtitle = "낮에는 오브제 · 밤에는 매이트",
         icon = Icons.Default.DarkMode,
     ) {
@@ -676,7 +676,7 @@ private fun SettingsHero(
                     contentDescription = if (state.isSessionActive) {
                         "현재 상태, ${state.experienceMode.title}"
                     } else {
-                        "현재 상태, S.tand 멈춤"
+                        "현재 상태, 에스텐드 멈춤"
                     }
                 },
             color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
@@ -686,7 +686,7 @@ private fun SettingsHero(
                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(if (state.isSessionActive) state.experienceMode.title else "S.tand 멈춤")
+                Text(if (state.isSessionActive) state.experienceMode.title else "에스텐드 멈춤")
             }
         }
         Text(

@@ -172,7 +172,7 @@ class GitHubAppUpdateService(
         val archive = packageManager.getPackageArchiveInfo(apkFile.absolutePath, flags)
             ?: throw IOException("Android could not parse the downloaded APK")
         if (archive.packageName != applicationContext.packageName) {
-            throw IOException("Downloaded APK package name does not match S.tand")
+            throw IOException("내려받은 APK의 앱 이름이 에스텐드와 맞지 않습니다")
         }
         val archiveVersion = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             archive.longVersionCode

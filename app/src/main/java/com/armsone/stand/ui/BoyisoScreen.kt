@@ -96,7 +96,16 @@ fun BoyisoScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("보이소") },
+                title = {
+                    Column {
+                        Text("보이소")
+                        Text(
+                            "BOISO · 보이는 소리",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "뒤로")

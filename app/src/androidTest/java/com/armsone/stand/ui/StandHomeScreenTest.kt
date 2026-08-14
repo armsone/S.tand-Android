@@ -66,7 +66,7 @@ class StandHomeScreenTest {
             .assertIsDisplayed()
         composeRule.onNodeWithText("정확한 위치는 요청하지 않습니다.", substring = true)
             .assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("권한 확인하고 S.tand 시작")
+        composeRule.onNodeWithContentDescription("권한 확인하고 에스텐드 시작")
             .performTouchInput { click() }
         composeRule.waitForIdle()
 

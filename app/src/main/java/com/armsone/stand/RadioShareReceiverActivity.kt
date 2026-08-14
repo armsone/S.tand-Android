@@ -34,7 +34,7 @@ class RadioShareReceiverActivity : ComponentActivity() {
                         modifier = Modifier.padding(24.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
-                        Text("S.tand 라디오", style = MaterialTheme.typography.headlineSmall)
+                        Text("에스텐드 라디오", style = MaterialTheme.typography.headlineSmall)
                         if (sharedUrl == null) {
                             Text("웹페이지가 아닌 합법적인 HTTPS 직접 스트림 주소 한 개를 공유해 주세요.")
                             Spacer(Modifier.weight(1f))
