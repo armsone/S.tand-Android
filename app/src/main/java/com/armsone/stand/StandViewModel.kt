@@ -12,6 +12,8 @@ import com.armsone.stand.data.SettingsRepository
 import com.armsone.stand.model.AmbientLightPolicy
 import com.armsone.stand.model.AppSettings
 import com.armsone.stand.model.BatteryProtectionPolicy
+import com.armsone.stand.model.BoyisoStartleLightingPolicy
+import com.armsone.stand.model.BoyisoStartleLightingProfile
 import com.armsone.stand.model.EnvironmentDisplayMode
 import com.armsone.stand.model.FaceDownLightingPolicy
 import com.armsone.stand.model.LampPhase
@@ -114,6 +116,7 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
     private var boyisoSpeakerActive = false
     private var batteryProtectionLatched = false
     private var movementTriggeredLamp = false
+    private var boyisoStartleLightingProfile: BoyisoStartleLightingProfile? = null
     private var mateModeEnteredAtElapsedRealtimeMillis: Long? = null
     private var pendingModeTarget: EnvironmentDisplayMode? = null
     private var activeRecordingSessionId: UUID? = null
@@ -311,6 +314,7 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
         ambientCamera.cancel()
         pendingModeTarget = null
         movementTriggeredLamp = false
+        boyisoStartleLightingProfile = null
         brightnessAdjustmentActive = false
         mutableUiState.update {
             it.copy(
@@ -393,6 +397,7 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
         brightnessEndpointLockJob?.cancel()
         modeTransitionJob?.cancel()
         movementTriggeredLamp = false
+        boyisoStartleLightingProfile = null
         brightnessAdjustmentActive = false
         pendingModeTarget = null
         mutableUiState.update {
@@ -427,6 +432,7 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
         brightnessEndpointLockJob?.cancel()
         lampJob?.cancel()
         movementTriggeredLamp = false
+        boyisoStartleLightingProfile = null
         finishStartleEvent()
         brightnessAdjustmentActive = true
         brightnessPreference = state.settings.modePreference
@@ -486,6 +492,7 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
         brightnessEndpointLockJob?.cancel()
         lampJob?.cancel()
         movementTriggeredLamp = false
+        boyisoStartleLightingProfile = null
         brightnessAdjustmentActive = false
         val start = state.lampIntensity.coerceIn(0f, 1f)
         val target = SimplifiedBrightnessModePolicy.tapLevel(state.environmentMode)
@@ -831,10 +838,20 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
         syncSleepCareMonitoring()
     }
 
-    fun activateBoyisoStartle() {
+    fun activateBoyisoStartle(kind: String = "movement", detail: String? = null) {
         val state = mutableUiState.value
         if (!state.isSessionActive || state.environmentMode != EnvironmentDisplayMode.MATE) return
-        activateLamp(triggeredByMovement = true, bypassStartleDelay = true)
+        val requestedProfile = BoyisoStartleLightingPolicy.profile(kind, detail)
+        val activeProfile = boyisoStartleLightingProfile
+        if (activeProfile != null &&
+            !(activeProfile == BoyisoStartleLightingProfile.GENTLE &&
+                requestedProfile == BoyisoStartleLightingProfile.STRONG)
+        ) return
+        activateLamp(
+            triggeredByMovement = true,
+            bypassStartleDelay = true,
+            boyisoProfile = requestedProfile,
+        )
     }
 
     fun deleteRecording(clip: RecordingClip): Boolean {
@@ -1105,6 +1122,7 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
         modeTransitionJob?.cancel()
         ambientCameraSamplingJob?.cancel()
         movementTriggeredLamp = false
+        boyisoStartleLightingProfile = null
         pendingModeTarget = null
         mutableUiState.update {
             it.copy(
@@ -1197,7 +1215,10 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
         modeTransitionJob?.cancel()
         modeTransitionJob = null
         pendingModeTarget = null
-        if (mode == EnvironmentDisplayMode.OBJECT) movementTriggeredLamp = false
+        if (mode == EnvironmentDisplayMode.OBJECT) {
+            movementTriggeredLamp = false
+            boyisoStartleLightingProfile = null
+        }
         mutableUiState.update {
             it.copy(
                 environmentMode = mode,
@@ -1216,6 +1237,7 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
     private fun activateLamp(
         triggeredByMovement: Boolean,
         bypassStartleDelay: Boolean = false,
+        boyisoProfile: BoyisoStartleLightingProfile? = null,
     ) {
         val state = mutableUiState.value
         if (!state.isSessionActive || batteryProtectionLatched) return
@@ -1238,20 +1260,64 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
             finishStartleEvent()
         }
         movementTriggeredLamp = triggeredByMovement
+        boyisoStartleLightingProfile = if (triggeredByMovement) boyisoProfile else null
+        val restingIntensity = state.settings.lampIntensity
         val maximumIntensity = if (triggeredByMovement) {
-            max(state.settings.lampIntensity, SimplifiedBrightnessModePolicy.OBJECT_TAP_LEVEL)
+            boyisoProfile?.peakIntensity
+                ?: max(state.settings.lampIntensity, SimplifiedBrightnessModePolicy.OBJECT_TAP_LEVEL)
         } else {
             state.settings.lampIntensity
         }
+        val initialIntensity = boyisoProfile?.startingIntensity ?: maximumIntensity
         mutableUiState.update {
-            val phase = if (maximumIntensity <= 0f) LampPhase.OFF else LampPhase.HOLDING
+            val phase = if (initialIntensity <= 0f) LampPhase.OFF else LampPhase.HOLDING
             it.copy(
-                lampIntensity = maximumIntensity,
+                lampIntensity = initialIntensity,
                 lampPhase = phase,
                 experienceMode = currentExperience(it.environmentMode, phase),
             )
         }
         syncTorch()
+
+        if (boyisoProfile != null) {
+            lampJob = viewModelScope.launch {
+                val startedAt = SystemClock.elapsedRealtime()
+                while (true) {
+                    val elapsed = SystemClock.elapsedRealtime() - startedAt
+                    val complete = elapsed >= boyisoProfile.totalMillis
+                    val intensity = BoyisoStartleLightingPolicy.intensityAt(
+                        profile = boyisoProfile,
+                        elapsedMillis = elapsed,
+                        restingIntensity = restingIntensity,
+                    )
+                    mutableUiState.update {
+                        it.copy(
+                            lampIntensity = intensity,
+                            lampPhase = if (complete) {
+                                if (restingIntensity <= 0f) LampPhase.OFF else LampPhase.HOLDING
+                            } else {
+                                LampPhase.FADING
+                            },
+                            experienceMode = if (complete) {
+                                modeExperience(it.environmentMode)
+                            } else {
+                                currentExperience(it.environmentMode, LampPhase.FADING)
+                            },
+                        )
+                    }
+                    syncTorch()
+                    if (complete) {
+                        movementTriggeredLamp = false
+                        boyisoStartleLightingProfile = null
+                        finishStartleEvent()
+                        torchController.turnOff()
+                        break
+                    }
+                    delay(LAMP_FRAME_MILLIS)
+                }
+            }
+            return
+        }
 
         val shouldFade = triggeredByMovement || StandAutomaticDimmingPolicy.shouldFade(
                 automaticDimmingEnabled = state.settings.automaticDimmingEnabled,
@@ -1287,6 +1353,7 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
                 syncTorch()
                 if (progress >= 1f) {
                     movementTriggeredLamp = false
+                    boyisoStartleLightingProfile = null
                     finishStartleEvent()
                     torchController.turnOff()
                     mutableUiState.update {
@@ -1317,6 +1384,7 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
         lampJob?.cancel()
         val startingIntensity = state.lampIntensity
         movementTriggeredLamp = false
+        boyisoStartleLightingProfile = null
         finishStartleEvent()
         lampJob = viewModelScope.launch {
             val startedAt = SystemClock.elapsedRealtime()
@@ -1434,6 +1502,20 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
+        val boyisoProfile = boyisoStartleLightingProfile
+        if (boyisoProfile != null) {
+            val level = BoyisoStartleLightingPolicy.torchLevel(
+                profile = boyisoProfile,
+                torchEnabled = state.settings.torchEnabled,
+                roomIsDark = AmbientCameraModePolicy.isRecentlyDark(
+                    ambientCamera.reading.value,
+                    SystemClock.elapsedRealtimeNanos(),
+                ),
+                supportsStrengthControl = torchController.state.value.maximumStrengthLevel > 1,
+            )
+            if (level <= 0.0) torchController.turnOff() else torchController.setLevel(level)
+            return
+        }
         val maximumLevel = LampTorchLightingPolicy.maximumLevel(
             torchEnabled = state.settings.torchEnabled,
             isMovementTriggered = movementTriggeredLamp,

@@ -34,8 +34,8 @@ final class BoyisoEvent {
                 long sentAtMilliseconds, Double intensity, String detail,
                 boolean monitoring, Integer batteryPercent, String displayMode,
                 boolean sessionActive) {
-        this.id = id;
-        this.sourceId = sourceId;
+        this.id = canonicalIdentifier(id);
+        this.sourceId = canonicalIdentifier(sourceId);
         this.sourceName = sourceName;
         this.role = role;
         this.kind = kind;
@@ -46,6 +46,20 @@ final class BoyisoEvent {
         this.batteryPercent = batteryPercent;
         this.displayMode = displayMode;
         this.sessionActive = sessionActive;
+    }
+
+    /** UUID text is case-insensitive; retain legacy non-UUID identifiers exactly as stored. */
+    static String canonicalIdentifier(String value) {
+        String trimmed = value == null ? "" : value.trim();
+        try {
+            return UUID.fromString(trimmed).toString();
+        } catch (IllegalArgumentException ignored) {
+            return trimmed;
+        }
+    }
+
+    static boolean sameIdentifier(String left, String right) {
+        return canonicalIdentifier(left).equals(canonicalIdentifier(right));
     }
 
     static BoyisoEvent heartbeat(String sourceId, String sourceName, String role, boolean monitoring,

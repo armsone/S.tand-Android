@@ -42,7 +42,7 @@ final class RemoteRelay {
                 CryptoCodec codec, Listener listener) {
         this.relayUrl = relayUrl;
         this.routingChannel = routingChannel(roomId, roomKey);
-        this.sourceId = sourceId;
+        this.sourceId = BoyisoEvent.canonicalIdentifier(sourceId);
         this.codec = codec;
         this.listener = listener;
     }
@@ -69,7 +69,7 @@ final class RemoteRelay {
                     JSONObject json = new JSONObject(text);
                     if (!"event".equals(json.optString("type"))) return;
                     if (!routingChannel.equals(json.optString("channel"))) return;
-                    if (sourceId.equals(json.optString("sender"))) return;
+                    if (BoyisoEvent.sameIdentifier(sourceId, json.optString("sender"))) return;
                     String encoded = json.getString("payload");
                     listener.onEvent(codec.openEvent(java.util.Base64.getDecoder().decode(encoded)), "인터넷");
                 } catch (JSONException | GeneralSecurityException | IllegalArgumentException ignored) {

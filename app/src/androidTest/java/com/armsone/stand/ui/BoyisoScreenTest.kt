@@ -98,6 +98,9 @@ class BoyisoScreenTest {
 
         composeRule.onNodeWithText("공간에 연결됨").assertIsDisplayed()
         composeRule.onNodeWithText("사람을 기다리고 있습니다.").assertIsDisplayed()
+        composeRule.onAllNodesWithText("연결 자세히 보기").assertCountEquals(0)
+        composeRule.onAllNodesWithText("연결 자세히 닫기").assertCountEquals(0)
+        composeRule.onNodeWithText("톡톡 보내기", substring = true).assertIsDisplayed()
         composeRule.onNodeWithText("우리 공간 QR코드").assertIsDisplayed()
         composeRule.onNodeWithText("QR 사진 보내기", substring = true).performScrollTo().performClick()
         composeRule.onNodeWithText("공간에 있는 사람").performScrollTo().assertIsDisplayed()

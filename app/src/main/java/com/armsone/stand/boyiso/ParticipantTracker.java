@@ -19,10 +19,11 @@ final class ParticipantTracker {
     private final Map<String, Set<String>> sourcePaths = new ConcurrentHashMap<>();
 
     boolean recordIfNew(BoyisoEvent event, String path, long nowMillis) {
+        String sourceId = BoyisoEvent.canonicalIdentifier(event.sourceId);
         if (!deduplicator.accept(event.id, nowMillis)) return false;
-        sourceLastSeen.put(event.sourceId, nowMillis);
-        sourceLatest.put(event.sourceId, event);
-        sourcePaths.computeIfAbsent(event.sourceId, ignored -> ConcurrentHashMap.newKeySet()).add(path);
+        sourceLastSeen.put(sourceId, nowMillis);
+        sourceLatest.put(sourceId, event);
+        sourcePaths.computeIfAbsent(sourceId, ignored -> ConcurrentHashMap.newKeySet()).add(path);
         return true;
     }
 
@@ -46,11 +47,11 @@ final class ParticipantTracker {
     }
 
     Set<String> pathsFor(String sourceId) {
-        return sourcePaths.getOrDefault(sourceId, Collections.emptySet());
+        return sourcePaths.getOrDefault(BoyisoEvent.canonicalIdentifier(sourceId), Collections.emptySet());
     }
 
     long lastSeenFor(String sourceId) {
-        return sourceLastSeen.getOrDefault(sourceId, 0L);
+        return sourceLastSeen.getOrDefault(BoyisoEvent.canonicalIdentifier(sourceId), 0L);
     }
 
     void clear() {

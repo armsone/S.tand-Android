@@ -18,4 +18,8 @@ final class BoyisoBackgroundAlertPolicy {
                 && BoyisoEvent.MODE_MATE.equals(displayMode)
                 && BoyisoEvent.MOVEMENT.equals(event.kind);
     }
+
+    static boolean shouldPlaySoundChime(boolean appVisible) {
+        return !appVisible;
+    }
 }

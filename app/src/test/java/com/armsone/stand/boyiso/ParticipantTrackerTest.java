@@ -56,4 +56,18 @@ public class ParticipantTrackerTest {
         );
         assertEquals(1, tracker.pathsFor("other-phone").size());
     }
+
+    @Test public void uppercaseIosUuidAndLowercaseAndroidUuidAreOneParticipantAndOneEvent() {
+        ParticipantTracker tracker = new ParticipantTracker();
+        String upperId = "BA65F73F-2B36-4FC4-A109-C39D51228B0C";
+        String lowerId = "ba65f73f-2b36-4fc4-a109-c39d51228b0c";
+        String upperEvent = "39611124-8D6A-4E0B-8572-8F472015249B";
+        String lowerEvent = "39611124-8d6a-4e0b-8572-8f472015249b";
+
+        assertTrue(tracker.recordIfNew(heartbeat(upperEvent, upperId, "갤럭시탭"), "LAN", 1L));
+        assertFalse(tracker.recordIfNew(heartbeat(lowerEvent, lowerId, "갤럭시탭"), "BLE", 2L));
+        assertEquals(1, tracker.size());
+        assertEquals(1, tracker.pathsFor(lowerId).size());
+        assertEquals(1L, tracker.lastSeenFor(upperId));
+    }
 }

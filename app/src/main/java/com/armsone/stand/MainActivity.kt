@@ -20,6 +20,7 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import android.os.VibrationAttributes
 import android.provider.Settings
+import android.util.Log
 import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -326,7 +327,7 @@ class MainActivity : ComponentActivity() {
                         connectedDevices = currentBoyiso.devices,
                     )
                 ) {
-                    standViewModel.activateBoyisoStartle()
+                    standViewModel.activateBoyisoStartle(kind = "movement")
                     boyisoManager.sendMovement()
                 }
             }
@@ -346,6 +347,13 @@ class MainActivity : ComponentActivity() {
                     activeTokTokSender = null
                 }
             }
+            if (BuildConfig.DEBUG) {
+                Log.d(
+                    "BoyisoActivity",
+                    "received kind=${event.kind} detail=${event.detail} ts=${event.timestampMillis} " +
+                        "lastHandled=$lastHandledBoyisoStartleTimestamp",
+                )
+            }
             if (event.timestampMillis <= lastHandledBoyisoStartleTimestamp) {
                 return@LaunchedEffect
             }
@@ -362,9 +370,19 @@ class MainActivity : ComponentActivity() {
                     localSessionActive = state.isSessionActive,
                     localMode = state.environmentMode,
                 )
+            if (BuildConfig.DEBUG) {
+                Log.d(
+                    "BoyisoActivity",
+                    "event kind=${event.kind} detail=${event.detail} ts=${event.timestampMillis} " +
+                        "role=${boyisoState.configuration.role.wireValue} active=${state.isSessionActive} " +
+                        "mode=${state.environmentMode} visible=${BoyisoManager.isAppVisible} " +
+                        "sound=$isSpeakerSoundForViewer movement=$isSharedMovement " +
+                        "alreadyHandled=${event.timestampMillis <= lastHandledBoyisoStartleTimestamp}",
+                )
+            }
             if (isSpeakerSoundForViewer || isSharedMovement) {
                 lastHandledBoyisoStartleTimestamp = event.timestampMillis
-                standViewModel.activateBoyisoStartle()
+                standViewModel.activateBoyisoStartle(kind = event.kind, detail = event.detail)
             }
             if (isLargeSpeakerSound) {
                 if (

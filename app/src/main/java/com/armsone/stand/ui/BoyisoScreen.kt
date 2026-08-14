@@ -22,10 +22,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.AddLink
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.ExpandLess
-import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.ChildCare
@@ -33,11 +29,9 @@ import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.Button
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -67,7 +61,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.armsone.stand.BuildConfig
 import com.armsone.stand.R
 import com.armsone.stand.boyiso.BoyisoConfiguration
 import com.armsone.stand.boyiso.BoyisoQrCode
@@ -89,7 +82,6 @@ fun BoyisoScreen(
     onBack: () -> Unit,
 ) {
     var validationMessage by remember { mutableStateOf<String?>(null) }
-    var connectionDetailsExpanded by remember { mutableStateOf(false) }
     var nameEditorOpen by remember { mutableStateOf(false) }
     var nameDraft by remember(state.configuration.deviceName) {
         mutableStateOf(state.configuration.deviceName)
@@ -290,23 +282,6 @@ fun BoyisoScreen(
                             onClick = { nameEditorOpen = true },
                             modifier = Modifier.fillMaxWidth(),
                         ) { Text("내 이름 수정") }
-                    }
-                    OutlinedButton(
-                        onClick = { connectionDetailsExpanded = !connectionDetailsExpanded },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Icon(
-                            if (connectionDetailsExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                            contentDescription = null,
-                        )
-                        Text(if (connectionDetailsExpanded) " 연결 자세히 닫기" else " 연결 자세히 보기")
-                    }
-                    if (connectionDetailsExpanded) {
-                        Text(
-                            "Wi-Fi ${state.lanConnectionCount} · Bluetooth ${state.bluetoothConnectionCount}",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
                     }
                 }
 

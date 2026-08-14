@@ -11,10 +11,11 @@ final class EventDeduplicator {
 
     synchronized boolean accept(String eventId, long nowMillis) {
         prune(nowMillis);
-        if (seen.containsKey(eventId)) {
+        String canonicalId = BoyisoEvent.canonicalIdentifier(eventId);
+        if (seen.containsKey(canonicalId)) {
             return false;
         }
-        seen.put(eventId, nowMillis);
+        seen.put(canonicalId, nowMillis);
         if (seen.size() > MAX_ENTRIES) {
             Iterator<String> iterator = seen.keySet().iterator();
             if (iterator.hasNext()) {

@@ -40,6 +40,7 @@ public final class MonitoringService extends Service implements LanTransport.Lis
     static final String ACTION_MOVEMENT = "com.armsone.stand.boyiso.MOVEMENT";
     static final String ACTION_UPDATE_STAND_STATE = "com.armsone.stand.boyiso.UPDATE_STAND_STATE";
     static final String ACTION_UPDATE_IDENTITY = "com.armsone.stand.boyiso.UPDATE_IDENTITY";
+    static final String ACTION_TEST_DETECTION = "com.armsone.stand.boyiso.TEST_DETECTION";
     static final String EXTRA_ROLE = "role";
     static final String EXTRA_ROOM_CODE = "roomCode";
     static final String EXTRA_ROOM_ID = "roomId";
@@ -57,6 +58,7 @@ public final class MonitoringService extends Service implements LanTransport.Lis
     private static final String TOKTOK_CHANNEL_ID = "boyiso_toktok";
     private static final String DETECTION_CHANNEL_ID = "boyiso_detection";
     private static final int NOTIFICATION_ID = 4101;
+    private static final int TOKTOK_NOTIFICATION_ID = 4201;
     private static final int DETECTION_NOTIFICATION_ID = 4301;
     private static final long STALE_MILLIS = 15_000;
 
@@ -79,19 +81,24 @@ public final class MonitoringService extends Service implements LanTransport.Lis
     private volatile String latestError;
     private volatile long lastTokTokSentAt;
     private volatile boolean hadConnectedDevice;
+    private volatile String lastOngoingNotificationText;
     private volatile String displayMode = BoyisoEvent.MODE_OBJECT;
     private volatile boolean sessionActive;
 
     @Override public void onCreate() {
         super.onCreate();
         createNotificationChannel();
-        sourceId = getSharedPreferences("boyiso", MODE_PRIVATE).getString("source_id", null);
-        if (sourceId == null) {
+        String storedSourceId = getSharedPreferences("boyiso", MODE_PRIVATE).getString("source_id", null);
+        sourceId = BoyisoEvent.canonicalIdentifier(storedSourceId);
+        if (sourceId.isEmpty()) {
             sourceId = UUID.randomUUID().toString();
+        }
+        if (!sourceId.equals(storedSourceId)) {
             getSharedPreferences("boyiso", MODE_PRIVATE).edit().putString("source_id", sourceId).apply();
         }
         sourceName = getSharedPreferences("boyiso", MODE_PRIVATE).getString(
                 "device_name", Build.MANUFACTURER + " " + Build.MODEL);
+        debugIdentity("local", sourceId, sourceName, "이 기기", null);
     }
 
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
@@ -115,6 +122,10 @@ public final class MonitoringService extends Service implements LanTransport.Lis
         }
         if (ACTION_UPDATE_IDENTITY.equals(intent.getAction())) {
             updateIdentity(intent);
+            return START_NOT_STICKY;
+        }
+        if (com.armsone.stand.BuildConfig.DEBUG && ACTION_TEST_DETECTION.equals(intent.getAction())) {
+            injectDebugDetection();
             return START_NOT_STICKY;
         }
         if (!ACTION_START.equals(intent.getAction())) return START_NOT_STICKY;
@@ -262,6 +273,17 @@ public final class MonitoringService extends Service implements LanTransport.Lis
         if (remote != null) remote.send(event);
     }
 
+    /** Debug-only, non-exported manual receive-path check; release builds do not recognize it. */
+    private void injectDebugDetection() {
+        if (!running || role == null) return;
+        BoyisoEvent event = BoyisoEvent.sound(
+                UUID.randomUUID().toString(), "테스트 말할 사람", ROLE_GUEST,
+                BoyisoEvent.DETAIL_FINGER_SNAP, 0.8, 80, BoyisoEvent.MODE_MATE, true);
+        // Exercise only this device's receive/notification path. A diagnostic event must never
+        // enter the mesh or appear as a participant on another person's device.
+        broadcastReceivedEvent(event, "테스트");
+    }
+
     private Integer batteryPercent() {
         BatteryManager manager = (BatteryManager) getSystemService(Context.BATTERY_SERVICE);
         int value = manager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY);
@@ -322,17 +344,20 @@ public final class MonitoringService extends Service implements LanTransport.Lis
     }
 
     @Override public void onEvent(BoyisoEvent event, String path) {
-        if (sourceId.equals(event.sourceId)) return;
+        if (BoyisoEvent.sameIdentifier(sourceId, event.sourceId)) return;
         long now = System.currentTimeMillis();
         if (!participants.recordIfNew(event, path, now)) return;
+        debugIdentity("새 participant event", event.sourceId, event.sourceName, path, event.id);
         hadConnectedDevice = true;
         if (BoyisoEvent.TOKTOK.equals(event.kind)) Log.i(TAG, "톡톡 받음: " + path);
         // Re-broadcast on every path, including the arrival transport, so a device between two
-        // otherwise unreachable peers can relay the event. Source checks and event-ID deduplication
-        // stop the echoes created by the bidirectional mesh.
-        lan.sendFromGuest(event);
-        ble.sendFromGuest(event);
-        remote.send(event);
+        // otherwise unreachable peers can relay the event. The debug receive-path check stays
+        // local. Source checks and event-ID deduplication stop normal bidirectional mesh echoes.
+        if (!"테스트".equals(path)) {
+            lan.sendFromGuest(event);
+            ble.sendFromGuest(event);
+            remote.send(event);
+        }
         if (!BoyisoEvent.HEARTBEAT.equals(event.kind)) broadcastReceivedEvent(event, path);
         broadcastState();
     }
@@ -363,14 +388,19 @@ public final class MonitoringService extends Service implements LanTransport.Lis
         putEventExtras(update, event, path);
         update.putExtra("intensity", event.intensity == null ? 0.0 : event.intensity);
         sendBroadcast(update);
+        boolean appVisible = BoyisoManager.isAppVisible();
+        boolean soundAlert = BoyisoBackgroundAlertPolicy.shouldShowSoundAlert(
+                role, sessionActive, displayMode, event);
+        boolean movementAlert = BoyisoBackgroundAlertPolicy.shouldShowMovementAlert(
+                sessionActive, displayMode, event);
+        debugDeliveryDecision(event, path, appVisible, soundAlert, movementAlert);
         if (BoyisoEvent.TOKTOK.equals(event.kind)) {
-            if (!BoyisoManager.isAppVisible()) showTokTokNotification(event.sourceName);
-        } else if (!BoyisoManager.isAppVisible()) {
-            if (BoyisoBackgroundAlertPolicy.shouldShowSoundAlert(role, sessionActive, displayMode, event)) {
-                showBackgroundDetectionNotification(event, path, true);
-            } else if (BoyisoBackgroundAlertPolicy.shouldShowMovementAlert(sessionActive, displayMode, event)) {
-                showBackgroundDetectionNotification(event, path, false);
-            }
+            if (!appVisible) showTokTokNotification(event.sourceName);
+        } else if (soundAlert) {
+            showBackgroundDetectionNotification(event, path, true,
+                    BoyisoBackgroundAlertPolicy.shouldPlaySoundChime(appVisible));
+        } else if (movementAlert) {
+            showBackgroundDetectionNotification(event, path, false, false);
         }
     }
 
@@ -380,6 +410,30 @@ public final class MonitoringService extends Service implements LanTransport.Lis
         intent.putExtra(EXTRA_EVENT_DETAIL, event.detail);
         intent.putExtra(EXTRA_EVENT_PATH, path);
         intent.putExtra(EXTRA_EVENT_TIMESTAMP, event.sentAtMilliseconds);
+    }
+
+    private void debugIdentity(String stage, String eventSourceId, String eventSourceName,
+                               String path, String eventId) {
+        if (!com.armsone.stand.BuildConfig.DEBUG) return;
+        String source = shortIdentifier(eventSourceId);
+        String local = shortIdentifier(sourceId);
+        String event = eventId == null ? "-" : shortIdentifier(eventId);
+        String name = eventSourceName == null ? "" : eventSourceName.replace('\n', ' ').trim();
+        Log.d(TAG, stage + " source=" + source + " name=" + name + " path=" + path
+                + " event=" + event + " local=" + local);
+    }
+
+    private void debugDeliveryDecision(BoyisoEvent event, String path, boolean appVisible,
+                                       boolean soundAlert, boolean movementAlert) {
+        if (!com.armsone.stand.BuildConfig.DEBUG) return;
+        Log.d(TAG, "delivery kind=" + event.kind + " detail=" + event.detail + " path=" + path
+                + " role=" + role + " active=" + sessionActive + " mode=" + displayMode
+                + " visible=" + appVisible + " sound=" + soundAlert + " movement=" + movementAlert);
+    }
+
+    private static String shortIdentifier(String value) {
+        if (value == null || value.isEmpty()) return "-";
+        return value.substring(0, Math.min(8, value.length()));
     }
 
     private void broadcastLocalDetection(BoyisoEvent event) {
@@ -499,9 +553,14 @@ public final class MonitoringService extends Service implements LanTransport.Lis
                 .build();
     }
 
-    private void updateNotification(String text) {
+    private synchronized void updateNotification(String text) {
         if (!running) return;
-        getSystemService(NotificationManager.class).notify(NOTIFICATION_ID, buildNotification(text));
+        Notification notification = buildNotification(text);
+        CharSequence content = notification.extras.getCharSequence(Notification.EXTRA_TEXT);
+        String resolvedText = content == null ? "" : content.toString();
+        if (resolvedText.equals(lastOngoingNotificationText)) return;
+        lastOngoingNotificationText = resolvedText;
+        getSystemService(NotificationManager.class).notify(NOTIFICATION_ID, notification);
     }
 
     private void showTokTokNotification(String senderName) {
@@ -517,11 +576,11 @@ public final class MonitoringService extends Service implements LanTransport.Lis
                 .setCategory(Notification.CATEGORY_MESSAGE)
                 .setContentIntent(pendingIntent)
                 .build();
-        getSystemService(NotificationManager.class).notify(
-                4_200 + (int) (System.currentTimeMillis() % 100), notification);
+        getSystemService(NotificationManager.class).notify(TOKTOK_NOTIFICATION_ID, notification);
     }
 
-    private void showBackgroundDetectionNotification(BoyisoEvent event, String path, boolean sound) {
+    private void showBackgroundDetectionNotification(BoyisoEvent event, String path, boolean sound,
+                                                     boolean playChime) {
         Intent open = new Intent(this, com.armsone.stand.MainActivity.class)
                 .setAction("com.armsone.stand.boyiso.OPEN_DETECTION")
                 .setData(android.net.Uri.parse("stand://open"));
@@ -543,9 +602,10 @@ public final class MonitoringService extends Service implements LanTransport.Lis
                 .setVisibility(Notification.VISIBILITY_PUBLIC)
                 .setContentIntent(pendingIntent)
                 .build();
-        getSystemService(NotificationManager.class).notify(
-                DETECTION_NOTIFICATION_ID + (int) (event.sentAtMilliseconds % 100), notification);
-        if (sound) playDetectionChimeTwice();
+        // Keep only the most recent alert instead of filling the notification shade with one row
+        // per heartbeat-derived detection. Updating this ID still alerts for a new event.
+        getSystemService(NotificationManager.class).notify(DETECTION_NOTIFICATION_ID, notification);
+        if (sound && playChime) playDetectionChimeTwice();
     }
 
     private void playDetectionChimeTwice() {

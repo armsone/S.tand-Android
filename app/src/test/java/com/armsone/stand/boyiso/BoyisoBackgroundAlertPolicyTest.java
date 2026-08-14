@@ -29,4 +29,11 @@ public class BoyisoBackgroundAlertPolicyTest {
         assertFalse(BoyisoBackgroundAlertPolicy.shouldShowMovementAlert(
                 false, BoyisoEvent.MODE_MATE, event(BoyisoEvent.MOVEMENT)));
     }
+
+    @Test public void eligibleSoundStillNotifiesInForegroundButOnlyBackgroundPlaysServiceChime() {
+        assertTrue(BoyisoBackgroundAlertPolicy.shouldShowSoundAlert(
+                MonitoringService.ROLE_HOST, true, BoyisoEvent.MODE_MATE, event(BoyisoEvent.SOUND)));
+        assertFalse(BoyisoBackgroundAlertPolicy.shouldPlaySoundChime(true));
+        assertTrue(BoyisoBackgroundAlertPolicy.shouldPlaySoundChime(false));
+    }
 }
