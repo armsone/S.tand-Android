@@ -39,7 +39,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Pets
+import androidx.compose.material.icons.filled.ChildCare
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.RestartAlt
@@ -478,7 +478,7 @@ fun SettingsScreen(
                     SettingsSectionKind.BOYISO -> SettingsCard(
                         title = "보이소",
                         subtitle = "BOISO · 보이는 소리",
-                        icon = Icons.Default.Pets,
+                        icon = Icons.Default.ChildCare,
                     ) {
                         Text(
                             boyisoStatus,

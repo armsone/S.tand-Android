@@ -4,7 +4,7 @@
 
 iOS 기준: `main` / `33711c009b7568779504a73685d616d6ec115db0`, `1.0.0 (0.25.1)`
 
-Android 기준: 작업 트리의 versionName `0.0.1`, versionCode `47`, 빌드 `0.0.47`
+Android 기준: 작업 트리의 versionName `0.0.1`, versionCode `48`, 빌드 `0.0.48`
 
 ## 보이소 v2 진행 상태 (2026-08-14)
 
@@ -216,10 +216,10 @@ UI 검증은 보류했다.
 
 ## 현재 설치 후보·버전 상태
 
-- Android versionName `0.0.1`, versionCode `47`, 빌드 표기 `0.0.47`.
-- versionCode 47에서 `testDebugUnitTest`·`assembleDebug`·`compileDebugAndroidTestKotlin`이 성공했다.
-- `SM-F968N`과 `SM-T500`의 직전 versionCode 46 설치·실행은 확인됐고, versionCode 47의 기기
-  설치·실행은 다음 설치 단계에서 확인한다.
+- Android versionName `0.0.1`, versionCode `48`, 빌드 표기 `0.0.48`.
+- versionCode 48에서 중복 mesh event가 참여자 상태를 갱신하지 않도록 보강했고, 백그라운드
+  매이트 모드의 소리 알림은 고우선 알림·진동·두 번의 띵동과 알림 탭 후 화들짝 화면 진입을 제공한다.
+- versionCode 48의 기기 설치·실행은 다음 설치 단계에서 확인한다.
 - `SM-T500`에서 역할·이름·공간 선택, 모든 참여자의 QR 공유, source ID·연결 경로 기준
   역할별 참여자 목록, 연결 중 이름 수정, 밝은 화들짝 알림 문구의 Boyiso 화면 계측 테스트
   5개가 통과했다. `SM-F968N`과 `SM-T500` 모두 화면이 꺼진 상태에서 foreground service

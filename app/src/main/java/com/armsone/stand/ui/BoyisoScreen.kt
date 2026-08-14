@@ -1,11 +1,13 @@
 package com.armsone.stand.ui
 
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -14,6 +16,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -25,7 +28,7 @@ import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Groups
-import androidx.compose.material.icons.filled.Pets
+import androidx.compose.material.icons.filled.ChildCare
 import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Share
@@ -61,7 +64,9 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.armsone.stand.BuildConfig
 import com.armsone.stand.R
 import com.armsone.stand.boyiso.BoyisoConfiguration
@@ -228,7 +233,7 @@ fun BoyisoScreen(
                         onClick = onTokTok,
                         modifier = Modifier.fillMaxWidth().height(72.dp),
                     ) {
-                        Icon(Icons.Default.Pets, contentDescription = null)
+                        Icon(Icons.Default.ChildCare, contentDescription = null)
                         Text(" 톡톡 보내기", style = MaterialTheme.typography.titleLarge)
                     }
                 }
@@ -467,61 +472,64 @@ private fun BoyisoPeopleSection(state: BoyisoState) {
         .groupBy { it.role to it.name.trim().lowercase() }
         .any { (_, matching) -> matching.size > 1 }
 
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .semantics {
-                    contentDescription = "함께 연결된 사람, 총 ${participants.size}명"
-                    heading()
-                },
-            shape = RoundedCornerShape(18.dp),
-            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.62f),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)),
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Box(
+            modifier = Modifier.fillMaxWidth(),
+            contentAlignment = Alignment.Center,
         ) {
-            Row(
-                modifier = Modifier.padding(18.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .widthIn(max = 720.dp),
+                shape = RoundedCornerShape(18.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.56f),
             ) {
-                Icon(
-                    Icons.Default.Groups,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(32.dp),
-                )
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        "함께 연결된 사람",
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold,
+                Column(modifier = Modifier.padding(vertical = 16.dp)) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 18.dp)
+                            .semantics {
+                                contentDescription = "공간에 있는 사람, 나를 포함해 총 ${participants.size}명"
+                                heading()
+                            },
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Icon(
+                            Icons.Default.Groups,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(26.dp),
+                        )
+                        Column {
+                            Text(
+                                "공간에 있는 사람",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                            )
+                            Text(
+                                "나를 포함해 총 ${participants.size}명",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(14.dp))
+                    BoyisoParticipantRoleSection(BoyisoRole.VIEWER, viewers)
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.68f),
                     )
-                    Text(
-                        "볼 사람 ${viewers.size}명 · 말할 사람 ${speakers.size}명",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.surface,
-                ) {
-                    Text(
-                        "총 ${participants.size}명",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                    )
+                    BoyisoParticipantRoleSection(BoyisoRole.SPEAKER, speakers)
                 }
             }
         }
-        BoyisoParticipantGroup(role = BoyisoRole.VIEWER, participants = viewers)
-        BoyisoParticipantGroup(role = BoyisoRole.SPEAKER, participants = speakers)
         if (hasDuplicateNames) {
             Text(
-                "같은 이름의 기기가 여러 대 연결되어 있습니다. 이름을 다르게 정하면 쉽게 구분할 수 있어요.",
+                "같은 이름을 쓰는 기기가 있어요.",
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.error,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 4.dp),
             )
         }
@@ -530,171 +538,121 @@ private fun BoyisoPeopleSection(state: BoyisoState) {
 }
 
 @Composable
-private fun BoyisoParticipantGroup(
+private fun BoyisoParticipantRoleSection(
     role: BoyisoRole,
     participants: List<BoyisoParticipant>,
 ) {
     val viewer = role == BoyisoRole.VIEWER
-    val badgeContainer = if (viewer) Color(0xFFDCEEFF) else Color(0xFFFFE3CE)
-    val badgeContent = if (viewer) Color(0xFF0B4F79) else Color(0xFF7A3500)
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(18.dp),
-        color = badgeContainer.copy(alpha = 0.28f),
-        border = BorderStroke(1.dp, badgeContent.copy(alpha = 0.34f)),
-    ) {
-        Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+    val accent = if (viewer) Color(0xFF176B9B) else Color(0xFFAA5314)
+    Column {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 18.dp)
+                .semantics(mergeDescendants = true) {
+                    heading()
+                    contentDescription = "${role.title} ${participants.size}명"
+                },
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .semantics(mergeDescendants = true) {
-                        heading()
-                        contentDescription = "${role.title} ${participants.size}명"
-                    },
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Icon(
-                    if (viewer) Icons.Default.Visibility else Icons.Default.GraphicEq,
-                    contentDescription = null,
-                    tint = badgeContent,
-                )
-                Text(
-                    role.title,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.weight(1f),
-                )
-                Text(
-                    "${participants.size}명",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = badgeContent,
-                    fontWeight = FontWeight.Bold,
-                )
-            }
-            if (participants.isEmpty()) {
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
-                ) {
-                    Text(
-                        "아직 없음",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(14.dp),
+            Icon(
+                if (viewer) Icons.Default.Visibility else Icons.Default.GraphicEq,
+                contentDescription = null,
+                tint = accent,
+                modifier = Modifier.size(20.dp),
+            )
+            Text(role.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text(
+                "${participants.size}명",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (participants.isEmpty()) {
+            Text(
+                "아직 없음",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 46.dp, vertical = 12.dp),
+            )
+        } else {
+            participants.forEachIndexed { index, participant ->
+                if (index > 0) {
+                    HorizontalDivider(
+                        modifier = Modifier.padding(start = 46.dp, end = 18.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.58f),
                     )
                 }
-            } else participants.forEach { participant ->
-                val accessibilityText = buildString {
-                    append(participant.name)
-                    if (participant.isMe) append(", 나")
-                    append(", ${role.title}, ${participant.status}")
-                    participant.batteryPercent?.let { append(", 배터리 ${it}퍼센트") }
-                    if (participant.transportPaths.isNotEmpty()) {
-                        append(", ${participant.transportPaths.sortedBy(String::displayTransportOrder).joinToString(" 및 ") { it.displayTransportName() }}")
-                    }
+                BoyisoParticipantRow(participant = participant, role = role, accent = accent)
+            }
+        }
+    }
+}
+
+@Composable
+@OptIn(ExperimentalLayoutApi::class)
+private fun BoyisoParticipantRow(
+    participant: BoyisoParticipant,
+    role: BoyisoRole,
+    accent: Color,
+) {
+    val paths = participant.transportPaths
+        .filterNot { participant.isMe && it == "이 기기" }
+        .sortedBy(String::displayTransportOrder)
+    val accessibilityText = buildString {
+        append(participant.name)
+        if (participant.isMe) append(", 이 기기")
+        append(", ${role.title}, ${participant.status}")
+        participant.batteryPercent?.let { append(", 배터리 ${it}퍼센트") }
+        if (paths.isNotEmpty()) {
+            append(", ${paths.joinToString(" 및 ") { it.displayTransportName() }}")
+        }
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 72.dp)
+            .padding(horizontal = 18.dp, vertical = 10.dp)
+            .semantics(mergeDescendants = true) { contentDescription = accessibilityText },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(3.dp),
+        ) {
+            Text(
+                participant.name,
+                fontSize = 18.sp,
+                lineHeight = 22.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(participant.status, style = MaterialTheme.typography.bodyMedium, color = accent)
+                if (participant.isMe) {
+                    Text("이 기기", style = MaterialTheme.typography.bodyMedium)
                 }
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 56.dp)
-                        .semantics(mergeDescendants = true) { contentDescription = accessibilityText },
-                    shape = RoundedCornerShape(14.dp),
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.88f),
-                    border = BorderStroke(1.dp, badgeContent.copy(alpha = 0.2f)),
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        Icon(
-                            if (viewer) Icons.Default.Visibility else Icons.Default.GraphicEq,
-                            contentDescription = null,
-                            tint = badgeContent,
-                        )
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            ) {
-                                Text(
-                                    participant.name,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.weight(1f, fill = false),
-                                )
-                                if (participant.isMe) {
-                                    Surface(
-                                        shape = RoundedCornerShape(8.dp),
-                                        color = MaterialTheme.colorScheme.primaryContainer,
-                                    ) {
-                                        Text(
-                                            "나",
-                                            style = MaterialTheme.typography.labelLarge,
-                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                                        )
-                                    }
-                                }
-                            }
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                Surface(shape = RoundedCornerShape(8.dp), color = badgeContainer) {
-                                    Text(
-                                        role.title,
-                                        style = MaterialTheme.typography.labelLarge,
-                                        color = badgeContent,
-                                        fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                                    )
-                                }
-                                Text(
-                                    participant.status,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                participant.transportPaths
-                                    .sortedBy(String::displayTransportOrder)
-                                    .forEach { path ->
-                                        Surface(
-                                            shape = RoundedCornerShape(8.dp),
-                                            color = MaterialTheme.colorScheme.secondaryContainer,
-                                        ) {
-                                            Text(
-                                                path.displayTransportName(),
-                                                style = MaterialTheme.typography.labelLarge,
-                                                color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                                fontWeight = FontWeight.Bold,
-                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                                            )
-                                        }
-                                    }
-                            }
-                        }
-                        participant.batteryPercent?.let {
-                            Text(
-                                "$it%",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
+                paths.forEach { path ->
+                    Text(
+                        path.displayTransportName(),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
+        }
+        participant.batteryPercent?.let {
+            Text(
+                "$it%",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

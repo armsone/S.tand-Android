@@ -12,7 +12,7 @@ import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.FlashlightOn
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.Pets
+import androidx.compose.material.icons.filled.ChildCare
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.StopCircle
@@ -106,7 +106,7 @@ internal fun StandControlKind.presentation(
         StandControlKind.BOYISO -> StandControlPresentation(
             title = "보이소",
             status = boyisoStatus,
-            icon = Icons.Default.Pets,
+            icon = Icons.Default.ChildCare,
         )
     }
 

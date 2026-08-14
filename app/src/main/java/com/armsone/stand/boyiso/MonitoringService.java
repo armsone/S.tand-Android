@@ -16,15 +16,14 @@ import android.media.MediaRecorder;
 import android.net.wifi.WifiManager;
 import android.os.BatteryManager;
 import android.os.Build;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.os.PowerManager;
 import android.provider.Settings;
 import android.util.Log;
 
-import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -47,17 +46,21 @@ public final class MonitoringService extends Service implements LanTransport.Lis
     static final String EXTRA_SOURCE_NAME = "sourceName";
     static final String EXTRA_DISPLAY_MODE = "displayMode";
     static final String EXTRA_SESSION_ACTIVE = "sessionActive";
+    public static final String EXTRA_EVENT_SOURCE_NAME = "sourceName";
+    public static final String EXTRA_EVENT_KIND = "kind";
+    public static final String EXTRA_EVENT_DETAIL = "detail";
+    public static final String EXTRA_EVENT_PATH = "path";
+    public static final String EXTRA_EVENT_TIMESTAMP = "timestamp";
     static final String ROLE_HOST = "host";
     static final String ROLE_GUEST = "guest";
     private static final String CHANNEL_ID = "boyiso_monitoring";
     private static final String TOKTOK_CHANNEL_ID = "boyiso_toktok";
+    private static final String DETECTION_CHANNEL_ID = "boyiso_detection";
     private static final int NOTIFICATION_ID = 4101;
+    private static final int DETECTION_NOTIFICATION_ID = 4301;
     private static final long STALE_MILLIS = 15_000;
 
-    private final EventDeduplicator deduplicator = new EventDeduplicator();
-    private final Map<String, Long> sourceLastSeen = new ConcurrentHashMap<>();
-    private final Map<String, BoyisoEvent> sourceLatest = new ConcurrentHashMap<>();
-    private final Map<String, Set<String>> sourcePaths = new ConcurrentHashMap<>();
+    private final ParticipantTracker participants = new ParticipantTracker();
     private ScheduledExecutorService scheduler;
     private LanTransport lan;
     private BleTransport ble;
@@ -321,11 +324,8 @@ public final class MonitoringService extends Service implements LanTransport.Lis
     @Override public void onEvent(BoyisoEvent event, String path) {
         if (sourceId.equals(event.sourceId)) return;
         long now = System.currentTimeMillis();
-        sourceLastSeen.put(event.sourceId, now);
-        sourceLatest.put(event.sourceId, event);
-        sourcePaths.computeIfAbsent(event.sourceId, ignored -> ConcurrentHashMap.newKeySet()).add(path);
+        if (!participants.recordIfNew(event, path, now)) return;
         hadConnectedDevice = true;
-        if (!deduplicator.accept(event.id, now)) return;
         if (BoyisoEvent.TOKTOK.equals(event.kind)) Log.i(TAG, "톡톡 받음: " + path);
         // Re-broadcast on every path, including the arrival transport, so a device between two
         // otherwise unreachable peers can relay the event. Source checks and event-ID deduplication
@@ -352,14 +352,7 @@ public final class MonitoringService extends Service implements LanTransport.Lis
 
     private void expireStaleSources() {
         long now = System.currentTimeMillis();
-        boolean removed = sourceLastSeen.entrySet().removeIf(entry -> {
-            boolean stale = now - entry.getValue() > STALE_MILLIS;
-            if (stale) {
-                sourceLatest.remove(entry.getKey());
-                sourcePaths.remove(entry.getKey());
-            }
-            return stale;
-        });
+        boolean removed = participants.expireStale(now, STALE_MILLIS);
         if (removed) {
             broadcastState();
         }
@@ -367,28 +360,32 @@ public final class MonitoringService extends Service implements LanTransport.Lis
 
     private void broadcastReceivedEvent(BoyisoEvent event, String path) {
         Intent update = new Intent(ACTION_EVENT).setPackage(getPackageName());
-        update.putExtra("sourceName", event.sourceName);
-        update.putExtra("kind", event.kind);
-        update.putExtra("detail", event.detail);
+        putEventExtras(update, event, path);
         update.putExtra("intensity", event.intensity == null ? 0.0 : event.intensity);
-        update.putExtra("path", path);
-        update.putExtra("timestamp", event.sentAtMilliseconds);
         sendBroadcast(update);
         if (BoyisoEvent.TOKTOK.equals(event.kind)) {
             if (!BoyisoManager.isAppVisible()) showTokTokNotification(event.sourceName);
-        } else {
-            updateNotification("소리 이벤트를 확인했습니다");
+        } else if (!BoyisoManager.isAppVisible()) {
+            if (BoyisoBackgroundAlertPolicy.shouldShowSoundAlert(role, sessionActive, displayMode, event)) {
+                showBackgroundDetectionNotification(event, path, true);
+            } else if (BoyisoBackgroundAlertPolicy.shouldShowMovementAlert(sessionActive, displayMode, event)) {
+                showBackgroundDetectionNotification(event, path, false);
+            }
         }
+    }
+
+    private void putEventExtras(Intent intent, BoyisoEvent event, String path) {
+        intent.putExtra(EXTRA_EVENT_SOURCE_NAME, event.sourceName);
+        intent.putExtra(EXTRA_EVENT_KIND, event.kind);
+        intent.putExtra(EXTRA_EVENT_DETAIL, event.detail);
+        intent.putExtra(EXTRA_EVENT_PATH, path);
+        intent.putExtra(EXTRA_EVENT_TIMESTAMP, event.sentAtMilliseconds);
     }
 
     private void broadcastLocalDetection(BoyisoEvent event) {
         Intent update = new Intent(ACTION_EVENT).setPackage(getPackageName());
-        update.putExtra("sourceName", sourceName);
-        update.putExtra("kind", event.kind);
-        update.putExtra("detail", event.detail);
+        putEventExtras(update, event, "이 기기");
         update.putExtra("intensity", event.intensity == null ? 0.0 : event.intensity);
-        update.putExtra("path", "이 기기");
-        update.putExtra("timestamp", event.sentAtMilliseconds);
         sendBroadcast(update);
     }
 
@@ -401,7 +398,7 @@ public final class MonitoringService extends Service implements LanTransport.Lis
         update.putExtra("bleCount", bleCount);
         update.putExtra("internetCount", internetCount);
         update.putExtra("hadConnectedDevice", hadConnectedDevice);
-        update.putExtra("guestCount", sourceLastSeen.size());
+        update.putExtra("guestCount", participants.size());
         update.putExtra("monitoring", audioRecord != null
                 && audioRecord.getRecordingState() == AudioRecord.RECORDSTATE_RECORDING);
         update.putExtra("error", latestError);
@@ -411,10 +408,10 @@ public final class MonitoringService extends Service implements LanTransport.Lis
         java.util.ArrayList<String> sourceDisplayModes = new java.util.ArrayList<>();
         java.util.ArrayList<String> sourceTransportPaths = new java.util.ArrayList<>();
         java.util.ArrayList<Integer> sourceBatteries = new java.util.ArrayList<>();
-        boolean[] sourceMonitoring = new boolean[sourceLatest.size()];
-        boolean[] sourceSessionActive = new boolean[sourceLatest.size()];
-        long[] sourceSeen = new long[sourceLatest.size()];
-        java.util.ArrayList<BoyisoEvent> sources = new java.util.ArrayList<>(sourceLatest.values());
+        java.util.ArrayList<BoyisoEvent> sources = new java.util.ArrayList<>(participants.latestEvents());
+        boolean[] sourceMonitoring = new boolean[sources.size()];
+        boolean[] sourceSessionActive = new boolean[sources.size()];
+        long[] sourceSeen = new long[sources.size()];
         sources.sort((left, right) -> left.sourceName.compareToIgnoreCase(right.sourceName));
         for (int index = 0; index < sources.size(); index++) {
             BoyisoEvent source = sources.get(index);
@@ -423,13 +420,13 @@ public final class MonitoringService extends Service implements LanTransport.Lis
             sourceRoles.add(source.role);
             sourceDisplayModes.add(source.displayMode == null ? "" : source.displayMode);
             java.util.ArrayList<String> paths = new java.util.ArrayList<>(
-                    sourcePaths.getOrDefault(source.sourceId, java.util.Collections.emptySet()));
+                    participants.pathsFor(source.sourceId));
             paths.sort(String::compareToIgnoreCase);
             sourceTransportPaths.add(String.join(",", paths));
             sourceBatteries.add(source.batteryPercent == null ? -1 : source.batteryPercent);
             sourceMonitoring[index] = source.monitoring;
             sourceSessionActive[index] = source.sessionActive;
-            sourceSeen[index] = sourceLastSeen.getOrDefault(source.sourceId, 0L);
+            sourceSeen[index] = participants.lastSeenFor(source.sourceId);
         }
         update.putStringArrayListExtra("sourceIds", sourceIds);
         update.putStringArrayListExtra("sourceNames", sourceNames);
@@ -464,6 +461,14 @@ public final class MonitoringService extends Service implements LanTransport.Lis
                 .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                 .build());
         getSystemService(NotificationManager.class).createNotificationChannel(tokTok);
+        NotificationChannel detection = new NotificationChannel(DETECTION_CHANNEL_ID,
+                "보이소 소리 알림", NotificationManager.IMPORTANCE_HIGH);
+        detection.setDescription("매이트 모드에서 말할 사람의 소리와 움직임을 알립니다.");
+        detection.enableVibration(true);
+        detection.setVibrationPattern(new long[]{0, 120, 80, 180});
+        detection.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
+        detection.setSound(null, null);
+        getSystemService(NotificationManager.class).createNotificationChannel(detection);
     }
 
     private Notification buildNotification() {
@@ -478,7 +483,7 @@ public final class MonitoringService extends Service implements LanTransport.Lis
         if (text == null) {
             if (ROLE_GUEST.equals(role)) text = "말할 사람 기기에서 소리를 살피는 중";
             else {
-                long speakerCount = sourceLatest.values().stream()
+                long speakerCount = participants.latestEvents().stream()
                         .filter(event -> ROLE_GUEST.equals(event.role)).count();
                 text = speakerCount == 0 ? "말할 사람 기기 연결을 기다리는 중"
                         : speakerCount + "대의 말할 사람 기기를 살피는 중";
@@ -516,6 +521,46 @@ public final class MonitoringService extends Service implements LanTransport.Lis
                 4_200 + (int) (System.currentTimeMillis() % 100), notification);
     }
 
+    private void showBackgroundDetectionNotification(BoyisoEvent event, String path, boolean sound) {
+        Intent open = new Intent(this, com.armsone.stand.MainActivity.class)
+                .setAction("com.armsone.stand.boyiso.OPEN_DETECTION")
+                .setData(android.net.Uri.parse("stand://open"));
+        putEventExtras(open, event, path);
+        PendingIntent pendingIntent = PendingIntent.getActivity(this, DETECTION_NOTIFICATION_ID, open,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+        String sender = event.sourceName == null || event.sourceName.trim().isEmpty()
+                ? "말할 사람" : event.sourceName;
+        String body = sound ? sender + "의 소리가 감지되었습니다."
+                : sender + "의 움직임이 감지되었습니다.";
+        Notification notification = new Notification.Builder(this, DETECTION_CHANNEL_ID)
+                .setSmallIcon(android.R.drawable.ic_dialog_alert)
+                .setContentTitle("보이소 · " + (sound ? "소리 알림" : "움직임 알림"))
+                .setContentText(body)
+                .setStyle(new Notification.BigTextStyle().bigText(body))
+                .setAutoCancel(true)
+                .setCategory(Notification.CATEGORY_EVENT)
+                .setPriority(Notification.PRIORITY_HIGH)
+                .setVisibility(Notification.VISIBILITY_PUBLIC)
+                .setContentIntent(pendingIntent)
+                .build();
+        getSystemService(NotificationManager.class).notify(
+                DETECTION_NOTIFICATION_ID + (int) (event.sentAtMilliseconds % 100), notification);
+        if (sound) playDetectionChimeTwice();
+    }
+
+    private void playDetectionChimeTwice() {
+        playDetectionChime();
+        new Handler(Looper.getMainLooper()).postDelayed(this::playDetectionChime, 1_250L);
+    }
+
+    private void playDetectionChime() {
+        android.media.MediaPlayer player = android.media.MediaPlayer.create(
+                this, com.armsone.stand.R.raw.boyiso_toktok);
+        if (player == null) return;
+        player.setOnCompletionListener(android.media.MediaPlayer::release);
+        player.start();
+    }
+
     private void stopMonitoring() {
         running = false;
         isActive = false;
@@ -534,9 +579,7 @@ public final class MonitoringService extends Service implements LanTransport.Lis
         if (remote != null) { remote.stop(); remote = null; }
         if (wakeLock != null && wakeLock.isHeld()) wakeLock.release();
         if (multicastLock != null && multicastLock.isHeld()) multicastLock.release();
-        sourceLastSeen.clear();
-        sourceLatest.clear();
-        sourcePaths.clear();
+        participants.clear();
         lanCount = 0;
         bleCount = 0;
         internetCount = 0;

@@ -160,6 +160,7 @@ class MainActivity : ComponentActivity() {
             restoredVisibility = restoredPermissionReview,
         )
         acceptRadioShareDraft(intent)
+        acceptBoyisoNotificationEvent(intent)
         acceptBoyisoInvitation(intent)
 
         setContent {
@@ -180,6 +181,7 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         acceptRadioShareDraft(intent)
+        acceptBoyisoNotificationEvent(intent)
         acceptBoyisoInvitation(intent)
     }
 
@@ -1038,6 +1040,11 @@ class MainActivity : ComponentActivity() {
             showToast("보이소 QR을 확인했습니다.")
         }
         pendingBoyisoInvitationVersion.value += 1L
+    }
+
+    private fun acceptBoyisoNotificationEvent(intent: Intent?) {
+        if (intent?.action != "com.armsone.stand.boyiso.OPEN_DETECTION") return
+        boyisoManager.receiveNotificationEvent(intent)
     }
 
     private fun scanBoyisoInvitation() {

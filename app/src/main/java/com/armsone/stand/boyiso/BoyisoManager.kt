@@ -244,6 +244,23 @@ class BoyisoManager(context: Context) : AutoCloseable {
         )
     }
 
+    fun receiveNotificationEvent(intent: Intent) {
+        val kind = intent.getStringExtra(MonitoringService.EXTRA_EVENT_KIND).orEmpty()
+        if (kind.isBlank()) return
+        _state.value = _state.value.copy(
+            latestEvent = BoyisoEventSummary(
+                sourceName = intent.getStringExtra(MonitoringService.EXTRA_EVENT_SOURCE_NAME).orEmpty(),
+                kind = kind,
+                detail = intent.getStringExtra(MonitoringService.EXTRA_EVENT_DETAIL).orEmpty(),
+                path = intent.getStringExtra(MonitoringService.EXTRA_EVENT_PATH).orEmpty(),
+                timestampMillis = intent.getLongExtra(
+                    MonitoringService.EXTRA_EVENT_TIMESTAMP,
+                    System.currentTimeMillis(),
+                ),
+            ),
+        )
+    }
+
     override fun close() {
         runCatching { applicationContext.unregisterReceiver(receiver) }
     }
@@ -292,15 +309,7 @@ class BoyisoManager(context: Context) : AutoCloseable {
     }
 
     private fun receiveEvent(intent: Intent) {
-        _state.value = _state.value.copy(
-            latestEvent = BoyisoEventSummary(
-                sourceName = intent.getStringExtra("sourceName").orEmpty(),
-                kind = intent.getStringExtra("kind").orEmpty(),
-                detail = intent.getStringExtra("detail").orEmpty(),
-                path = intent.getStringExtra("path").orEmpty(),
-                timestampMillis = intent.getLongExtra("timestamp", System.currentTimeMillis()),
-            ),
-        )
+        receiveNotificationEvent(intent)
     }
 
     private fun loadConfiguration(): BoyisoConfiguration {
