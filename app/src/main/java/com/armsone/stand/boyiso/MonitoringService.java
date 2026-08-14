@@ -22,6 +22,7 @@ import android.provider.Settings;
 import android.util.Log;
 
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
@@ -39,6 +40,7 @@ public final class MonitoringService extends Service implements LanTransport.Lis
     static final String ACTION_TOKTOK = "com.armsone.stand.boyiso.TOKTOK";
     static final String ACTION_MOVEMENT = "com.armsone.stand.boyiso.MOVEMENT";
     static final String ACTION_UPDATE_STAND_STATE = "com.armsone.stand.boyiso.UPDATE_STAND_STATE";
+    static final String ACTION_UPDATE_IDENTITY = "com.armsone.stand.boyiso.UPDATE_IDENTITY";
     static final String EXTRA_ROLE = "role";
     static final String EXTRA_ROOM_CODE = "roomCode";
     static final String EXTRA_ROOM_ID = "roomId";
@@ -55,6 +57,7 @@ public final class MonitoringService extends Service implements LanTransport.Lis
     private final EventDeduplicator deduplicator = new EventDeduplicator();
     private final Map<String, Long> sourceLastSeen = new ConcurrentHashMap<>();
     private final Map<String, BoyisoEvent> sourceLatest = new ConcurrentHashMap<>();
+    private final Map<String, Set<String>> sourcePaths = new ConcurrentHashMap<>();
     private ScheduledExecutorService scheduler;
     private LanTransport lan;
     private BleTransport ble;
@@ -107,7 +110,12 @@ public final class MonitoringService extends Service implements LanTransport.Lis
             updateStandState(intent);
             return START_NOT_STICKY;
         }
-        if (!ACTION_START.equals(intent.getAction()) || running) return START_NOT_STICKY;
+        if (ACTION_UPDATE_IDENTITY.equals(intent.getAction())) {
+            updateIdentity(intent);
+            return START_NOT_STICKY;
+        }
+        if (!ACTION_START.equals(intent.getAction())) return START_NOT_STICKY;
+        if (running) return START_REDELIVER_INTENT;
         role = intent.getStringExtra(EXTRA_ROLE);
         displayMode = normalizedDisplayMode(intent.getStringExtra(EXTRA_DISPLAY_MODE));
         sessionActive = intent.getBooleanExtra(EXTRA_SESSION_ACTIVE, false);
@@ -131,7 +139,7 @@ public final class MonitoringService extends Service implements LanTransport.Lis
             broadcastState();
             stopSelf();
         }
-        return START_NOT_STICKY;
+        return running ? START_REDELIVER_INTENT : START_NOT_STICKY;
     }
 
     private void startMonitoring(CryptoCodec codec, String roomId, String roomKey) {
@@ -174,10 +182,8 @@ public final class MonitoringService extends Service implements LanTransport.Lis
 
     private void acquireLocks() {
         PowerManager powerManager = (PowerManager) getSystemService(Context.POWER_SERVICE);
-        if (ROLE_GUEST.equals(role)) {
-            wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Boyiso:GuestMonitoring");
-            wakeLock.acquire();
-        }
+        wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Boyiso:NearbyConnection");
+        wakeLock.acquire();
         WifiManager wifiManager = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
         multicastLock = wifiManager.createMulticastLock("BoyisoNsd");
         multicastLock.setReferenceCounted(false);
@@ -199,6 +205,15 @@ public final class MonitoringService extends Service implements LanTransport.Lis
         lan.sendFromGuest(heartbeat);
         ble.sendFromGuest(heartbeat);
         remote.send(heartbeat);
+    }
+
+    private void updateIdentity(Intent intent) {
+        String requestedSourceName = intent.getStringExtra(EXTRA_SOURCE_NAME);
+        if (!running || requestedSourceName == null || requestedSourceName.trim().isEmpty()) return;
+        sourceName = requestedSourceName.trim();
+        getSharedPreferences("boyiso", MODE_PRIVATE).edit().putString("device_name", sourceName).apply();
+        sendHeartbeat();
+        broadcastState();
     }
 
     private void sendTokTok() {
@@ -308,6 +323,7 @@ public final class MonitoringService extends Service implements LanTransport.Lis
         long now = System.currentTimeMillis();
         sourceLastSeen.put(event.sourceId, now);
         sourceLatest.put(event.sourceId, event);
+        sourcePaths.computeIfAbsent(event.sourceId, ignored -> ConcurrentHashMap.newKeySet()).add(path);
         hadConnectedDevice = true;
         if (!deduplicator.accept(event.id, now)) return;
         if (BoyisoEvent.TOKTOK.equals(event.kind)) Log.i(TAG, "톡톡 받음: " + path);
@@ -338,7 +354,10 @@ public final class MonitoringService extends Service implements LanTransport.Lis
         long now = System.currentTimeMillis();
         boolean removed = sourceLastSeen.entrySet().removeIf(entry -> {
             boolean stale = now - entry.getValue() > STALE_MILLIS;
-            if (stale) sourceLatest.remove(entry.getKey());
+            if (stale) {
+                sourceLatest.remove(entry.getKey());
+                sourcePaths.remove(entry.getKey());
+            }
             return stale;
         });
         if (removed) {
@@ -390,6 +409,7 @@ public final class MonitoringService extends Service implements LanTransport.Lis
         java.util.ArrayList<String> sourceNames = new java.util.ArrayList<>();
         java.util.ArrayList<String> sourceRoles = new java.util.ArrayList<>();
         java.util.ArrayList<String> sourceDisplayModes = new java.util.ArrayList<>();
+        java.util.ArrayList<String> sourceTransportPaths = new java.util.ArrayList<>();
         java.util.ArrayList<Integer> sourceBatteries = new java.util.ArrayList<>();
         boolean[] sourceMonitoring = new boolean[sourceLatest.size()];
         boolean[] sourceSessionActive = new boolean[sourceLatest.size()];
@@ -402,6 +422,10 @@ public final class MonitoringService extends Service implements LanTransport.Lis
             sourceNames.add(source.sourceName);
             sourceRoles.add(source.role);
             sourceDisplayModes.add(source.displayMode == null ? "" : source.displayMode);
+            java.util.ArrayList<String> paths = new java.util.ArrayList<>(
+                    sourcePaths.getOrDefault(source.sourceId, java.util.Collections.emptySet()));
+            paths.sort(String::compareToIgnoreCase);
+            sourceTransportPaths.add(String.join(",", paths));
             sourceBatteries.add(source.batteryPercent == null ? -1 : source.batteryPercent);
             sourceMonitoring[index] = source.monitoring;
             sourceSessionActive[index] = source.sessionActive;
@@ -411,6 +435,7 @@ public final class MonitoringService extends Service implements LanTransport.Lis
         update.putStringArrayListExtra("sourceNames", sourceNames);
         update.putStringArrayListExtra("sourceRoles", sourceRoles);
         update.putStringArrayListExtra("sourceDisplayModes", sourceDisplayModes);
+        update.putStringArrayListExtra("sourceTransportPaths", sourceTransportPaths);
         update.putIntegerArrayListExtra("sourceBatteries", sourceBatteries);
         update.putExtra("sourceMonitoring", sourceMonitoring);
         update.putExtra("sourceSessionActive", sourceSessionActive);
@@ -511,6 +536,7 @@ public final class MonitoringService extends Service implements LanTransport.Lis
         if (multicastLock != null && multicastLock.isHeld()) multicastLock.release();
         sourceLastSeen.clear();
         sourceLatest.clear();
+        sourcePaths.clear();
         lanCount = 0;
         bleCount = 0;
         internetCount = 0;

@@ -85,6 +85,10 @@ fun BoyisoScreen(
 ) {
     var validationMessage by remember { mutableStateOf<String?>(null) }
     var connectionDetailsExpanded by remember { mutableStateOf(false) }
+    var nameEditorOpen by remember { mutableStateOf(false) }
+    var nameDraft by remember(state.configuration.deviceName) {
+        mutableStateOf(state.configuration.deviceName)
+    }
 
     LaunchedEffect(state.configuration.roomId, state.configuration.roomKey) {
         if (state.configuration.hasRoom && !state.running) onStart()
@@ -231,6 +235,48 @@ fun BoyisoScreen(
                         },
                         style = MaterialTheme.typography.titleMedium,
                     )
+                    Text(
+                        "내 이름: ${state.configuration.deviceName}",
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    if (nameEditorOpen) {
+                        OutlinedTextField(
+                            value = nameDraft,
+                            onValueChange = { nameDraft = it },
+                            label = { Text("내 이름") },
+                            placeholder = { Text("예: 엄마, 거실 태블릿") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            OutlinedButton(
+                                onClick = {
+                                    nameDraft = state.configuration.deviceName
+                                    nameEditorOpen = false
+                                },
+                                modifier = Modifier.weight(1f),
+                            ) { Text("취소") }
+                            Button(
+                                onClick = {
+                                    val newName = nameDraft.trim()
+                                    if (newName.isNotEmpty()) {
+                                        onUpdateConfiguration(state.configuration.copy(deviceName = newName))
+                                        nameEditorOpen = false
+                                    }
+                                },
+                                modifier = Modifier.weight(1f),
+                            ) { Text("저장") }
+                        }
+                    } else {
+                        OutlinedButton(
+                            onClick = { nameEditorOpen = true },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text("내 이름 수정") }
+                    }
                     OutlinedButton(
                         onClick = { connectionDetailsExpanded = !connectionDetailsExpanded },
                         modifier = Modifier.fillMaxWidth(),
@@ -250,12 +296,14 @@ fun BoyisoScreen(
                     }
                 }
 
+                if (state.running) BoyisoPeopleSection(state)
+
                 invitationUri?.let { uri ->
                     BoyisoCard {
                         val qr = remember(uri) { BoyisoQrCode.create(uri) }
                         Text("우리 공간 QR코드", style = MaterialTheme.typography.titleLarge)
                         Text(
-                            "이 QR로 같은 공간에 들어올 수 있어요.",
+                            "누구나 이 QR을 찍고 우리 공간에 들어올 수 있어요.",
                             style = MaterialTheme.typography.bodyLarge,
                         )
                         Image(
@@ -272,8 +320,6 @@ fun BoyisoScreen(
                         }
                     }
                 }
-
-                if (state.running) BoyisoPeopleSection(state)
 
             }
 
@@ -339,6 +385,7 @@ private data class BoyisoParticipant(
     val isMe: Boolean,
     val batteryPercent: Int?,
     val status: String,
+    val transportPaths: Set<String>,
 )
 
 private fun deduplicatedParticipants(
@@ -363,6 +410,7 @@ private fun deduplicatedParticipants(
                 matching.any { it.status == "연결됨" } -> "연결됨"
                 else -> primary.status
             },
+            transportPaths = matching.flatMap(BoyisoParticipant::transportPaths).toSet(),
         )
     }
     .sortedWith(
@@ -384,6 +432,7 @@ private fun BoyisoPeopleSection(state: BoyisoState) {
                     BoyisoRole.VIEWER -> "연결됨"
                     BoyisoRole.SPEAKER -> if (state.microphoneMonitoring) "감지 중" else "대기 중"
                 },
+                transportPaths = setOf("이 기기"),
             ),
         )
         state.devices.forEach { device ->
@@ -398,6 +447,7 @@ private fun BoyisoPeopleSection(state: BoyisoState) {
                         BoyisoRole.VIEWER -> "연결됨"
                         BoyisoRole.SPEAKER -> if (device.monitoring) "감지 중" else "대기 중"
                     },
+                    transportPaths = device.transportPaths,
                 ),
             )
         }
@@ -535,6 +585,9 @@ private fun BoyisoParticipantGroup(
                     if (participant.isMe) append(", 나")
                     append(", ${role.title}, ${participant.status}")
                     participant.batteryPercent?.let { append(", 배터리 ${it}퍼센트") }
+                    if (participant.transportPaths.isNotEmpty()) {
+                        append(", ${participant.transportPaths.sortedBy(String::displayTransportOrder).joinToString(" 및 ") { it.displayTransportName() }}")
+                    }
                 }
                 Surface(
                     modifier = Modifier
@@ -601,6 +654,27 @@ private fun BoyisoParticipantGroup(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                participant.transportPaths
+                                    .sortedBy(String::displayTransportOrder)
+                                    .forEach { path ->
+                                        Surface(
+                                            shape = RoundedCornerShape(8.dp),
+                                            color = MaterialTheme.colorScheme.secondaryContainer,
+                                        ) {
+                                            Text(
+                                                path.displayTransportName(),
+                                                style = MaterialTheme.typography.labelLarge,
+                                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                                fontWeight = FontWeight.Bold,
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                            )
+                                        }
+                                    }
+                            }
                         }
                         participant.batteryPercent?.let {
                             Text(
@@ -614,6 +688,21 @@ private fun BoyisoParticipantGroup(
             }
         }
     }
+}
+
+private fun String.displayTransportName(): String = when (this) {
+    "LAN" -> "Wi‑Fi"
+    "BLE" -> "Bluetooth"
+    "INTERNET", "인터넷" -> "인터넷"
+    else -> this
+}
+
+private fun String.displayTransportOrder(): Int = when (this) {
+    "이 기기" -> 0
+    "LAN" -> 1
+    "BLE" -> 2
+    "INTERNET", "인터넷" -> 3
+    else -> 4
 }
 
 @Composable

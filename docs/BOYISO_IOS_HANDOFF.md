@@ -52,10 +52,11 @@ Apple notification sound 지원 형식과 길이를 확인한 뒤 번들에 포�
 
 ## 현재 Android 근거와 미완료
 
-- versionCode 45 전체 JVM 테스트·`lintDebug`·`assembleDebug` 통과
-- `SM-T500`에서 역할·이름·공간 선택, 공간 상태·QR 공유, source ID 기준 역할별 참여자 목록,
-  밝은 화들짝 알림 문구의 Boyiso 화면 계측 테스트 4개 통과
-- `SM-F968N`과 `SM-T500`에 같은 versionCode 45 APK를 데이터 유지 설치하고 실행 확인
+- versionCode 46 전체 JVM 테스트·`lintDebug`·`assembleDebug` 통과
+- `SM-T500`에서 역할·이름·공간 선택, 모든 참여자의 QR 공유, source ID·연결 경로 기준
+  역할별 참여자 목록, 연결 중 이름 수정, 밝은 화들짝 알림 문구의 Boyiso 화면 계측 테스트 5개 통과
+- `SM-F968N`과 `SM-T500`에 같은 versionCode 46 APK를 데이터 유지 설치·실행했고,
+  두 기기 모두 화면이 꺼진 상태에서 Boyiso foreground service 유지를 확인
 - 실제 여러 기기의 QR 촬영, LAN·BLE 다중 hop, 최신 백그라운드 톡톡 소리·진동과 소리 감지
   전체 흐름은 최종 실사용 검증이 남아 있음
 - 원거리 relay server, 공개 배포, APNs·FCM은 사용자 지시에 따라 후순위로 보류

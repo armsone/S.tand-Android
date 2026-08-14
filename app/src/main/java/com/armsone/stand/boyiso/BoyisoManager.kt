@@ -54,6 +54,7 @@ data class BoyisoDevice(
     val lastSeenMillis: Long,
     val displayMode: EnvironmentDisplayMode?,
     val sessionActive: Boolean,
+    val transportPaths: Set<String> = emptySet(),
 )
 
 data class BoyisoEventSummary(
@@ -122,12 +123,23 @@ class BoyisoManager(context: Context) : AutoCloseable {
     }
 
     fun updateConfiguration(configuration: BoyisoConfiguration) {
-        if (_state.value.running) return
         val normalized = configuration.copy(
             roomId = configuration.roomId.trim(),
             roomKey = configuration.roomKey.trim(),
             deviceName = configuration.deviceName.trim().take(MAXIMUM_DEVICE_NAME_LENGTH),
         )
+        if (_state.value.running) {
+            if (normalized.deviceName.isBlank()) return
+            val updated = _state.value.configuration.copy(deviceName = normalized.deviceName)
+            saveConfiguration(updated)
+            _state.value = _state.value.copy(configuration = updated, issueMessage = null)
+            applicationContext.startService(
+                Intent(applicationContext, MonitoringService::class.java)
+                    .setAction(MonitoringService.ACTION_UPDATE_IDENTITY)
+                    .putExtra(MonitoringService.EXTRA_SOURCE_NAME, updated.deviceName),
+            )
+            return
+        }
         saveConfiguration(normalized)
         _state.value = _state.value.copy(configuration = normalized, issueMessage = null)
     }
@@ -160,7 +172,7 @@ class BoyisoManager(context: Context) : AutoCloseable {
 
     fun invitationUri(): Uri? {
         val configuration = _state.value.configuration
-        if (!configuration.hasRoom || !configuration.canInvite) return null
+        if (!configuration.hasRoom) return null
         return Uri.Builder()
             .scheme(INVITE_SCHEME)
             .authority(INVITE_HOST)
@@ -242,6 +254,7 @@ class BoyisoManager(context: Context) : AutoCloseable {
         val names = intent.getStringArrayListExtra("sourceNames").orEmpty()
         val roles = intent.getStringArrayListExtra("sourceRoles").orEmpty()
         val displayModes = intent.getStringArrayListExtra("sourceDisplayModes").orEmpty()
+        val transportPaths = intent.getStringArrayListExtra("sourceTransportPaths").orEmpty()
         val ids = intent.getStringArrayListExtra("sourceIds").orEmpty()
         val batteries = intent.getIntegerArrayListExtra("sourceBatteries").orEmpty()
         val monitoring = intent.getBooleanArrayExtra("sourceMonitoring") ?: booleanArrayOf()
@@ -257,6 +270,11 @@ class BoyisoManager(context: Context) : AutoCloseable {
                 lastSeenMillis = lastSeen.getOrNull(index) ?: 0L,
                 displayMode = displayModes.getOrNull(index)?.toEnvironmentDisplayModeOrNull(),
                 sessionActive = sessionActive.getOrNull(index) ?: false,
+                transportPaths = transportPaths.getOrNull(index)
+                    .orEmpty()
+                    .split(',')
+                    .filter(String::isNotBlank)
+                    .toSet(),
             )
         }
         _state.value = _state.value.copy(

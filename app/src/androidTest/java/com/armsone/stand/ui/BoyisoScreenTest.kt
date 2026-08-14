@@ -11,6 +11,8 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextClearance
+import androidx.compose.ui.test.performTextInput
 import com.armsone.stand.boyiso.BoyisoConfiguration
 import com.armsone.stand.boyiso.BoyisoDevice
 import com.armsone.stand.boyiso.BoyisoRole
@@ -133,6 +135,7 @@ class BoyisoScreenTest {
                                 lastSeenMillis = 1L,
                                 displayMode = EnvironmentDisplayMode.MATE,
                                 sessionActive = true,
+                                transportPaths = setOf("LAN"),
                             ),
                             BoyisoDevice(
                                 id = "speaker",
@@ -143,6 +146,7 @@ class BoyisoScreenTest {
                                 lastSeenMillis = 1L,
                                 displayMode = EnvironmentDisplayMode.MATE,
                                 sessionActive = true,
+                                transportPaths = setOf("LAN"),
                             ),
                             BoyisoDevice(
                                 id = "speaker",
@@ -153,6 +157,7 @@ class BoyisoScreenTest {
                                 lastSeenMillis = 2L,
                                 displayMode = EnvironmentDisplayMode.MATE,
                                 sessionActive = true,
+                                transportPaths = setOf("BLE"),
                             ),
                             BoyisoDevice(
                                 id = "local",
@@ -163,6 +168,7 @@ class BoyisoScreenTest {
                                 lastSeenMillis = 2L,
                                 displayMode = EnvironmentDisplayMode.MATE,
                                 sessionActive = true,
+                                transportPaths = setOf("BLE"),
                             ),
                         ),
                     ),
@@ -187,6 +193,51 @@ class BoyisoScreenTest {
         composeRule.onNodeWithText("나").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("침실폰").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("감지 중").performScrollTo().assertIsDisplayed()
+        composeRule.onAllNodesWithText("Wi‑Fi").assertCountEquals(2)
+        composeRule.onAllNodesWithText("Bluetooth").assertCountEquals(2)
+    }
+
+    @Test
+    fun joinedParticipantCanRenameAndShareRoomQrBelowPeople() {
+        var updatedName = ""
+        var shareCount = 0
+        composeRule.setContent {
+            STandTheme {
+                BoyisoScreen(
+                    state = BoyisoState(
+                        localDeviceId = "joined",
+                        configuration = BoyisoConfiguration(
+                            role = BoyisoRole.SPEAKER,
+                            roomId = "room",
+                            roomKey = "12345678901234567890123456789012",
+                            canInvite = false,
+                            deviceName = "침실폰",
+                        ),
+                        running = true,
+                    ),
+                    invitationUri = "stand://boyiso?v=2&room=room&key=12345678901234567890123456789012",
+                    onUpdateConfiguration = { updatedName = it.deviceName },
+                    onCreateRoom = {},
+                    onScanInvitation = {},
+                    onShareInvitation = { shareCount += 1 },
+                    onStart = {},
+                    onLeaveRoom = {},
+                    onTokTok = {},
+                    onBack = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("내 이름 수정").performScrollTo().performClick()
+        composeRule.onNodeWithText("내 이름").performTextClearance()
+        composeRule.onNodeWithText("내 이름").performTextInput("아기방 폰")
+        composeRule.onNodeWithText("저장").performClick()
+        composeRule.onNodeWithText("함께 연결된 사람").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("우리 공간 QR코드").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("QR 사진 보내기", substring = true).performClick()
+
+        assertEquals("아기방 폰", updatedName)
+        assertEquals(1, shareCount)
     }
 
     @Test
