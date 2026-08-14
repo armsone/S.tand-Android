@@ -229,6 +229,7 @@ class StandHomeScreenTest {
                         environmentMode = EnvironmentDisplayMode.MATE,
                         experienceMode = StandExperienceMode.MATE,
                         lampPhase = LampPhase.OFF,
+                        controlsVisible = false,
                     ),
                     onScreenTap = {},
                     onToggleTheme = {},

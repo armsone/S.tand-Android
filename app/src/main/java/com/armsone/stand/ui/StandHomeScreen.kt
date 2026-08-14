@@ -1048,8 +1048,8 @@ private fun DashboardCanvas(
                 val lockSize = if (isPortrait) 92.dp else 116.dp
                 Surface(
                     shape = CircleShape,
-                    color = Color.Black.copy(alpha = 0.74f),
-                    border = BorderStroke(2.dp, Color.White.copy(alpha = contentAlpha * 0.38f)),
+                    color = Color.Black.copy(alpha = 0.68f),
+                    border = BorderStroke(2.dp, Color.White.copy(alpha = 0.12f)),
                     modifier = Modifier
                         .align(Alignment.Center)
                         .panelTransform(layout.clock, canvasWidth.value, canvasHeight.value)
@@ -1060,7 +1060,7 @@ private fun DashboardCanvas(
                         Icon(
                             imageVector = Icons.Default.Lock,
                             contentDescription = null,
-                            tint = Color.White.copy(alpha = contentAlpha.coerceAtLeast(0.7f)),
+                            tint = Color.White.copy(alpha = 0.35f),
                             modifier = Modifier.size(lockSize * 0.66f),
                         )
                     }
