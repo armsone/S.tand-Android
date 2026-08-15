@@ -6,6 +6,7 @@ local.properties
 build/
 **/build/
 captures/
+artifacts/
 .DS_Store
 *.jks
 *.keystore

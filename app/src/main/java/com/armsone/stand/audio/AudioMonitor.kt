@@ -296,16 +296,36 @@ class AudioMonitor(
             rmsDB = analysis.rmsDB,
             duration = analysis.features.duration,
         )
+        val requested = requestedConfiguration
+        val effectiveSoundThresholdDB = AdaptiveSoundThresholdPolicy.soundThreshold(
+            noiseFloorDB = adaptiveState.noiseFloorDB,
+            userThresholdDB = requested.soundThresholdDB,
+        )
+        val effectiveClapPeakThresholdDB = AdaptiveSoundThresholdPolicy.clapPeakThreshold(
+            noiseFloorDB = adaptiveState.noiseFloorDB,
+            userThresholdDB = requested.soundThresholdDB,
+            configuredPeakThresholdDB = requested.clapPeakThresholdDB,
+        )
         detector.configuration = requestedConfiguration.copy(
-            soundThresholdDB = adaptiveState.effectiveSoundThresholdDB,
-            clapPeakThresholdDB = adaptiveState.effectiveClapPeakThresholdDB,
+            soundThresholdDB = effectiveSoundThresholdDB,
+            clapPeakThresholdDB = effectiveClapPeakThresholdDB,
         )
-        val detection = detector.analyze(
-            rmsDB = analysis.rmsDB,
-            peakDB = analysis.peakDB,
-            bufferDuration = analysis.features.duration,
-            now = nowNanos / NANOS_PER_SECOND,
-        )
+        val detection = if (AudioCalibrationPolicy.canReact(adaptiveState)) {
+            detector.analyze(
+                rmsDB = analysis.rmsDB,
+                peakDB = analysis.peakDB,
+                bufferDuration = analysis.features.duration,
+                now = nowNanos / NANOS_PER_SECOND,
+            )
+        } else {
+            detector.reset()
+            classifier.reset()
+            AudioDetection(
+                clapDetected = false,
+                soundBegan = false,
+                isAboveSoundThreshold = false,
+            )
+        }
 
         if (detection.clapDetected) {
             dispatchCallback { onClap?.invoke() }
@@ -332,7 +352,7 @@ class AudioMonitor(
             lastLevelPublicationNanos = nowNanos
             _normalizedLevel.value = analysis.normalizedLevel
             _adaptiveNoiseFloorDB.value = adaptiveState.noiseFloorDB
-            _effectiveSoundThresholdDB.value = adaptiveState.effectiveSoundThresholdDB
+            _effectiveSoundThresholdDB.value = effectiveSoundThresholdDB
             _noiseCalibrationProgress.value = adaptiveState.calibrationProgress
         }
     }
@@ -578,7 +598,10 @@ class AudioMonitor(
         lastLevelPublicationNanos = 0L
         _normalizedLevel.value = 0.0
         _adaptiveNoiseFloorDB.value = null
-        _effectiveSoundThresholdDB.value = AdaptiveSoundThresholdPolicy.soundThreshold(null)
+        _effectiveSoundThresholdDB.value = AdaptiveSoundThresholdPolicy.soundThreshold(
+            noiseFloorDB = null,
+            userThresholdDB = requestedConfiguration.soundThresholdDB,
+        )
         _noiseCalibrationProgress.value = 0.0
         _isWritingClip.value = false
     }

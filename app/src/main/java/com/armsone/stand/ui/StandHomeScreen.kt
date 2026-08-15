@@ -127,6 +127,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import java.time.LocalDateTime
 import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.math.roundToInt
@@ -157,6 +158,7 @@ fun StandHomeScreen(
     onToggleRadio: (String) -> Unit,
     onEditRadio: (String) -> Unit,
     modifier: Modifier = Modifier,
+    catalogNow: LocalDateTime? = null,
 ) {
     val burnInOffset = rememberBurnInOffset()
     var adjustmentFeedback by remember { mutableStateOf<HomeAdjustmentFeedback?>(null) }
@@ -268,6 +270,7 @@ fun StandHomeScreen(
                     onEditRadio = onEditRadio,
                     onClockTap = onScreenTap,
                     onClockDoubleTap = {},
+                    catalogNow = catalogNow,
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(WindowInsets.safeDrawing.asPaddingValues())
@@ -402,7 +405,7 @@ private fun StandStartContent(
             textAlign = TextAlign.Center,
         )
         Text(
-            text = "에스텐드가 필요한 이유를 먼저 알려드릴게요.",
+            text = "S.tand가 필요한 이유를 먼저 알려드릴게요.",
             color = Color.White.copy(alpha = 0.60f),
             style = MaterialTheme.typography.bodyMedium,
             textAlign = TextAlign.Center,
@@ -454,9 +457,9 @@ private fun StandStartContent(
                 .widthIn(min = 220.dp)
                 .semantics {
                     contentDescription = if (allPermissionsGranted) {
-                        "에스텐드 시작"
+                        "S.tand 시작"
                     } else {
-                        "권한 확인하고 에스텐드 시작"
+                        "권한 확인하고 시작"
                     }
                 },
         ) {
@@ -468,7 +471,7 @@ private fun StandStartContent(
                 Icon(Icons.Default.LightMode, contentDescription = null)
                 Text(
                     text = if (allPermissionsGranted) {
-                        "에스텐드 시작"
+                        "S.tand 시작"
                     } else {
                         "권한 확인하고 시작"
                     },
@@ -495,7 +498,7 @@ private fun RegularStartContent(
             modifier = Modifier.size(76.dp),
         )
         Text(
-            text = "에스텐드가 곁에 있을게요",
+            text = "S.tand가 곁에 있을게요",
             color = Color.White.copy(alpha = 0.92f),
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
@@ -514,7 +517,7 @@ private fun RegularStartContent(
             shape = RoundedCornerShape(16.dp),
             modifier = Modifier
                 .height(52.dp)
-                .semantics { contentDescription = "에스텐드 시작" },
+                .semantics { contentDescription = "S.tand 시작" },
         ) {
             Row(
                 modifier = Modifier.padding(horizontal = 22.dp),
@@ -522,7 +525,7 @@ private fun RegularStartContent(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Icon(Icons.Default.LightMode, contentDescription = null)
-                Text("에스텐드 시작", fontWeight = FontWeight.Bold)
+                Text("S.tand 시작", fontWeight = FontWeight.Bold)
             }
         }
     }
@@ -966,7 +969,7 @@ private fun Header(state: StandUiState, contentAlpha: Float) {
                     .graphicsLayer { alpha = contentAlpha },
             )
             Text(
-                text = "에스텐드",
+                text = "S.tand",
                 color = Color.White.copy(alpha = contentAlpha * 0.82f),
                 fontWeight = FontWeight.SemiBold,
             )
@@ -1006,6 +1009,7 @@ private fun DashboardCanvas(
     onEditRadio: (String) -> Unit,
     onClockTap: () -> Unit,
     onClockDoubleTap: () -> Unit,
+    catalogNow: LocalDateTime?,
     modifier: Modifier = Modifier,
 ) {
     val layout = if (isPortrait) {
@@ -1032,6 +1036,7 @@ private fun DashboardCanvas(
                 isPortrait = isPortrait,
                 scale = 1f,
                 contentAlpha = contentAlpha,
+                fixedNow = catalogNow,
                 modifier = Modifier
                     .align(Alignment.Center)
                     .combinedClickable(
@@ -1077,6 +1082,7 @@ private fun DashboardCanvas(
                     canvasHeightDp = canvasHeight.value,
                     isPortrait = isPortrait,
                 ),
+                fixedNow = catalogNow,
                 modifier = Modifier
                     .align(Alignment.Center)
                     .panelTransform(layout.seconds, canvasWidth.value, canvasHeight.value),
@@ -1085,6 +1091,7 @@ private fun DashboardCanvas(
             ClockDateAndSeconds(
                 hourMode = state.settings.clockHourMode,
                 contentAlpha = contentAlpha,
+                fixedNow = catalogNow,
                 modifier = Modifier
                     .align(Alignment.Center)
                     .panelTransform(layout.date, canvasWidth.value, canvasHeight.value),

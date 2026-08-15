@@ -26,6 +26,8 @@
 - QR 생성은 Core Image, 촬영은 AVFoundation 또는 DataScanner 지원 범위에 맞춰 구현
 - 첫 QR 생성자만 초대 QR·공유를 표시하고 참여자는 역할만 선택
 - 톡톡 전경 3초 overlay, 짧은 notification haptic, VoiceOver announcement, Reduce Motion에서는 opacity 전환만 사용
+- 공통 명세의 60초 학습 무반응, 사용자 감도 하한, 10~14dB 주변 대비 상승폭, 기본 `-18 dB`
+  박수 피크와 조용한 회귀 벡터 무반응을 Android와 같은 테스트로 고정
 - 근거리 연결이 실제 유지되는 동안 톡톡 백그라운드 알림과 custom sound 사용
 - 앱 종료 뒤 원거리 톡톡을 깨우는 APNs는 후속 원거리 단계로 분리
 - notification 권한 거부·집중 모드·무음 상태를 연결 오류로 오인하지 않고 설정 안내 제공
@@ -49,14 +51,20 @@ Apple notification sound 지원 형식과 길이를 확인한 뒤 번들에 포�
 - 톡톡 전경 3초 표시·햅틱, 백그라운드 custom sound·진동, 알림 탭 진입을 확인한다.
 - 앱 종료·집중 모드·알림 거부·네트워크 단절 상태를 실제와 다르게 정상으로 표시하지 않는다.
 - 원음·녹음이 LAN·BLE로 전송되지 않음을 packet/log 수준에서 확인한다.
+- 공통 조용한 회귀 벡터에서 양 플랫폼 모두 녹음·화들짝·보이소 소리 사건이 0인지 확인한다.
 
-## 현재 Android 근거와 미완료
+## 현재 양 플랫폼 근거와 미완료
 
-- versionCode 46 전체 JVM 테스트·`lintDebug`·`assembleDebug` 통과
-- `SM-T500`에서 역할·이름·공간 선택, 모든 참여자의 QR 공유, source ID·연결 경로 기준
-  역할별 참여자 목록, 연결 중 이름 수정, 밝은 화들짝 알림 문구의 Boyiso 화면 계측 테스트 5개 통과
-- `SM-F968N`과 `SM-T500`에 같은 versionCode 46 APK를 데이터 유지 설치·실행했고,
-  두 기기 모두 화면이 꺼진 상태에서 Boyiso foreground service 유지를 확인
+- Android versionCode 47에서 `AudioAnalysisTest`·`SoundEventDetectorTest`와
+  `assembleDebug` 통과
+- iPhone 0.28.2에서 공통 판정 기준 관련 `AudioAnalysisTests` 7개와 실기기 Debug 빌드 통과
+- `SM-F968N`과 `SM-T500`에 같은 versionCode 47 APK를 데이터 유지 설치하고 실행했으며,
+  두 기기에서 설치된 versionCode 47을 확인
+- `BK_iPhone17pro`에 0.28.2 앱을 설치하고 `com.armsone.stand` 실행을 확인
+- 이전 versionCode 46에서 `SM-T500`의 역할·이름·공간 선택, 모든 참여자의 QR 공유,
+  source ID·연결 경로 기준 역할별 참여자 목록, 연결 중 이름 수정, 밝은 화들짝 알림 문구의
+  Boyiso 화면 계측 테스트 5개를 통과했고, 두 Android 기기의 화면 꺼짐 상태에서 Boyiso
+  foreground service 유지를 확인
 - 실제 여러 기기의 QR 촬영, LAN·BLE 다중 hop, 최신 백그라운드 톡톡 소리·진동과 소리 감지
   전체 흐름은 최종 실사용 검증이 남아 있음
 - 원거리 relay server, 공개 배포, APNs·FCM은 사용자 지시에 따라 후순위로 보류

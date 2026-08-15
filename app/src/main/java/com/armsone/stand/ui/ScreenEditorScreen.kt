@@ -140,6 +140,7 @@ import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.math.roundToInt
 import kotlin.math.sign
+import java.time.LocalDateTime
 
 /**
  * Edits one orientation's draft layout. The caller owns the draft and decides when [onSave]
@@ -159,6 +160,7 @@ fun ScreenEditorScreen(
     onSave: (StandScreenLayout, ClockFontChoice, ClockHourMode) -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
+    catalogNow: LocalDateTime? = null,
 ) {
     var selectedPanel by rememberSaveable(stateSaver = EditorPanelKeySaver) {
         mutableStateOf<EditorPanelKey>(EditorPanelKey.Clock)
@@ -244,6 +246,7 @@ fun ScreenEditorScreen(
             onManageRadios = onManageRadios,
             onLayoutChange = onLayoutChange,
             measuredPanelSizes = measuredPanelSizes,
+            catalogNow = catalogNow,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(WindowInsets.safeDrawing.asPaddingValues())
@@ -368,6 +371,7 @@ private fun PanelCanvas(
     contentAlpha: Float,
     protectedInsets: FloatInsets,
     selectedPanel: EditorPanelKey,
+    catalogNow: LocalDateTime?,
     onSelectedPanelChange: (EditorPanelKey) -> Unit,
     onClockClick: () -> Unit,
     onClockDoubleClick: () -> Unit,
@@ -545,6 +549,7 @@ private fun PanelCanvas(
                                 canvasHeightDp = canvasHeightDp,
                                 isPortrait = isPortrait,
                             ),
+                            catalogNow = catalogNow,
                         )
                     }
                 }
@@ -830,6 +835,7 @@ private fun LiveEditorPanelContent(
     contentAlpha: Float,
     selected: Boolean,
     secondsShowsBackground: Boolean,
+    catalogNow: LocalDateTime?,
 ) {
     LiveEditorSelection(selected = selected) {
         when (key) {
@@ -839,6 +845,7 @@ private fun LiveEditorPanelContent(
                 isPortrait = isPortrait,
                 scale = 1f,
                 contentAlpha = contentAlpha,
+                fixedNow = catalogNow,
             )
 
             EditorPanelKey.Seconds -> ClockSeconds(
@@ -846,11 +853,13 @@ private fun LiveEditorPanelContent(
                 isPortrait = isPortrait,
                 contentAlpha = contentAlpha,
                 showsBackground = secondsShowsBackground,
+                fixedNow = catalogNow,
             )
 
             EditorPanelKey.Date -> ClockDateAndSeconds(
                 hourMode = state.settings.clockHourMode,
                 contentAlpha = contentAlpha,
+                fixedNow = catalogNow,
             )
 
             EditorPanelKey.Status -> Text(

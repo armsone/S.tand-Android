@@ -7,7 +7,7 @@ import org.junit.Test
 
 class AudioAnalysisTest {
     @Test
-    fun adaptiveNoiseFloorMakesQuietRoomsMoreSensitiveAndNoisyRoomsRelative() {
+    fun adaptiveNoiseFloorRequiresTenToFourteenDecibelsOfRelativeRise() {
         val quietTracker = AdaptiveNoiseFloorTracker()
         var quietState = quietTracker.state
         repeat(60) { quietState = quietTracker.observe(rmsDB = -62f, duration = 1.0) }
@@ -18,14 +18,14 @@ class AudioAnalysisTest {
 
         assertTrue(quietState.isCalibrated)
         assertEquals(-62f, quietState.noiseFloorDB ?: 0f, 0f)
-        assertEquals(-58f, quietState.effectiveSoundThresholdDB, 0f)
+        assertEquals(-52f, quietState.effectiveSoundThresholdDB, 0f)
         assertEquals(-30f, noisyState.noiseFloorDB ?: 0f, 0f)
-        assertEquals(-24f, noisyState.effectiveSoundThresholdDB, 0f)
+        assertEquals(-18f, noisyState.effectiveSoundThresholdDB, 0f)
         assertTrue(noisyState.effectiveSoundThresholdDB > quietState.effectiveSoundThresholdDB)
     }
 
     @Test
-    fun adaptiveNoiseFloorIgnoresOneLoudMomentAndDetectsSmallRelativeRise() {
+    fun adaptiveNoiseFloorIgnoresSmallRelativeRiseAndAcceptsTenDecibels() {
         val tracker = AdaptiveNoiseFloorTracker()
         repeat(59) { tracker.observe(rmsDB = -60f, duration = 1.0) }
         val state = tracker.observe(rmsDB = -10f, duration = 1.0)
@@ -37,13 +37,70 @@ class AudioAnalysisTest {
         detector.analyze(rmsDB = -60f, peakDB = -54f, bufferDuration = 0.02, now = 1.0)
         detector.analyze(rmsDB = -54f, peakDB = -45f, bufferDuration = 0.02, now = 1.02)
         detector.analyze(rmsDB = -54f, peakDB = -45f, bufferDuration = 0.02, now = 1.04)
-        val rise = detector.analyze(
+        val smallRise = detector.analyze(
             rmsDB = -54f,
             peakDB = -45f,
             bufferDuration = 0.02,
             now = 1.06,
         )
-        assertTrue(rise.soundBegan)
+        assertFalse(smallRise.soundBegan)
+
+        detector.reset()
+        detector.analyze(rmsDB = -49f, peakDB = -30f, bufferDuration = 0.02, now = 2.0)
+        detector.analyze(rmsDB = -49f, peakDB = -30f, bufferDuration = 0.02, now = 2.02)
+        val clearRise = detector.analyze(
+            rmsDB = -49f,
+            peakDB = -30f,
+            bufferDuration = 0.02,
+            now = 2.04,
+        )
+        assertTrue(clearRise.soundBegan)
+    }
+
+    @Test
+    fun userThresholdLimitsAutomaticSensitivityAndCalibrationSuppressesReactions() {
+        val tracker = AdaptiveNoiseFloorTracker()
+        var state = tracker.state
+        repeat(59) { state = tracker.observe(rmsDB = -55f, duration = 1.0) }
+
+        assertFalse(AudioCalibrationPolicy.canReact(state))
+        state = tracker.observe(rmsDB = -55f, duration = 1.0)
+        assertTrue(AudioCalibrationPolicy.canReact(state))
+        assertEquals(
+            -36f,
+            AdaptiveSoundThresholdPolicy.soundThreshold(
+                noiseFloorDB = state.noiseFloorDB,
+                userThresholdDB = -36f,
+            ),
+            0f,
+        )
+        assertEquals(
+            -18f,
+            AdaptiveSoundThresholdPolicy.clapPeakThreshold(
+                noiseFloorDB = state.noiseFloorDB,
+                userThresholdDB = -36f,
+                configuredPeakThresholdDB = -18f,
+            ),
+            0f,
+        )
+    }
+
+    @Test
+    fun reportedQuietClipCannotOpenRecordingOrClapGateAtRecommendedSettings() {
+        val detector = AudioEventDetector(
+            AudioDetectorConfiguration(soundThresholdDB = -36f),
+        )
+        repeat(10) { index ->
+            val detection = detector.analyze(
+                rmsDB = -46.69f,
+                peakDB = -36.92f,
+                bufferDuration = 0.02,
+                now = index * 0.02,
+            )
+            assertFalse(detection.soundBegan)
+            assertFalse(detection.isAboveSoundThreshold)
+            assertFalse(detection.clapDetected)
+        }
     }
 
     @Test

@@ -34,18 +34,36 @@ object AdaptiveSoundThresholdPolicy {
     const val QuietestThresholdDB = -58f
     const val LoudestThresholdDB = -18f
 
-    fun soundThreshold(noiseFloorDB: Float?): Float {
-        val floor = noiseFloorDB ?: return -50f
-        val margin = when {
-            floor < -50f -> 3f
-            floor < -35f -> 4f
-            else -> 6f
+    fun soundThreshold(
+        noiseFloorDB: Float?,
+        userThresholdDB: Float = QuietestThresholdDB,
+    ): Float {
+        val adaptiveThreshold = if (noiseFloorDB == null) {
+            -50f
+        } else {
+            val margin = when {
+                noiseFloorDB < -50f -> 10f
+                noiseFloorDB < -35f -> 12f
+                else -> 14f
+            }
+            (noiseFloorDB + margin).coerceIn(QuietestThresholdDB, LoudestThresholdDB)
         }
-        return (floor + margin).coerceIn(QuietestThresholdDB, LoudestThresholdDB)
+        return max(adaptiveThreshold, userThresholdDB.coerceIn(QuietestThresholdDB, LoudestThresholdDB))
     }
 
-    fun clapPeakThreshold(noiseFloorDB: Float?): Float =
-        (soundThreshold(noiseFloorDB) + 9f).coerceIn(-45f, -8f)
+    fun clapPeakThreshold(
+        noiseFloorDB: Float?,
+        userThresholdDB: Float = QuietestThresholdDB,
+        configuredPeakThresholdDB: Float = -18f,
+    ): Float {
+        val adaptivePeak = (soundThreshold(noiseFloorDB, userThresholdDB) + 12f)
+            .coerceIn(-45f, -8f)
+        return max(adaptivePeak, configuredPeakThresholdDB.coerceIn(-45f, -8f))
+    }
+}
+
+object AudioCalibrationPolicy {
+    fun canReact(state: AdaptiveNoiseState): Boolean = state.isCalibrated
 }
 
 class AdaptiveNoiseFloorTracker {

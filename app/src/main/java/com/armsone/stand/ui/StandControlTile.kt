@@ -86,8 +86,8 @@ internal fun StandControlKind.presentation(
         )
 
         StandControlKind.RECORDINGS -> StandControlPresentation(
-            title = "녹음 목록",
-            status = "${state.recordingCount}개 녹음",
+            title = "잠소리 확인",
+            status = if (state.recordingCount == 0) "잠소리 없음" else "잠소리 ${state.recordingCount}개",
             icon = Icons.Default.Mic,
         )
 

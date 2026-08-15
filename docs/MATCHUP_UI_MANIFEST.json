@@ -1,0 +1,100 @@
+{
+  "schemaVersion": 2,
+  "fixtureId": "ui_catalog_v2",
+  "sourceOfTruth": {
+    "platform": "ios",
+    "repository": "../S.tand",
+    "revision": "2335ec382883c769bf70113ce6a724014af4eaa9",
+    "dirty": true,
+    "sourceStateSha256": "c0c90c049857a0ac56d94b44d7a93e78089ce7fcffad22905bd45bc7d5de22b3",
+    "version": "1.0.0 (0.29.5)"
+  },
+  "sharedProfile": {
+    "locale": "ko-KR",
+    "timezone": "Asia/Seoul",
+    "theme": "dark",
+    "animations": false,
+    "fontScale": 1.0
+  },
+  "fixedClock": "2026-08-15T07:42:05+09:00",
+  "stateThemeOverrides": {
+    "settings_top": "orange",
+    "settings_midnight_theme": "midnight",
+    "clock_font_options": "midnight"
+  },
+  "android": {
+    "revision": "77579904ca04353ff6c50672f3a258b2a98d6dc5",
+    "dirty": true,
+    "versionName": "0.0.1",
+    "versionCode": 52,
+    "captureManifest": "artifacts/matchup/android/R3KYB061JTZ/manifest.json",
+    "captureStable": true,
+    "captureRepeatCount": 2,
+    "catalogTestClasses": [
+      "com.armsone.stand.ui.MatchupUiCatalogTest",
+      "com.armsone.stand.ui.RecordingsUiCatalogTest"
+    ],
+    "devices": [
+      {"name": "SM-F968N", "class": "phone", "orientations": ["portrait", "landscape"]},
+      {"name": "SM-T500", "class": "tablet-600dp", "orientations": ["portrait", "landscape"]}
+    ]
+  },
+  "sharedStates": [
+    "first_launch_permissions",
+    "home_portrait",
+    "home_landscape",
+    "home_editor",
+    "recordings_report_populated",
+    "recordings_management",
+    "boyiso_setup",
+    "settings_top",
+    "settings_midnight_theme",
+    "clock_font_options",
+    "settings_lower_sections",
+    "radio_channel_editor",
+    "radio_delete_confirmation",
+    "restore_confirmation",
+    "font_licenses"
+  ],
+  "additionalStates": [
+    "first_launch_request_camera", "first_launch_request_microphone",
+    "first_launch_request_location", "home_object_locked", "home_mate",
+    "home_startle", "home_inactive", "home_brightness_hud",
+    "home_radio_volume_hud", "home_clock_scale_hud", "home_face_down",
+    "home_radio_idle_loading_playing_reconnecting_error",
+    "home_weather_loading_denied_error_loaded", "home_editor_landscape",
+    "home_editor_font_palette", "home_editor_radio_grouped",
+    "recordings_report_empty", "recordings_management_empty",
+    "recordings_selection_dock", "recordings_playback_dock",
+    "recordings_delete_clip_confirmation", "recordings_delete_selected_confirmation",
+    "recordings_delete_all_confirmation", "recordings_merge_delete_confirmation",
+    "recordings_operation_error", "boyiso_host_scanning", "boyiso_guest_scanning",
+    "boyiso_connected", "boyiso_disconnected_banner", "boyiso_greeting_overlay",
+    "settings_grayscale_theme", "settings_sage_theme", "settings_large_text",
+    "settings_tablet", "font_license_detail", "radio_channel_add",
+    "radio_channel_validation_error", "radio_browser", "radio_browser_favorites",
+    "radio_browser_error", "share_radio_import_confirmation",
+    "widget_lock_screen_circular", "widget_home_sizes"
+  ],
+  "captureRequirements": {
+    "format": "lossless PNG",
+    "preserveOriginal": true,
+    "recordSha256": true,
+    "recordPixelSize": true,
+    "recordDensity": true,
+    "recordAppBounds": true,
+    "recordInsets": true,
+    "orientationNormalization": "rotate pixels and bounds without arbitrary scaling",
+    "osMasks": "only exact OS-owned regions with proof"
+  },
+  "forcedOsExceptionCandidates": [
+    "system permission dialogs",
+    "system share chooser",
+    "system keyboard/IME",
+    "system bars and gesture indicators"
+  ],
+  "completion": {
+    "status": "partial-unresolved",
+    "reason": "Both 15-state catalogs exist and Android is repeat-stable, but paired visual review found app-owned icon, color, spacing, geometry, and additional-state trace mismatches."
+  }
+}

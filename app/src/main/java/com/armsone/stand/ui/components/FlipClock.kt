@@ -52,11 +52,14 @@ fun FlipClock(
     scale: Float,
     contentAlpha: Float,
     modifier: Modifier = Modifier,
+    fixedNow: LocalDateTime? = null,
 ) {
-    val now by produceState(initialValue = LocalDateTime.now()) {
-        while (true) {
-            value = LocalDateTime.now()
-            delay(250)
+    val now by produceState(initialValue = fixedNow ?: LocalDateTime.now(), fixedNow) {
+        if (fixedNow == null) {
+            while (true) {
+                value = LocalDateTime.now()
+                delay(250)
+            }
         }
     }
     val formatter = if (hourMode == ClockHourMode.TWENTY_FOUR) {
@@ -193,11 +196,14 @@ fun ClockSeconds(
     contentAlpha: Float,
     showsBackground: Boolean,
     modifier: Modifier = Modifier,
+    fixedNow: LocalDateTime? = null,
 ) {
-    val now by produceState(initialValue = LocalDateTime.now()) {
-        while (true) {
-            value = LocalDateTime.now()
-            delay(250)
+    val now by produceState(initialValue = fixedNow ?: LocalDateTime.now(), fixedNow) {
+        if (fixedNow == null) {
+            while (true) {
+                value = LocalDateTime.now()
+                delay(250)
+            }
         }
     }
     val fontSize = if (showsBackground) {
@@ -274,11 +280,14 @@ fun ClockDateAndSeconds(
     hourMode: ClockHourMode,
     contentAlpha: Float,
     modifier: Modifier = Modifier,
+    fixedNow: LocalDateTime? = null,
 ) {
-    val now by produceState(initialValue = LocalDateTime.now()) {
-        while (true) {
-            value = LocalDateTime.now()
-            delay(250)
+    val now by produceState(initialValue = fixedNow ?: LocalDateTime.now(), fixedNow) {
+        if (fixedNow == null) {
+            while (true) {
+                value = LocalDateTime.now()
+                delay(250)
+            }
         }
     }
     val dateText = now.format(

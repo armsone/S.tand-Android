@@ -2,6 +2,7 @@
 
 package com.armsone.stand.ui
 
+import android.content.Intent
 import android.media.AudioAttributes
 import android.media.MediaPlayer
 import android.media.audiofx.LoudnessEnhancer
@@ -76,6 +77,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -100,6 +102,11 @@ import kotlinx.coroutines.delay
 import kotlin.math.max
 import kotlin.math.roundToLong
 
+private enum class RecordingsPage(val title: String) {
+    LastNight("수면 리포트"),
+    Sounds("잠소리 관리"),
+}
+
 @Composable
 fun RecordingsScreen(
     recordings: List<RecordingClip>,
@@ -117,6 +124,7 @@ fun RecordingsScreen(
     onPlaybackStateChanged: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
     val currentPlaybackCallback = rememberUpdatedState(onPlaybackStateChanged)
     val player = remember {
         RecordingPlaybackController { playing -> currentPlaybackCallback.value(playing) }
@@ -131,6 +139,9 @@ fun RecordingsScreen(
     var expandedSessionIds by rememberSaveable { mutableStateOf(emptyList<String>()) }
     var mergedExpanded by rememberSaveable { mutableStateOf(false) }
     var listActionsExpanded by remember { mutableStateOf(false) }
+    var selectedPage by rememberSaveable { mutableStateOf(RecordingsPage.LastNight) }
+    var playbackQueue by remember { mutableStateOf(emptyList<RecordingClip>()) }
+    var playbackQueueIndex by remember { mutableIntStateOf(0) }
 
     val sortedRecordings = remember(recordings) {
         recordings.sortedWith(
@@ -159,6 +170,23 @@ fun RecordingsScreen(
         originals.filterNot { it.file.absolutePath in groupedPaths }
     }
 
+    player.onPlaybackFinished = {
+        val nextIndex = playbackQueueIndex + 1
+        if (nextIndex in playbackQueue.indices) {
+            playbackQueueIndex = nextIndex
+            player.play(playbackQueue[nextIndex])
+            true
+        } else {
+            playbackQueue = emptyList()
+            playbackQueueIndex = 0
+            false
+        }
+    }
+    player.onManualPlaybackStarted = {
+        playbackQueue = emptyList()
+        playbackQueueIndex = 0
+    }
+
     DisposableEffect(lifecycleOwner, player) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_STOP) player.stop()
@@ -166,6 +194,8 @@ fun RecordingsScreen(
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
+            player.onPlaybackFinished = null
+            player.onManualPlaybackStarted = null
             player.release()
         }
     }
@@ -201,7 +231,7 @@ fun RecordingsScreen(
             containerColor = Color.Transparent,
             topBar = {
                 TopAppBar(
-                    title = { Text("수면 소리") },
+                    title = { Text("잠소리") },
                     navigationIcon = {
                         IconButton(
                             onClick = {
@@ -213,7 +243,7 @@ fun RecordingsScreen(
                         }
                     },
                     actions = {
-                        if (sortedRecordings.isNotEmpty()) {
+                        if (selectedPage == RecordingsPage.Sounds && sortedRecordings.isNotEmpty()) {
                             IconButton(
                                 onClick = { listActionsExpanded = true },
                                 enabled = !isBusy,
@@ -267,7 +297,7 @@ fun RecordingsScreen(
             },
             bottomBar = {
                 Column {
-                    if (selectedClips.isNotEmpty()) {
+                    if (selectedPage == RecordingsPage.Sounds && selectedClips.isNotEmpty()) {
                         RecordingSelectionDock(
                             count = selectedClips.size,
                             canMerge = selectedClips.size >= 2 && !isBusy,
@@ -294,19 +324,11 @@ fun RecordingsScreen(
                 }
             },
         ) { innerPadding ->
-            if (sortedRecordings.isEmpty() && sessionGroups.isEmpty()) {
-                EmptyRecordings(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(innerPadding)
-                        .padding(24.dp),
-                )
-            } else {
-                BoxWithConstraints(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(innerPadding),
-                ) {
+            BoxWithConstraints(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding),
+            ) {
                     val columnCount = if (maxWidth >= 600.dp) 2 else 1
                     LazyVerticalGrid(
                         columns = GridCells.Fixed(columnCount),
@@ -320,21 +342,67 @@ fun RecordingsScreen(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        item(key = "summary", span = { GridItemSpan(maxLineSpan) }) {
-                            RecordingSummaryCard(
-                                sessionCount = sessionGroups.size,
-                                originals = originals,
+                        item(key = "page-picker", span = { GridItemSpan(maxLineSpan) }) {
+                            RecordingsPagePicker(
+                                selectedPage = selectedPage,
+                                onSelected = { selectedPage = it },
                             )
                         }
 
-                        item(key = "today", span = { GridItemSpan(maxLineSpan) }) {
-                            TodayMergeCard(
-                                clips = todayOriginals,
-                                enabled = todayOriginals.size >= 2 && !isBusy,
-                                isBusy = isBusy,
-                                onMerge = { pendingMerge = PendingMerge.Today },
-                            )
-                        }
+                        if (selectedPage == RecordingsPage.LastNight) {
+                            item(key = "last-night", span = { GridItemSpan(maxLineSpan) }) {
+                                val latestSession = sessionGroups.firstOrNull()
+                                if (latestSession == null) {
+                                    EmptySleepReport()
+                                } else {
+                                    SleepReportCard(
+                                        session = latestSession,
+                                        isBusy = isBusy,
+                                        isPlayingQueue = playbackQueue.isNotEmpty() &&
+                                            player.activeClip?.let { active ->
+                                                latestSession.clips.any { it.file == active.file }
+                                            } == true,
+                                        onPlayHighlights = {
+                                            if (!isBusy && latestSession.clips.isNotEmpty()) {
+                                                playbackQueue = latestSession.clips.sortedBy { it.createdAt }
+                                                playbackQueueIndex = 0
+                                                player.play(playbackQueue.first())
+                                            }
+                                        },
+                                        onShareReport = {
+                                            context.startActivity(
+                                                Intent.createChooser(
+                                                    Intent(Intent.ACTION_SEND).apply {
+                                                        type = "text/plain"
+                                                        putExtra(Intent.EXTRA_TEXT, sleepReportShareText(latestSession))
+                                                    },
+                                                    "수면 리포트 공유",
+                                                ),
+                                            )
+                                        },
+                                    )
+                                }
+                            }
+                        } else if (sortedRecordings.isEmpty() && sessionGroups.isEmpty()) {
+                            item(key = "empty-sounds", span = { GridItemSpan(maxLineSpan) }) {
+                                EmptyRecordings(modifier = Modifier.fillMaxWidth().padding(vertical = 80.dp))
+                            }
+                        } else {
+                            item(key = "summary", span = { GridItemSpan(maxLineSpan) }) {
+                                RecordingSummaryCard(
+                                    sessionCount = sessionGroups.size,
+                                    originals = originals,
+                                )
+                            }
+
+                            item(key = "today", span = { GridItemSpan(maxLineSpan) }) {
+                                TodayMergeCard(
+                                    clips = todayOriginals,
+                                    enabled = todayOriginals.size >= 2 && !isBusy,
+                                    isBusy = isBusy,
+                                    onMerge = { pendingMerge = PendingMerge.Today },
+                                )
+                            }
 
                         if (selectionMode && originals.isNotEmpty()) {
                             item(key = "selection", span = { GridItemSpan(maxLineSpan) }) {
@@ -397,7 +465,7 @@ fun RecordingsScreen(
                         if (ungroupedOriginals.isNotEmpty()) {
                             item(key = "ungrouped") {
                                 RecordingListCard(
-                                    title = "기타 수면 소리",
+                                    title = "기타 잠소리",
                                     subtitle = "세션 시간이 없는 원본 ${ungroupedOriginals.size}개",
                                     clips = ungroupedOriginals,
                                     selectionMode = selectionMode,
@@ -426,8 +494,8 @@ fun RecordingsScreen(
                                 )
                             }
                         }
+                        }
                     }
-                }
             }
         }
     }
@@ -467,7 +535,7 @@ fun RecordingsScreen(
 
     if (pendingDeleteAll) {
         ConfirmActionDialog(
-            title = "저장된 수면 소리를 모두 삭제할까요?",
+            title = "저장된 잠소리를 모두 삭제할까요?",
             message = "삭제한 녹음은 복구할 수 없습니다.",
             confirmLabel = "모두 삭제",
             onDismiss = { pendingDeleteAll = false },
@@ -506,6 +574,212 @@ fun RecordingsScreen(
 }
 
 @Composable
+private fun RecordingsPagePicker(
+    selectedPage: RecordingsPage,
+    onSelected: (RecordingsPage) -> Unit,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
+    ) {
+        Row(modifier = Modifier.padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            RecordingsPage.entries.forEach { page ->
+                Surface(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(11.dp))
+                        .clickable { onSelected(page) },
+                    shape = RoundedCornerShape(11.dp),
+                    color = if (page == selectedPage) {
+                        MaterialTheme.colorScheme.surfaceVariant
+                    } else {
+                        Color.Transparent
+                    },
+                ) {
+                    Text(
+                        text = page.title,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
+                        textAlign = TextAlign.Center,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = if (page == selectedPage) FontWeight.Bold else FontWeight.Medium,
+                        color = if (page == selectedPage) {
+                            MaterialTheme.colorScheme.onSurface
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EmptySleepReport() {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 80.dp, horizontal = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Icon(
+            Icons.Default.GraphicEq,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(42.dp),
+        )
+        Text(
+            "분석할 수면 기록이 없습니다",
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Text(
+            "매이트 모드에서 소리와 움직임이 기록되면 수면 리포트로 정리합니다.",
+            textAlign = TextAlign.Center,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun SleepReportCard(
+    session: RecordingSessionGroup,
+    isBusy: Boolean,
+    isPlayingQueue: Boolean,
+    onPlayHighlights: () -> Unit,
+    onShareReport: () -> Unit,
+) {
+    val insight = session.insight
+    RecordingSurface {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text(sessionTitle(session), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text(
+                            buildString {
+                                append(sessionTimeRange(session))
+                                append(" · 소리 ${insight.soundCount}개")
+                                if (insight.movementCount > 0) append(" · 화들짝 ${insight.movementCount}회")
+                            },
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    if (session.isInferred) {
+                        Text(
+                            "시간 추정",
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(50))
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    }
+                }
+                SessionTimeline(session)
+            }
+
+            Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)))
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("분석 요약", modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold)
+                TextButton(onClick = onShareReport) {
+                    Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Text(" 리포트 공유")
+                }
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                SleepInsightMetric("기록 구간", compactDuration(insight.sessionDuration), Modifier.weight(1f))
+                SleepInsightMetric("소리 후보", "${insight.soundCount}회", Modifier.weight(1f))
+                SleepInsightMetric("화들짝 반응", "${insight.movementCount}회", Modifier.weight(1f))
+            }
+
+            ActivityDistributionBar(insight.activityBuckets)
+
+            Text(
+                activityDescription(session),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            if (session.clips.isNotEmpty()) {
+                TextButton(
+                    onClick = onPlayHighlights,
+                    enabled = !isBusy,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(13.dp))
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.13f)),
+                ) {
+                    Icon(
+                        if (isPlayingQueue) Icons.Default.GraphicEq else Icons.Default.PlayArrow,
+                        contentDescription = null,
+                    )
+                    Text(
+                        if (isPlayingQueue) " 핵심 소리 이어 듣는 중" else " 핵심 소리 ${session.clips.size}개 이어 듣기",
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+            }
+
+            Text(
+                "소리와 움직임의 발생 기록을 요약한 참고 정보이며, 수면 단계나 질병을 진단하지 않습니다.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SleepInsightMetric(title: String, value: String, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(11.dp))
+            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.07f))
+            .padding(10.dp),
+        verticalArrangement = Arrangement.spacedBy(3.dp),
+    ) {
+        Text(value, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+        Text(title, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun ActivityDistributionBar(buckets: List<Int>) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(28.dp)
+            .semantics {
+                contentDescription = "수면 중 활동 분포"
+                stateDescription = buckets.joinToString(", ")
+            },
+        verticalAlignment = Alignment.Bottom,
+        horizontalArrangement = Arrangement.spacedBy(3.dp),
+    ) {
+        buckets.forEach { count ->
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height((5 + count.coerceAtMost(4) * 5).dp)
+                    .clip(RoundedCornerShape(50))
+                    .background(
+                        if (count == 0) {
+                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+                        } else {
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.42f + 0.12f * count.coerceAtMost(4))
+                        },
+                    ),
+            )
+        }
+    }
+}
+
+@Composable
 private fun RecordingSummaryCard(
     sessionCount: Int,
     originals: List<RecordingClip>,
@@ -536,7 +810,7 @@ private fun RecordingSummaryCard(
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 Text("기록 요약", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Text(
-                    "잠자리 ${sessionCount}회 · 원본 ${originals.size}개",
+                    "잠자리 ${sessionCount}회 · 원본 ${originals.size}개 · ${formatStorageSize(originals.sumOf { it.file.length() })}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -824,7 +1098,7 @@ private fun SessionTimeline(session: RecordingSessionGroup) {
             Text(formatClockTime(session.startedAt), style = MaterialTheme.typography.labelSmall)
             Spacer(modifier = Modifier.weight(1f))
             Text(
-                "수면 소리 · 얇은 선은 화들짝",
+                "잠소리 · 얇은 선은 화들짝",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -1349,7 +1623,7 @@ private fun EmptyRecordings(modifier: Modifier = Modifier) {
             )
         }
         Text(
-            "저장된 수면 소리가 없습니다",
+            "저장된 잠소리가 없습니다",
             modifier = Modifier.padding(top = 18.dp),
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
@@ -1522,6 +1796,8 @@ private class RecordingPlaybackController(
 
     private var mediaPlayer: MediaPlayer? = null
     private var loudnessEnhancer: LoudnessEnhancer? = null
+    var onPlaybackFinished: (() -> Boolean)? = null
+    var onManualPlaybackStarted: (() -> Unit)? = null
 
     fun toggleBoost() {
         boostEnabled = !boostEnabled
@@ -1529,13 +1805,19 @@ private class RecordingPlaybackController(
     }
 
     fun toggle(clip: RecordingClip) {
+        onManualPlaybackStarted?.invoke()
         errorMessage = null
         if (activeClip?.file == clip.file) {
             if (isPreparing) return
             if (isPlaying) pause() else resume()
             return
         }
-        start(clip)
+        start(clip, preservePlaybackState = false)
+    }
+
+    fun play(clip: RecordingClip) {
+        errorMessage = null
+        start(clip, preservePlaybackState = true)
     }
 
     fun seekTo(positionMillis: Int) {
@@ -1566,8 +1848,8 @@ private class RecordingPlaybackController(
 
     fun release() = releaseCurrent(clearSelection = true)
 
-    private fun start(clip: RecordingClip) {
-        releaseCurrent(clearSelection = true)
+    private fun start(clip: RecordingClip, preservePlaybackState: Boolean) {
+        releaseCurrent(clearSelection = true, notifyPlaybackState = !preservePlaybackState)
         activeClip = clip
         isPreparing = true
         positionMillis = 0
@@ -1604,7 +1886,11 @@ private class RecordingPlaybackController(
                 }
             }
             nextPlayer.setOnCompletionListener { completedPlayer ->
-                if (mediaPlayer === completedPlayer) stop()
+                if (mediaPlayer === completedPlayer) {
+                    releaseCurrent(clearSelection = true, notifyPlaybackState = false)
+                    val continued = onPlaybackFinished?.invoke() == true
+                    if (!continued) updatePlaying(false)
+                }
             }
             nextPlayer.setOnErrorListener { failedPlayer, _, _ ->
                 if (mediaPlayer === failedPlayer) failPlayback()
@@ -1642,7 +1928,7 @@ private class RecordingPlaybackController(
         errorMessage = "녹음을 재생할 수 없습니다. 파일을 확인해 주세요."
     }
 
-    private fun releaseCurrent(clearSelection: Boolean) {
+    private fun releaseCurrent(clearSelection: Boolean, notifyPlaybackState: Boolean = true) {
         val player = mediaPlayer
         mediaPlayer = null
         runCatching { loudnessEnhancer?.release() }
@@ -1650,7 +1936,7 @@ private class RecordingPlaybackController(
         runCatching { player?.stop() }
         runCatching { player?.reset() }
         runCatching { player?.release() }
-        updatePlaying(false)
+        if (notifyPlaybackState) updatePlaying(false)
         isPreparing = false
         if (clearSelection) {
             activeClip = null
@@ -1697,10 +1983,11 @@ private fun recordingsBackground(): Brush {
 private fun sessionTitle(session: RecordingSessionGroup): String {
     val zone = ZoneId.systemDefault()
     val date = session.startedAt.atZone(zone).toLocalDate()
+    val startTime = CLOCK_TIME_FORMATTER.format(session.startedAt.atZone(zone))
     return when (date) {
-        LocalDate.now(zone) -> "오늘 잠자리"
-        LocalDate.now(zone).minusDays(1) -> "어제 잠자리"
-        else -> SESSION_DATE_FORMATTER.format(session.startedAt.atZone(zone))
+        LocalDate.now(zone) -> "오늘 ${startTime} 잠자리"
+        LocalDate.now(zone).minusDays(1) -> "어제 ${startTime} 잠자리"
+        else -> "${SESSION_DATE_FORMATTER.format(session.startedAt.atZone(zone))} ${startTime} 잠자리"
     }
 }
 
@@ -1738,8 +2025,41 @@ private fun formatDuration(seconds: Double): String {
     }
 }
 
+private fun compactDuration(duration: Duration): String {
+    val totalMinutes = (duration.toMillis().coerceAtLeast(0L) / 60_000.0).roundToLong()
+    val hours = totalMinutes / 60
+    val minutes = totalMinutes % 60
+    return if (hours > 0) "${hours}시간 ${minutes}분" else "${minutes}분"
+}
+
+private fun activityDescription(session: RecordingSessionGroup): String {
+    val insight = session.insight
+    val range = insight.busiestRange(session.startedAt)
+        ?: return "기록된 소리나 뒤척임이 없습니다."
+    return "가장 기록이 몰린 시간은 ${formatClockTime(range.first)}–${formatClockTime(range.second)}입니다 · " +
+        "시간당 ${String.format(Locale.KOREAN, "%.1f", insight.eventsPerHour)}회"
+}
+
+private fun sleepReportShareText(session: RecordingSessionGroup): String {
+    val insight = session.insight
+    val date = REPORT_DATE_FORMATTER.format(session.startedAt.atZone(ZoneId.systemDefault()))
+    return "S.tand 수면 리포트 · ${date}\n" +
+        "기록 구간 ${compactDuration(insight.sessionDuration)}\n" +
+        "소리 후보 ${insight.soundCount}회 · 화들짝 반응 ${insight.movementCount}회\n" +
+        "${activityDescription(session)}\n" +
+        "※ 감지 기록을 분석한 참고 정보이며 의료 진단이 아닙니다."
+}
+
+private fun formatStorageSize(bytes: Long): String {
+    if (bytes < 1_024) return "${bytes} B"
+    val kib = bytes / 1_024.0
+    if (kib < 1_024) return String.format(Locale.KOREAN, "%.1f KB", kib)
+    return String.format(Locale.KOREAN, "%.1f MB", kib / 1_024.0)
+}
+
 private val RECORDING_TIME_FORMATTER = DateTimeFormatter.ofPattern("M월 d일 HH:mm:ss", Locale.KOREAN)
 private val SESSION_DATE_FORMATTER = DateTimeFormatter.ofPattern("M월 d일 E", Locale.KOREAN)
 private val CLOCK_TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm", Locale.KOREAN)
+private val REPORT_DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy년 M월 d일", Locale.KOREAN)
 private const val MILLIS_PER_SECOND = 1_000.0
 private const val PROGRESS_UPDATE_MILLIS = 100L

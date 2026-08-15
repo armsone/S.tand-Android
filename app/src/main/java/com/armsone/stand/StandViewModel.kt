@@ -892,7 +892,7 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
             val remaining = recordingRepository.reload()
             refreshRecordingSessionGroups(remaining)
             if (succeeded && remaining.isEmpty()) {
-                "저장된 수면 소리를 모두 삭제했습니다."
+                "저장된 잠소리를 모두 삭제했습니다."
             } else {
                 "일부 녹음을 삭제하지 못했습니다."
             }

@@ -17,7 +17,7 @@ public class SoundEventDetectorTest {
         java.util.Arrays.fill(quiet, (short) 200);
         java.util.Arrays.fill(loud, (short) 14_000);
         long time = 0;
-        for (int index = 0; index < 30; index++) {
+        for (int index = 0; index < 601; index++) {
             time += 100;
             detector.observe(quiet, quiet.length, time, (kind, level) -> detected.add(kind));
         }
@@ -35,7 +35,7 @@ public class SoundEventDetectorTest {
         short[] quiet = new short[1_024];
         java.util.Arrays.fill(quiet, (short) 180);
         long time = 0;
-        for (int index = 0; index < 25; index++) {
+        for (int index = 0; index < 601; index++) {
             time += 100;
             detector.observe(quiet, quiet.length, time, (kind, level) -> detected.add(kind));
         }
@@ -47,5 +47,34 @@ public class SoundEventDetectorTest {
 
         assertTrue(detected.contains(BoyisoEvent.DETAIL_FINGER_SNAP));
         assertFalse(detected.contains(BoyisoEvent.DETAIL_BIG_SOUND));
+    }
+
+    @Test public void calibrationAndReportedQuietClipNeverSendSoundEvents() {
+        SoundEventDetector detector = new SoundEventDetector();
+        List<String> detected = new ArrayList<>();
+        short[] loudDuringCalibration = new short[1_024];
+        java.util.Arrays.fill(loudDuringCalibration, (short) 14_000);
+        long time = 0;
+        for (int index = 0; index < 600; index++) {
+            time += 100;
+            detector.observe(loudDuringCalibration, loudDuringCalibration.length, time,
+                    (kind, level) -> detected.add(kind));
+        }
+        assertTrue(detected.isEmpty());
+
+        short[] quietRoom = new short[1_024];
+        java.util.Arrays.fill(quietRoom, (short) 200);
+        time += 100;
+        detector.observe(quietRoom, quietRoom.length, time, (kind, level) -> detected.add(kind));
+
+        short[] reportedQuietClip = new short[1_024];
+        java.util.Arrays.fill(reportedQuietClip, (short) 152);
+        reportedQuietClip[512] = 470;
+        for (int index = 0; index < 30; index++) {
+            time += 100;
+            detector.observe(reportedQuietClip, reportedQuietClip.length, time,
+                    (kind, level) -> detected.add(kind));
+        }
+        assertTrue(detected.isEmpty());
     }
 }

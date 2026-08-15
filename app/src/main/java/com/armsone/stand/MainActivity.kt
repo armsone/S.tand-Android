@@ -69,6 +69,9 @@ import com.armsone.stand.ui.InternetRadioManagementScreen
 import com.armsone.stand.ui.StandHomeScreen
 import com.armsone.stand.ui.TokTokGreetingOverlay
 import com.armsone.stand.ui.CryingChildAlertOverlay
+import com.armsone.stand.ui.ClockFontOptionsScreen
+import com.armsone.stand.ui.FontLicenseDetailScreen
+import com.armsone.stand.ui.FontLicensesScreen
 import com.armsone.stand.ui.theme.STandTheme
 import com.armsone.stand.update.AppUpdateState
 import com.armsone.stand.update.GitHubAppUpdateService
@@ -287,6 +290,7 @@ class MainActivity : ComponentActivity() {
         var editorDraftEncoded by rememberSaveable { mutableStateOf<String?>(null) }
         var editorClockFontName by rememberSaveable { mutableStateOf<String?>(null) }
         var editorClockHourModeName by rememberSaveable { mutableStateOf<String?>(null) }
+        var selectedFontLicenseName by rememberSaveable { mutableStateOf<String?>(null) }
 
         LaunchedEffect(sharedRadioUrl) {
             if (sharedRadioUrl != null) {
@@ -430,6 +434,10 @@ class MainActivity : ComponentActivity() {
                 -> secondaryReturnDestination
                 AppDestination.BROWSER -> browserReturnDestination
                 AppDestination.BOYISO -> boyisoReturnDestination
+                AppDestination.CLOCK_FONTS,
+                AppDestination.FONT_LICENSES,
+                -> AppDestination.SETTINGS
+                AppDestination.FONT_LICENSE_DETAIL -> AppDestination.FONT_LICENSES
                 else -> AppDestination.HOME
             }
         }
@@ -522,6 +530,8 @@ class MainActivity : ComponentActivity() {
                         boyisoReturnDestination = AppDestination.SETTINGS
                         destination = AppDestination.BOYISO
                     },
+                    onOpenClockFonts = { destination = AppDestination.CLOCK_FONTS },
+                    onOpenFontLicenses = { destination = AppDestination.FONT_LICENSES },
                     boyisoStatus = boyisoState.statusText,
                     onRequestMicrophonePermission = {
                         retryPermission(PermissionRequest.MICROPHONE)
@@ -540,6 +550,29 @@ class MainActivity : ComponentActivity() {
                     },
                     onOpenAppSettings = ::openAppSettings,
                     onBack = { destination = AppDestination.HOME },
+                )
+
+                AppDestination.CLOCK_FONTS -> ClockFontOptionsScreen(
+                    selectedFont = state.settings.clockFont,
+                    onFontSelected = { font ->
+                        standViewModel.updateSettings { current -> current.copy(clockFont = font) }
+                    },
+                    onBack = { destination = AppDestination.SETTINGS },
+                )
+
+                AppDestination.FONT_LICENSES -> FontLicensesScreen(
+                    onOpenLicense = { font ->
+                        selectedFontLicenseName = font.name
+                        destination = AppDestination.FONT_LICENSE_DETAIL
+                    },
+                    onBack = { destination = AppDestination.SETTINGS },
+                )
+
+                AppDestination.FONT_LICENSE_DETAIL -> FontLicenseDetailScreen(
+                    font = selectedFontLicenseName
+                        ?.let { name -> ClockFontChoice.entries.firstOrNull { it.name == name } }
+                        ?: ClockFontChoice.PRETENDARD,
+                    onBack = { destination = AppDestination.FONT_LICENSES },
                 )
 
                 AppDestination.BOYISO -> BoyisoScreen(
@@ -1193,6 +1226,9 @@ class MainActivity : ComponentActivity() {
         RADIO_MANAGEMENT,
         BROWSER,
         BOYISO,
+        CLOCK_FONTS,
+        FONT_LICENSES,
+        FONT_LICENSE_DETAIL,
     }
 
     private enum class PermissionRequest { MICROPHONE, LOCATION, CAMERA }

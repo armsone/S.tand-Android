@@ -37,6 +37,61 @@ data class RecordingSessionGroup(
 ) {
     val totalDurationSeconds: Double
         get() = clips.sumOf { it.durationSeconds }
+
+    val insight: SleepSessionInsight
+        get() = SleepSessionInsight.from(this)
+}
+
+data class SleepSessionInsight(
+    val sessionDuration: Duration,
+    val soundCount: Int,
+    val soundDurationSeconds: Double,
+    val movementCount: Int,
+    val activityBuckets: List<Int>,
+    val busiestBucketIndex: Int?,
+) {
+    val eventsPerHour: Double
+        get() {
+            val seconds = sessionDuration.toMillis().coerceAtLeast(0L) / 1_000.0
+            return if (seconds <= 0.0) 0.0 else (soundCount + movementCount) / (seconds / 3_600.0)
+        }
+
+    fun busiestRange(sessionStart: Instant): Pair<Instant, Instant>? {
+        val index = busiestBucketIndex ?: return null
+        val bucketMillis = sessionDuration.toMillis() / BUCKET_COUNT
+        if (bucketMillis <= 0L) return null
+        val start = sessionStart.plusMillis(index * bucketMillis)
+        return start to start.plusMillis(bucketMillis)
+    }
+
+    companion object {
+        const val BUCKET_COUNT = 12
+
+        fun from(session: RecordingSessionGroup): SleepSessionInsight {
+            val duration = Duration.between(session.startedAt, session.endedAt).coerceAtLeast(Duration.ZERO)
+            val buckets = MutableList(BUCKET_COUNT) { 0 }
+            val eventTimes = session.clips.map(RecordingClip::createdAt) +
+                session.startleEvents.map(SleepStartleEvent::startedAt)
+            eventTimes.forEach { instant ->
+                val fraction = RecordingSessionPolicy.markerFraction(
+                    instant = instant,
+                    sessionStart = session.startedAt,
+                    sessionEnd = session.endedAt,
+                )
+                val index = (fraction * BUCKET_COUNT).toInt().coerceIn(0, BUCKET_COUNT - 1)
+                buckets[index] += 1
+            }
+            val maximum = buckets.maxOrNull() ?: 0
+            return SleepSessionInsight(
+                sessionDuration = duration,
+                soundCount = session.clips.size,
+                soundDurationSeconds = session.totalDurationSeconds,
+                movementCount = session.startleEvents.size,
+                activityBuckets = buckets,
+                busiestBucketIndex = if (maximum > 0) buckets.indexOf(maximum) else null,
+            )
+        }
+    }
 }
 
 /** iOS의 세션 경계 규칙을 Android의 WAV 녹음에 그대로 적용한 순수 정책입니다. */

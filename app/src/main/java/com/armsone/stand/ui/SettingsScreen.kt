@@ -9,7 +9,9 @@ import androidx.annotation.RawRes
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -27,6 +29,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -34,12 +37,18 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.PauseCircle
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.ChildCare
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.RestartAlt
@@ -47,14 +56,16 @@ import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
@@ -64,9 +75,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -82,6 +93,7 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
@@ -123,6 +135,8 @@ fun SettingsScreen(
     onOpenInternetRadioBrowser: () -> Unit,
     onOpenRecordings: () -> Unit,
     onOpenBoyiso: () -> Unit,
+    onOpenClockFonts: () -> Unit,
+    onOpenFontLicenses: () -> Unit,
     boyisoStatus: String,
     onRequestMicrophonePermission: () -> Unit,
     onRequestApproximateLocationPermission: () -> Unit,
@@ -135,18 +149,18 @@ fun SettingsScreen(
     val uriHandler = LocalUriHandler.current
     var showResetConfirmation by remember { mutableStateOf(false) }
     var pendingRadioDeletionID by remember { mutableStateOf<String?>(null) }
-    var selectedLicense by remember { mutableStateOf<ClockFontChoice?>(null) }
     var editingRadioID by remember { mutableStateOf<String?>(null) }
     var addingRadio by remember { mutableStateOf(false) }
     var radioDraftName by remember { mutableStateOf("") }
     var radioDraftURL by remember { mutableStateOf("") }
     var radioValidationMessage by remember { mutableStateOf<String?>(null) }
     val settings = state.settings
+    val settingsBase = Color(red = 0.115f, green = 0.085f, blue = 0.078f)
     val settingsBackground = Brush.linearGradient(
         listOf(
-            lerp(Color(0xFF1D1614), MaterialTheme.colorScheme.primary, 0.20f),
-            Color(0xFF291D1A),
-            Color(0xFF161313),
+            lerp(settingsBase, MaterialTheme.colorScheme.primary, 0.20f),
+            lerp(settingsBase, MaterialTheme.colorScheme.primary, 0.24f),
+            settingsBase,
         ),
     )
     val missingPermissionCount = listOf(
@@ -171,15 +185,24 @@ fun SettingsScreen(
             .background(settingsBackground),
         containerColor = Color.Transparent,
         topBar = {
-            TopAppBar(
-                title = { Text("에스텐드 설정") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "뒤로")
-                    }
+            CenterAlignedTopAppBar(
+                title = {
+                    Text(
+                        "설정",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                    )
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+                actions = {
+                TextButton(
+                    onClick = onBack,
+                ) {
+                    Text("완료", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+                }
+                },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
                 ),
             )
         },
@@ -223,7 +246,7 @@ fun SettingsScreen(
                         subtitle = if (settings.internetRadioChannels.isEmpty()) {
                             "이 화면에서 채널을 추가하고 바로 재생합니다."
                         } else {
-                            "${settings.internetRadioChannels.size}개 채널 · 최대 2개"
+                            "${settings.internetRadioChannels.size}개 채널 · 선택과 재생을 한곳에서"
                         },
                         icon = Icons.Default.Radio,
                     ) {
@@ -246,26 +269,41 @@ fun SettingsScreen(
                                 InternetRadioState.Idle -> "대기 중"
                             }
                             Row(
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 58.dp)
+                                    .padding(horizontal = 10.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
-                                TextButton(
+                                IconButton(
                                     onClick = { onToggleInternetRadio(channel.id) },
-                                    modifier = Modifier.weight(1f),
+                                    modifier = Modifier.width(44.dp).height(48.dp),
                                 ) {
-                                    Column(Modifier.fillMaxWidth()) {
-                                        Text(channel.displayName, fontWeight = FontWeight.SemiBold)
-                                        Text(status, style = MaterialTheme.typography.bodySmall)
-                                    }
+                                    Icon(
+                                        Icons.Default.PlayArrow,
+                                        contentDescription = if (active) "라디오 일시 정지" else "라디오 재생",
+                                        modifier = Modifier.size(20.dp),
+                                    )
                                 }
-                                TextButton(onClick = {
-                                    editingRadioID = channel.id
-                                    addingRadio = false
-                                    radioDraftName = channel.displayName
-                                    radioDraftURL = channel.streamUrl
-                                    radioValidationMessage = null
-                                }) { Text("수정") }
+                                Column(Modifier.weight(1f)) {
+                                    Text(channel.displayName, fontWeight = FontWeight.SemiBold)
+                                    Text(status, style = MaterialTheme.typography.bodySmall)
+                                }
+                                IconButton(
+                                    onClick = {
+                                        editingRadioID = channel.id
+                                        addingRadio = false
+                                        radioDraftName = channel.displayName
+                                        radioDraftURL = channel.streamUrl
+                                        radioValidationMessage = null
+                                    },
+                                    modifier = Modifier
+                                        .size(48.dp)
+                                        .background(Color.White.copy(alpha = 0.07f), CircleShape),
+                                ) {
+                                    Icon(Icons.Default.Edit, contentDescription = "수정", modifier = Modifier.size(13.dp))
+                                }
                             }
                             if (editingRadioID == channel.id) {
                                 InlineRadioEditor(
@@ -291,6 +329,7 @@ fun SettingsScreen(
                                     onDelete = {
                                         pendingRadioDeletionID = channel.id
                                     },
+                                    onOpenBrowser = onOpenInternetRadioBrowser,
                                     onClose = { editingRadioID = null },
                                 )
                             }
@@ -317,6 +356,7 @@ fun SettingsScreen(
                                     if (radioValidationMessage == null) addingRadio = false
                                 },
                                 onDelete = null,
+                                onOpenBrowser = onOpenInternetRadioBrowser,
                                 onClose = { addingRadio = false },
                             )
                         } else if (
@@ -356,7 +396,7 @@ fun SettingsScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Text(
-                            "최대 두 채널을 저장합니다. 현재 선택 채널은 홈에서 재생할 수 있고, 연결이 끊기면 자동 재연결합니다. 재생 중에는 소리 감지와 녹음을 잠시 멈춥니다.",
+                            "목록의 첫 두 채널이 홈 패널에 순서대로 표시됩니다. 왼쪽 버튼으로 바로 듣고, 연결이 끊기면 자동 재연결합니다. 재생 중에는 소리 감지와 녹음을 잠시 멈춥니다.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -364,7 +404,7 @@ fun SettingsScreen(
 
                     SettingsSectionKind.SCREEN_AND_CLOCK -> SettingsCard(
                         title = "화면과 시계",
-                        subtitle = "테마와 시계 글꼴을 바꿉니다.",
+                        subtitle = "테마와 시계 글꼴을 바꿉니다",
                         icon = Icons.Default.TextFields,
                     ) {
                         Text(
@@ -373,35 +413,28 @@ fun SettingsScreen(
                             fontWeight = FontWeight.SemiBold,
                         )
                         Text(
-                            "홈 화면을 더블 터치하면 테마가 바뀝니다.",
+                            "시계를 더블 터치하면 테마가 바뀝니다.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            StandDisplayTheme.entries.forEach { theme ->
-                                FilterChip(
-                                    selected = settings.displayTheme == theme,
-                                    onClick = { onUpdate { it.copy(displayTheme = theme) } },
-                                    label = {
-                                        Text(theme.title)
-                                    },
-                                )
-                            }
+                        ThemePalettePicker(
+                            selectedTheme = settings.displayTheme,
+                            onThemeSelected = { theme ->
+                                onUpdate { it.copy(displayTheme = theme) }
+                            },
+                        )
+                        TextButton(
+                            onClick = onOpenClockFonts,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Icon(Icons.Default.TextFields, contentDescription = null)
+                            Text(" 시계 글꼴", modifier = Modifier.weight(1f), textAlign = TextAlign.Start)
+                            Text(
+                                settings.clockFont.displayName,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null)
                         }
-                        Text(
-                            "시계 글꼴",
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        Text(
-                            "실제 플립시계 모양을 눌러 선택하세요 · ${settings.clockFont.displayName}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        ClockFontPreviewGrid(
-                            selectedFont = settings.clockFont,
-                            onFontSelected = { font -> onUpdate { it.copy(clockFont = font) } },
-                        )
                         Text(
                             "홈 화면을 길게 누르면 시계와 날씨 같은 정보 패널을 편집할 수 있습니다.",
                             style = MaterialTheme.typography.bodySmall,
@@ -411,7 +444,7 @@ fun SettingsScreen(
 
                     SettingsSectionKind.PERMISSIONS -> SettingsCard(
                         title = "권한 설정",
-                        subtitle = "필요한 기능만 선택해서 사용합니다.",
+                        subtitle = "필요한 기능만 선택해서 사용합니다",
                         icon = Icons.Default.Security,
                     ) {
                         LabeledSwitch(
@@ -499,7 +532,7 @@ fun SettingsScreen(
 
                     SettingsSectionKind.SLEEP_SOUNDS -> SettingsCard(
                         title = "잠꼬대와 코골이",
-                        subtitle = "매이트 모드에서만 작동합니다.",
+                        subtitle = "매이트 모드에서만 작동합니다",
                         icon = Icons.Default.GraphicEq,
                     ) {
                         val audioStatus = when {
@@ -540,14 +573,14 @@ fun SettingsScreen(
                         ) {
                             Text(
                                 if (state.recordingCount == 0) {
-                                    "수면 소리 열기"
+                                    "잠소리 열기"
                                 } else {
-                                    "녹음 ${state.recordingCount}개 보기"
+                                    "잠소리 ${state.recordingCount}개 보기"
                                 },
                             )
                         }
                         Text(
-                            "처음에는 방의 평소 소리를 익히고, 후보 녹음은 이 기기 안에서만 처리합니다.",
+                            "처음 1분 동안 방의 평소 소리를 익힙니다. 이후 평균보다 커진 순간에는 바로 화들짝 반응하고, 녹음은 이 기기 안에서만 처리합니다.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -555,7 +588,7 @@ fun SettingsScreen(
 
                     SettingsSectionKind.INFORMATION -> SettingsCard(
                         title = "정보",
-                        subtitle = "개인정보, 저작권과 앱 정보를 확인합니다.",
+                        subtitle = "개인정보, 저작권과 앱 정보를 확인합니다",
                         icon = Icons.Default.Info,
                     ) {
                         Text(
@@ -574,27 +607,32 @@ fun SettingsScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
-                        Text("에스텐드 · S.tand ${BuildConfig.VERSION_NAME}")
+                        Text("S.tand ${BuildConfig.VERSION_NAME}")
                         Text(
                             "빌드 ${BuildConfig.BUILD_NUMBER} · versionCode ${BuildConfig.VERSION_CODE}",
                             style = MaterialTheme.typography.bodySmall,
                         )
-                        Text("시스템 글꼴 + 번들 글꼴 9종", style = MaterialTheme.typography.bodySmall)
+                        TextButton(
+                            onClick = { uriHandler.openUri("https://github.com/armsone") },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Icon(Icons.Default.Public, contentDescription = null)
+                            Text(" 만든 사람 GitHub · github.com/armsone")
+                        }
+                        TextButton(
+                            onClick = onOpenFontLicenses,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Icon(Icons.Default.TextFields, contentDescription = null)
+                            Text(" 내장 폰트 저작권", modifier = Modifier.weight(1f), textAlign = TextAlign.Start)
+                            Text("원문 포함", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null)
+                        }
                         TextButton(
                             onClick = { uriHandler.openUri("https://open-meteo.com/") },
                             modifier = Modifier.fillMaxWidth(),
                         ) {
                             Text("날씨 데이터 · Open-Meteo")
-                        }
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            ClockFontChoice.entries.filterNot {
-                                it == ClockFontChoice.SYSTEM_ROUNDED
-                            }.forEach { font ->
-                                AssistChip(
-                                    onClick = { selectedLicense = font },
-                                    label = { Text(font.displayName) },
-                                )
-                            }
                         }
                         TextButton(
                             onClick = { showResetConfirmation = true },
@@ -653,9 +691,6 @@ fun SettingsScreen(
         )
     }
 
-    selectedLicense?.let { font ->
-        FontLicenseDialog(font = font, onDismiss = { selectedLicense = null })
-    }
 }
 
 @Composable
@@ -663,37 +698,86 @@ private fun SettingsHero(
     state: StandUiState,
     onModePreferenceSelected: (StandModePreference) -> Unit,
 ) {
-    SettingsCard(
-        title = "에스텐드",
-        subtitle = "낮에는 오브제 · 밤에는 매이트",
-        icon = Icons.Default.DarkMode,
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                brush = Brush.linearGradient(
+                    listOf(
+                        Color.White.copy(alpha = 0.18f),
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
+                    ),
+                ),
+                shape = RoundedCornerShape(22.dp),
+            )
+            .border(
+                width = 1.dp,
+                color = Color.White.copy(alpha = 0.18f),
+                shape = RoundedCornerShape(22.dp),
+            )
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 44.dp)
-                .semantics(mergeDescendants = true) {
-                    contentDescription = if (state.isSessionActive) {
-                        "현재 상태, ${state.experienceMode.title}"
-                    } else {
-                        "현재 상태, 에스텐드 멈춤"
-                    }
-                },
-            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
-            shape = RoundedCornerShape(14.dp),
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Box(
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                contentAlignment = Alignment.Center,
+            Image(
+                painter = painterResource(R.drawable.stand_brand_icon),
+                contentDescription = null,
+                modifier = Modifier.size(58.dp),
+            )
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(5.dp),
             ) {
-                Text(if (state.isSessionActive) state.experienceMode.title else "에스텐드 멈춤")
+                Text("S.tand", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                Text(
+                    "낮에는 오브제\n밤에는 매이트",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White.copy(alpha = 0.64f),
+                )
+            }
+            val statusTitle = if (state.isSessionActive) {
+                state.experienceMode.title
+            } else {
+                "S.tand 멈춤"
+            }
+            Surface(
+                modifier = Modifier.semantics(mergeDescendants = true) {
+                    contentDescription = "현재 상태, $statusTitle"
+                },
+                color = if (state.isSessionActive) {
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                } else {
+                    Color.White.copy(alpha = 0.07f)
+                },
+                contentColor = if (state.isSessionActive) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    Color.White.copy(alpha = 0.58f)
+                },
+                shape = RoundedCornerShape(50),
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                ) {
+                    Icon(
+                        imageVector = when {
+                            !state.isSessionActive -> Icons.Default.PauseCircle
+                            state.experienceMode == com.armsone.stand.model.StandExperienceMode.OBJECT ->
+                                Icons.Default.LightMode
+                            else -> Icons.Default.DarkMode
+                        },
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Text(statusTitle, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
+                }
             }
         }
-        Text(
-            "화면 모드 유지",
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.SemiBold,
-        )
         SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
             StandModePreference.entries.forEachIndexed { index, preference ->
                 SegmentedButton(
@@ -709,12 +793,91 @@ private fun SettingsHero(
                 }
             }
         }
-        Text(
-            "자동 전환 또는 오브제와 매이트 모드 유지를 선택합니다.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
     }
+}
+
+@Composable
+private fun ThemePalettePicker(
+    selectedTheme: StandDisplayTheme,
+    onThemeSelected: (StandDisplayTheme) -> Unit,
+) {
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        val spacing = 10.dp
+        val columnCount = (maxWidth.value / 82f).toInt().coerceAtLeast(1).coerceAtMost(4)
+        val tileWidth = ((maxWidth.value - spacing.value * (columnCount - 1)) / columnCount).dp
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(spacing),
+            verticalArrangement = Arrangement.spacedBy(spacing),
+            maxItemsInEachRow = columnCount,
+        ) {
+            StandDisplayTheme.entries.forEach { theme ->
+                val selected = selectedTheme == theme
+                Surface(
+                    onClick = { onThemeSelected(theme) },
+                    modifier = Modifier
+                        .width(tileWidth)
+                        .semantics(mergeDescendants = true) {
+                            contentDescription = "${theme.title} 테마"
+                            this.selected = selected
+                            role = Role.RadioButton
+                        },
+                    color = if (selected) {
+                        themeAccent(theme).copy(alpha = 0.12f)
+                    } else {
+                        Color.White.copy(alpha = 0.04f)
+                    },
+                    shape = RoundedCornerShape(14.dp),
+                ) {
+                    Column(
+                        modifier = Modifier.padding(vertical = 9.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(7.dp),
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Box(
+                                modifier = Modifier
+                                    .size(38.dp)
+                                    .background(themeAccent(theme), CircleShape)
+                                    .border(
+                                        width = if (selected) 2.dp else 1.dp,
+                                        color = Color.White.copy(alpha = if (selected) 0.90f else 0.18f),
+                                        shape = CircleShape,
+                                    ),
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .size(14.dp)
+                                    .offset(x = (-7).dp, y = (-7).dp)
+                                    .background(
+                                        Color.White.copy(
+                                            alpha = if (theme == StandDisplayTheme.GRAYSCALE) 0.12f else 0.18f,
+                                        ),
+                                        CircleShape,
+                                    ),
+                            )
+                            if (selected) {
+                                Icon(
+                                    Icons.Default.Check,
+                                    contentDescription = null,
+                                    tint = if (theme == StandDisplayTheme.GRAYSCALE) Color.Black else Color.White,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            }
+                        }
+                        Text(theme.title, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun themeAccent(theme: StandDisplayTheme): Color = when (theme) {
+    StandDisplayTheme.COLOR -> Color(0xFFFF8A2A)
+    StandDisplayTheme.GRAYSCALE -> Color(0xFFE4E4E4)
+    StandDisplayTheme.MIDNIGHT -> Color(0xFF61ADFF)
+    StandDisplayTheme.SAGE -> Color(0xFF8CC69E)
 }
 
 @Composable
@@ -761,41 +924,61 @@ private fun InlineRadioEditor(
     onUrlChange: (String) -> Unit,
     onSave: () -> Unit,
     onDelete: (() -> Unit)?,
+    onOpenBrowser: () -> Unit,
     onClose: () -> Unit,
 ) {
     val clipboardManager = LocalClipboardManager.current
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .standPanelSurface(isDimmed = false, cornerRadius = 14.dp)
+            .standPanelSurface(isDimmed = false, cornerRadius = 16.dp)
             .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                if (onDelete == null) "채널 추가" else "채널 수정",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Spacer(Modifier.weight(1f))
+            TextButton(onClick = onClose) { Text("닫기") }
+        }
         OutlinedTextField(
             value = name,
             onValueChange = onNameChange,
             modifier = Modifier.fillMaxWidth(),
-            label = { Text("표시 이름") },
+            label = { Text("이름 (선택)") },
             singleLine = true,
         )
         OutlinedTextField(
             value = url,
             onValueChange = onUrlChange,
             modifier = Modifier.fillMaxWidth(),
-            label = { Text("HTTPS 스트림 주소") },
+            label = { Text("https://…") },
             singleLine = true,
             isError = error != null,
             supportingText = error?.let { message -> { Text(message) } },
         )
-        TextButton(
-            onClick = {
-                clipboardManager.getText()?.text?.let { pasted ->
-                    onUrlChange(pasted.take(2_048))
-                }
-            },
+        Row(
             modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text("복사한 주소 붙여넣기")
+            TextButton(
+                onClick = {
+                    clipboardManager.getText()?.text?.let { pasted ->
+                        onUrlChange(pasted.take(2_048))
+                    }
+                },
+                modifier = Modifier.weight(1f),
+            ) { Text("붙여넣기") }
+            TextButton(
+                onClick = onOpenBrowser,
+                modifier = Modifier.weight(1f),
+            ) { Text("웹에서 찾기") }
         }
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -805,153 +988,10 @@ private fun InlineRadioEditor(
                 TextButton(onClick = delete) { Text("삭제") }
             }
             Spacer(Modifier.weight(1f))
-            TextButton(onClick = onClose) { Text("닫기") }
-            TextButton(onClick = onSave) { Text("저장") }
-        }
-    }
-}
-
-@Composable
-private fun ClockFontPreviewGrid(
-    selectedFont: ClockFontChoice,
-    onFontSelected: (ClockFontChoice) -> Unit,
-) {
-    val isLargeScreen = LocalConfiguration.current.screenWidthDp >= 600
-    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-        val columnCount = if (isLargeScreen) 5 else 3
-        val spacing = 8.dp
-        val tileWidth = (
-            (maxWidth.value - spacing.value * (columnCount - 1)) / columnCount
-        ).dp - 1.dp
-        val previewFontSize = when {
-            isLargeScreen -> 28.sp
-            tileWidth < 88.dp -> 21.sp
-            else -> 24.sp
-        }
-        val density = LocalDensity.current
-        val previewVisualFontSize = with(density) {
-            previewFontSize.toPx() / this.density
-        }
-
-        FlowRow(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(spacing),
-            verticalArrangement = Arrangement.spacedBy(spacing),
-            maxItemsInEachRow = columnCount,
-        ) {
-            ClockFontChoice.entries.forEach { font ->
-                val isSelected = selectedFont == font
-                val previewFontFamily = font.fontFamily()
-                val previewVerticalOffset = ClockVisualPolicy.verticalOffset(
-                    font = font,
-                    fontSize = previewVisualFontSize,
-                ).dp
-                Card(
-                    onClick = { onFontSelected(font) },
-                    modifier = Modifier
-                        .width(tileWidth)
-                        .heightIn(min = 72.dp)
-                        .semantics(mergeDescendants = true) {
-                            contentDescription =
-                                "${font.displayName} 글꼴, 12시 34분 미리보기"
-                            selected = isSelected
-                            role = Role.RadioButton
-                        },
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (isSelected) {
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.30f)
-                        } else {
-                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.62f)
-                        },
-                        contentColor = MaterialTheme.colorScheme.onSurface,
-                    ),
-                    shape = RoundedCornerShape(14.dp),
-                    border = BorderStroke(
-                        width = if (isSelected) 2.dp else 1.dp,
-                        color = if (isSelected) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.18f)
-                        },
-                    ),
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(72.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(horizontal = 6.dp, vertical = 11.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(3.dp),
-                        ) {
-                            listOf("12", "34").forEachIndexed { index, digits ->
-                                if (index > 0) {
-                                    Text(
-                                        text = ":",
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        fontFamily = previewFontFamily,
-                                        fontSize = previewFontSize,
-                                        fontWeight = font.fontWeight(),
-                                        maxLines = 1,
-                                        softWrap = false,
-                                        modifier = Modifier.offset(y = previewVerticalOffset),
-                                    )
-                                }
-                                SettingsMiniFlipCard(
-                                    digits = digits,
-                                    font = font,
-                                    fontSize = previewFontSize,
-                                    verticalOffset = previewVerticalOffset,
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(50.dp),
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SettingsMiniFlipCard(
-    digits: String,
-    font: ClockFontChoice,
-    fontSize: TextUnit,
-    verticalOffset: Dp,
-    modifier: Modifier = Modifier,
-) {
-    val splitGap = 2.dp
-    Box(
-        modifier = modifier.standPanelSurface(
-            isDimmed = false,
-            cornerRadius = 9.dp,
-            splitGap = splitGap,
-        ),
-        contentAlignment = Alignment.Center,
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .flipTextSplitMask(splitGap),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = digits,
-                color = MaterialTheme.colorScheme.onSurface,
-                fontFamily = font.fontFamily(),
-                fontSize = fontSize,
-                fontWeight = font.fontWeight(),
-                maxLines = 1,
-                softWrap = false,
-                modifier = Modifier.offset(y = verticalOffset),
-            )
+            Button(
+                onClick = onSave,
+                modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+            ) { Text("저장") }
         }
     }
 }
@@ -963,34 +1003,46 @@ private fun SettingsCard(
     icon: ImageVector,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface,
-        ),
-        shape = RoundedCornerShape(22.dp),
-        border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.12f)),
-        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                Brush.verticalGradient(
+                    listOf(Color.White.copy(alpha = 0.16f), Color.White.copy(alpha = 0.085f)),
+                ),
+                RoundedCornerShape(22.dp),
+            )
+            .border(1.dp, Color.White.copy(alpha = 0.16f), RoundedCornerShape(22.dp)),
     ) {
-        Column(
-            modifier = Modifier.padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
+        CompositionLocalProvider(LocalContentColor provides Color.White) {
             Row(
+                modifier = Modifier.padding(15.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalArrangement = Arrangement.spacedBy(11.dp),
             ) {
-                Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Box(
+                    modifier = Modifier
+                        .size(34.dp)
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f), RoundedCornerShape(10.dp)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                }
                 Column {
                     Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     Text(
                         subtitle,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = Color.White.copy(alpha = 0.64f),
                     )
                 }
             }
-            content()
+            HorizontalDivider(thickness = 1.dp, color = Color.White.copy(alpha = 0.10f))
+            Column(
+                modifier = Modifier.padding(15.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+                content = content,
+            )
         }
     }
 }
@@ -1021,46 +1073,4 @@ private fun LabeledSwitch(
         }
         Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
-}
-
-@Composable
-private fun FontLicenseDialog(font: ClockFontChoice, onDismiss: () -> Unit) {
-    val context = LocalContext.current
-    val license = remember(font) {
-        font.licenseResource()?.let { resource ->
-            runCatching {
-                context.resources.openRawResource(resource).bufferedReader().use { it.readText() }
-            }.getOrNull()
-        } ?: "라이선스 원문을 불러올 수 없습니다."
-    }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("${font.displayName} 라이선스") },
-        text = {
-            LazyColumn(modifier = Modifier.height(420.dp)) {
-                item {
-                    Text(
-                        license,
-                        style = MaterialTheme.typography.bodySmall,
-                        textAlign = TextAlign.Start,
-                    )
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("닫기") } },
-    )
-}
-
-@RawRes
-private fun ClockFontChoice.licenseResource(): Int? = when (this) {
-    ClockFontChoice.SYSTEM_ROUNDED -> null
-    ClockFontChoice.PRETENDARD -> R.raw.pretendard_license
-    ClockFontChoice.KAKAO_BIG_SANS -> R.raw.kakao_big_sans_ofl
-    ClockFontChoice.NANUM_GOTHIC -> R.raw.nanum_gothic_ofl
-    ClockFontChoice.TENADA -> R.raw.tenada_license
-    ClockFontChoice.BLACK_HAN_SANS -> R.raw.black_han_sans_ofl
-    ClockFontChoice.DO_HYEON -> R.raw.do_hyeon_ofl
-    ClockFontChoice.PAPERLOGY_BOLD -> R.raw.paperlogy_ofl
-    ClockFontChoice.NEXON_LV1_GOTHIC -> R.raw.nexon_lv1_gothic_license
-    ClockFontChoice.POPPINS -> R.raw.poppins_ofl
 }

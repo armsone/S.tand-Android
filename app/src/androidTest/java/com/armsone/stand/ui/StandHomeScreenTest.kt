@@ -59,14 +59,14 @@ class StandHomeScreenTest {
             }
         }
 
-        listOf("플래시", "카메라", "마이크", "위치 정보").forEach { title ->
+        listOf("카메라와 플래시", "마이크", "위치 정보").forEach { title ->
             composeRule.onNodeWithText(title).assertIsDisplayed()
         }
         composeRule.onNodeWithText("사진·영상은 저장하거나 전송하지 않습니다.", substring = true)
             .assertIsDisplayed()
         composeRule.onNodeWithText("정확한 위치는 요청하지 않습니다.", substring = true)
             .assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("권한 확인하고 에스텐드 시작")
+        composeRule.onNodeWithContentDescription("권한 확인하고 시작")
             .performTouchInput { click() }
         composeRule.waitForIdle()
 

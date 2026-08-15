@@ -83,6 +83,42 @@ class RecordingSessionStoreTest {
     }
 
     @Test
+    fun sleepSessionInsightBuildsActivityDistributionAndBusiestRange() = withDirectory { directory ->
+        val start = instant("2026-08-10T00:00:00Z")
+        val first = clip(directory, "first.wav", start.plusSeconds(3_601), 12.0)
+        val second = clip(directory, "second.wav", start.plusSeconds(3_690), 18.0)
+        val movement = SleepStartleEvent(
+            id = UUID.randomUUID(),
+            startedAt = start.plusSeconds(8 * 3_600L),
+            endedAt = start.plusSeconds(8 * 3_600L + 5),
+        )
+        val session = RecordingSessionGroup(
+            id = "insight",
+            startedAt = start,
+            endedAt = start.plusSeconds(12 * 3_600L),
+            clips = listOf(first, second),
+            isInferred = false,
+            startleEvents = listOf(movement),
+        )
+
+        val insight = session.insight
+
+        assertEquals(Duration.ofHours(12), insight.sessionDuration)
+        assertEquals(2, insight.soundCount)
+        assertEquals(30.0, insight.soundDurationSeconds, 0.0)
+        assertEquals(1, insight.movementCount)
+        assertEquals(SleepSessionInsight.BUCKET_COUNT, insight.activityBuckets.size)
+        assertEquals(2, insight.activityBuckets[1])
+        assertEquals(1, insight.activityBuckets[8])
+        assertEquals(1, insight.busiestBucketIndex)
+        assertEquals(0.25, insight.eventsPerHour, 0.000_001)
+        assertEquals(
+            start.plusSeconds(3_600) to start.plusSeconds(7_200),
+            insight.busiestRange(start),
+        )
+    }
+
+    @Test
     fun aNewStoreRecoversAnOpenSessionAtItsStartTime() = withDirectory { directory ->
         val start = instant("2026-08-10T01:00:00Z")
         val original = RecordingSessionStore(directory)
