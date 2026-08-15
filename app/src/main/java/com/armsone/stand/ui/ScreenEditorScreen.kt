@@ -885,11 +885,7 @@ private fun LiveEditorPanelContent(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     Icon(
-                        if (state.isCharging) {
-                            Icons.Default.BatteryChargingFull
-                        } else {
-                            Icons.Default.AutoAwesome
-                        },
+                        batteryIcon(state.batteryLevel, state.isCharging),
                         contentDescription = null,
                         tint = Color.White.copy(alpha = contentAlpha),
                         modifier = Modifier.size(15.dp),

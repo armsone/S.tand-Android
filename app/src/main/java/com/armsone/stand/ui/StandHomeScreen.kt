@@ -43,7 +43,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.automirrored.filled.RotateRight
 import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Cloud
@@ -980,11 +979,7 @@ private fun Header(state: StandUiState, contentAlpha: Float) {
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Icon(
-                imageVector = if (state.isCharging) {
-                    Icons.Default.BatteryChargingFull
-                } else {
-                    Icons.Default.AutoAwesome
-                },
+                imageVector = batteryIcon(state.batteryLevel, state.isCharging),
                 contentDescription = null,
                 tint = Color.White.copy(alpha = contentAlpha * 0.62f),
                 modifier = Modifier.size(16.dp),
@@ -1097,7 +1092,7 @@ private fun DashboardCanvas(
                     .panelTransform(layout.date, canvasWidth.value, canvasHeight.value),
             )
 
-            if (state.isDisplayDark) {
+            if (state.isDisplayDark || state.experienceMode == StandExperienceMode.MATE) {
                 Surface(
                     color = Color.Transparent,
                     shape = RoundedCornerShape(18.dp),
@@ -1116,11 +1111,7 @@ private fun DashboardCanvas(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
                         Icon(
-                            imageVector = if (state.isCharging) {
-                                Icons.Default.BatteryChargingFull
-                            } else {
-                                Icons.Default.AutoAwesome
-                            },
+                            imageVector = batteryIcon(state.batteryLevel, state.isCharging),
                             contentDescription = null,
                             tint = Color.White.copy(alpha = contentAlpha),
                             modifier = Modifier.size(15.dp),

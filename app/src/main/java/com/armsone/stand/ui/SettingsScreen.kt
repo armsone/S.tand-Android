@@ -186,6 +186,7 @@ fun SettingsScreen(
         containerColor = Color.Transparent,
         topBar = {
             CenterAlignedTopAppBar(
+                windowInsets = WindowInsets.safeDrawing,
                 title = {
                     Text(
                         "설정",
@@ -447,6 +448,34 @@ fun SettingsScreen(
                         subtitle = "필요한 기능만 선택해서 사용합니다",
                         icon = Icons.Default.Security,
                     ) {
+                        Text(
+                            "백그라운드 모드",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                            listOf(false to "꺼짐", true to "켜짐").forEachIndexed { index, option ->
+                                SegmentedButton(
+                                    selected = settings.backgroundModeEnabled == option.first,
+                                    onClick = {
+                                        onUpdate { it.copy(backgroundModeEnabled = option.first) }
+                                    },
+                                    shape = SegmentedButtonDefaults.itemShape(index, 2),
+                                ) {
+                                    Text(option.second)
+                                }
+                            }
+                        }
+                        Text(
+                            if (settings.backgroundModeEnabled) {
+                                "다른 앱을 보는 동안에도 매이트 모드 감지를 유지합니다."
+                            } else {
+                                "앱에서 나가면 감지와 재생을 모두 멈춥니다."
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
                         LabeledSwitch(
                             title = "플래시 사용",
                             detail = if (state.torchAvailable) {
@@ -618,6 +647,13 @@ fun SettingsScreen(
                         ) {
                             Icon(Icons.Default.Public, contentDescription = null)
                             Text(" 만든 사람 GitHub · github.com/armsone")
+                        }
+                        TextButton(
+                            onClick = { uriHandler.openUri("https://nasfinder.com") },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Icon(Icons.Default.Public, contentDescription = null)
+                            Text(" 공식 홈페이지 · nasfinder.com")
                         }
                         TextButton(
                             onClick = onOpenFontLicenses,
@@ -803,7 +839,7 @@ private fun ThemePalettePicker(
 ) {
     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
         val spacing = 10.dp
-        val columnCount = (maxWidth.value / 82f).toInt().coerceAtLeast(1).coerceAtMost(4)
+        val columnCount = StandDisplayTheme.entries.size
         val tileWidth = ((maxWidth.value - spacing.value * (columnCount - 1)) / columnCount).dp
         FlowRow(
             modifier = Modifier.fillMaxWidth(),

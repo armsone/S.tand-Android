@@ -7,12 +7,12 @@ import org.junit.Test
 
 class StandPoliciesTest {
     @Test
-    fun startleWaitsForTheFullMinuteAfterMateEntry() {
+    fun startleWaitsForTwoMinutesAfterMateEntry() {
         val enteredAt = 1_000L
 
         assertFalse(StartleActivationPolicy.canActivate(null, enteredAt + 120_000L))
-        assertFalse(StartleActivationPolicy.canActivate(enteredAt, enteredAt + 59_999L))
-        assertTrue(StartleActivationPolicy.canActivate(enteredAt, enteredAt + 60_000L))
+        assertFalse(StartleActivationPolicy.canActivate(enteredAt, enteredAt + 119_999L))
+        assertTrue(StartleActivationPolicy.canActivate(enteredAt, enteredAt + 120_000L))
     }
 
     @Test

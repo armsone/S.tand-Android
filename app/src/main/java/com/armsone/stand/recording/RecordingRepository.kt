@@ -1,10 +1,8 @@
 package com.armsone.stand.recording
 
 import android.content.Context
-import com.armsone.stand.R
 import java.io.EOFException
 import java.io.File
-import java.io.FileOutputStream
 import java.io.IOException
 import java.io.RandomAccessFile
 import java.nio.charset.StandardCharsets
@@ -12,7 +10,6 @@ import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.time.Instant
-import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -62,7 +59,7 @@ class RecordingRepository internal constructor(
         durationResolver = AndroidRecordingDurationResolver,
         completedRecordingFinalizer = AacM4aRecordingFinalizer(),
     ) {
-        installEmbeddedSamplesIfNeeded(context.applicationContext)
+        removeEmbeddedSamplesIfPresent()
         reload()
     }
 
@@ -230,70 +227,13 @@ class RecordingRepository internal constructor(
         }
     }
 
-    internal fun installEmbeddedSamplesIfNeeded(context: Context) = synchronized(ioLock) {
+    private fun removeEmbeddedSamplesIfPresent() = synchronized(ioLock) {
         val marker = File(directory, EMBEDDED_SAMPLE_MARKER_NAME)
-        if (marker.isFile || !ensureDirectoryLocked()) return@synchronized
-
-        val firstSampleAt = LocalDate.now(zoneId)
-            .minusDays(1)
-            .atTime(1, 0)
-            .atZone(zoneId)
-            .toInstant()
-        val samples = listOf(
-            EmbeddedSample(R.raw.sample_snore_5s, minuteOffset = 0),
-            EmbeddedSample(R.raw.sample_snore_10s, minuteOffset = 20),
-            EmbeddedSample(R.raw.sample_snore_15s, minuteOffset = 40),
-        )
-
-        val installed = samples.all { sample ->
-            val createdAt = firstSampleAt.plusSeconds(sample.minuteOffset * 60L)
-            val destination = File(
-                directory,
-                RecordingFileNames.create(
-                    instant = createdAt,
-                    zoneId = zoneId,
-                    nonce = EMBEDDED_SAMPLE_NONCE,
-                    mediaFormat = RecordingMediaFormat.M4A,
-                ),
-            )
-            if (destination.isFile && durationResolver.durationSeconds(destination) != null) {
-                return@all true
-            }
-
-            val temporary = File(
-                directory,
-                ".${destination.name}.${UUID.randomUUID()}.tmp.${destination.extension}",
-            )
-            try {
-                context.resources.openRawResource(sample.rawResource).use { input ->
-                    FileOutputStream(temporary).use { output ->
-                        input.copyTo(output)
-                        output.fd.sync()
-                    }
-                }
-                if (durationResolver.durationSeconds(temporary) == null) {
-                    throw IOException("내장 M4A 샘플이 손상되었습니다.")
-                }
-                moveReplacing(temporary, destination)
-                destination.setLastModified(createdAt.toEpochMilli())
-                true
-            } catch (_: Exception) {
-                temporary.delete()
-                false
-            }
-        }
-
-        if (installed) {
-            val temporaryMarker = File(directory, ".${marker.name}.${UUID.randomUUID()}.tmp")
-            try {
-                FileOutputStream(temporaryMarker).use { output ->
-                    output.write(byteArrayOf())
-                    output.fd.sync()
-                }
-                moveReplacing(temporaryMarker, marker)
-            } catch (_: Exception) {
-                temporaryMarker.delete()
-            }
+        directory.listFiles()
+            ?.filter { file -> file.name.contains(EMBEDDED_SAMPLE_NONCE, ignoreCase = true) }
+            ?.forEach(File::delete)
+        if (marker.exists()) {
+            marker.delete()
         }
     }
 
@@ -320,11 +260,6 @@ class RecordingRepository internal constructor(
         private const val EMBEDDED_SAMPLE_MARKER_NAME = ".embedded-snore-samples-v1"
         private const val EMBEDDED_SAMPLE_NONCE = "embedded-snore"
     }
-
-    private data class EmbeddedSample(
-        val rawResource: Int,
-        val minuteOffset: Int,
-    )
 }
 
 internal object RecordingTimestampPolicy {

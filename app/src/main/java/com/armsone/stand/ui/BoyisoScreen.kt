@@ -82,6 +82,7 @@ fun BoyisoScreen(
     onBack: () -> Unit,
 ) {
     var validationMessage by remember { mutableStateOf<String?>(null) }
+    var confirmsLeavingRoom by remember { mutableStateOf(false) }
     var nameEditorOpen by remember { mutableStateOf(false) }
     var nameDraft by remember(state.configuration.deviceName) {
         mutableStateOf(state.configuration.deviceName)
@@ -322,7 +323,7 @@ fun BoyisoScreen(
             }
             if (state.configuration.hasRoom) {
                 OutlinedButton(
-                    onClick = onLeaveRoom,
+                    onClick = { confirmsLeavingRoom = true },
                     modifier = Modifier.fillMaxWidth().height(64.dp),
                 ) {
                     Text("공간에서 나오기", style = MaterialTheme.typography.titleMedium)
@@ -330,6 +331,23 @@ fun BoyisoScreen(
             }
             Spacer(Modifier.height(20.dp))
         }
+    }
+
+    if (confirmsLeavingRoom) {
+        AlertDialog(
+            onDismissRequest = { confirmsLeavingRoom = false },
+            title = { Text("공간에서 나올까요?") },
+            text = { Text("같은 공간의 연결이 끊어집니다. 실수로 누른 경우 취소해 주세요.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmsLeavingRoom = false
+                    onLeaveRoom()
+                }) { Text("나오기") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmsLeavingRoom = false }) { Text("취소") }
+            },
+        )
     }
 }
 

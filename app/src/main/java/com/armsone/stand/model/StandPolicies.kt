@@ -110,7 +110,7 @@ object SleepCareMonitoringPolicy {
 }
 
 object StartleActivationPolicy {
-    const val DELAY_MILLIS = 60_000L
+    const val DELAY_MILLIS = 120_000L
 
     fun canActivate(
         mateModeEnteredAtMillis: Long?,

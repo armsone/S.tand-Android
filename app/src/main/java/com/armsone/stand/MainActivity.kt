@@ -117,6 +117,9 @@ class MainActivity : ComponentActivity() {
         syncViewModelPermissions()
         if (completedRequest == PermissionRequest.CAMERA) {
             standViewModel.onCameraPermissionResult(granted)
+            if (granted && startSessionAfterPermissionSequence) {
+                standViewModel.setCameraAmbientSensingEnabled(true)
+            }
         }
 
         if (startSessionAfterPermissionSequence) {

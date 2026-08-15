@@ -123,6 +123,7 @@ class SettingsRepository(context: Context) {
             "cameraAmbientSensingEnabled",
             false,
         ),
+        backgroundModeEnabled = booleanValue("backgroundModeEnabled", false),
         soundSensingEnabled = booleanValue("soundSensingEnabled", true),
         weatherLocationEnabled = booleanValue("weatherLocationEnabled", true),
             internetRadio = radioSnapshot.selected,
@@ -207,6 +208,7 @@ class SettingsRepository(context: Context) {
             putString(MODE_PREFERENCE_KEY, value.modePreference.name)
             putBoolean("ambientSensingEnabled", value.ambientSensingEnabled)
             putBoolean("cameraAmbientSensingEnabled", value.cameraAmbientSensingEnabled)
+            putBoolean("backgroundModeEnabled", value.backgroundModeEnabled)
             putBoolean("soundSensingEnabled", value.soundSensingEnabled)
             putBoolean("weatherLocationEnabled", value.weatherLocationEnabled)
             value.internetRadio?.let { radio ->

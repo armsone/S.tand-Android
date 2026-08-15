@@ -69,6 +69,7 @@ data class AppSettings(
     val modePreference: StandModePreference = StandModePreference.AUTOMATIC,
     val ambientSensingEnabled: Boolean = true,
     val cameraAmbientSensingEnabled: Boolean = false,
+    val backgroundModeEnabled: Boolean = false,
     val soundSensingEnabled: Boolean = true,
     val weatherLocationEnabled: Boolean = true,
     val internetRadio: InternetRadioConfiguration? = null,

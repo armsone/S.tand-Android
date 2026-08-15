@@ -304,7 +304,10 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun onAppBackground() {
-        foreground.set(false)
+        val keepRunning = mutableUiState.value.settings.backgroundModeEnabled &&
+            mutableUiState.value.isSessionActive
+        foreground.set(keepRunning)
+        if (keepRunning) return
         internetRadioPlayer.stop()
         lampJob?.cancel()
         brightnessTapJob?.cancel()
@@ -494,23 +497,11 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
         movementTriggeredLamp = false
         boyisoStartleLightingProfile = null
         brightnessAdjustmentActive = false
-        val start = state.lampIntensity.coerceIn(0f, 1f)
         val target = SimplifiedBrightnessModePolicy.tapLevel(state.environmentMode)
-        brightnessTapJob = viewModelScope.launch {
-            val steps = 40
-            for (step in 1..steps) {
-                val progress = step.toFloat() / steps
-                applyBrightnessPreview(
-                    level = start + (target - start) * progress,
-                    preference = StandModePreference.AUTOMATIC,
-                )
-                delay(TAP_BRIGHTNESS_FRAME_MILLIS)
-            }
-            persistBrightness(target, StandModePreference.AUTOMATIC)
-            brightnessTapJob = null
-            syncTorch()
-            syncAmbientCameraSampling()
-        }
+        applyBrightnessPreview(target, StandModePreference.AUTOMATIC)
+        persistBrightness(target, StandModePreference.AUTOMATIC)
+        syncTorch()
+        syncAmbientCameraSampling()
     }
 
     private fun applyBrightnessPreview(level: Float, preference: StandModePreference) {
@@ -1595,7 +1586,6 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
 
     companion object {
         private const val LAMP_FRAME_MILLIS = 50L
-        private const val TAP_BRIGHTNESS_FRAME_MILLIS = 50L
         private const val MANUAL_DIM_DURATION_MILLIS = 1_500f
         private const val AMBIENT_CAMERA_SAMPLE_INTERVAL_MILLIS = 45_000L
     }
