@@ -8,6 +8,7 @@ import com.armsone.stand.model.ClockHourMode
 import com.armsone.stand.model.CurrentExperienceMigration
 import com.armsone.stand.model.OrientationPreference
 import com.armsone.stand.model.InternetRadioConfiguration
+import com.armsone.stand.model.HomeMusicChannelSelection
 import com.armsone.stand.model.ScreenLayoutCodec
 import com.armsone.stand.model.StandScreenLayout
 import com.armsone.stand.model.StandDisplayTheme
@@ -129,6 +130,10 @@ class SettingsRepository(context: Context) {
             internetRadio = radioSnapshot.selected,
             internetRadioChannels = radioSnapshot.channels,
             selectedInternetRadioId = radioSnapshot.selected?.id,
+            homeMusicChannels = listOfNotNull(
+                HomeMusicChannelSelection.decode(stringValue(HOME_MUSIC_CHANNEL_0_KEY)),
+                HomeMusicChannelSelection.decode(stringValue(HOME_MUSIC_CHANNEL_1_KEY)),
+            ),
         ).normalized()
     }
 
@@ -219,6 +224,8 @@ class SettingsRepository(context: Context) {
                 remove(RADIO_URL_KEY)
             }
             putString(SELECTED_RADIO_ID_KEY, value.selectedInternetRadioId)
+            putString(HOME_MUSIC_CHANNEL_0_KEY, value.homeMusicChannels.getOrNull(0)?.encoded())
+            putString(HOME_MUSIC_CHANNEL_1_KEY, value.homeMusicChannels.getOrNull(1)?.encoded())
             repeat(AppSettings.MAXIMUM_INTERNET_RADIO_CHANNEL_COUNT) { index ->
                 val channel = value.internetRadioChannels.getOrNull(index)
                 if (channel == null) {
@@ -253,6 +260,8 @@ class SettingsRepository(context: Context) {
         const val RADIO_NAME_PREFIX = "internetRadioName."
         const val RADIO_URL_PREFIX = "internetRadioUrl."
         const val SELECTED_RADIO_ID_KEY = "selectedInternetRadioId"
+        const val HOME_MUSIC_CHANNEL_0_KEY = "homeMusicChannel.0"
+        const val HOME_MUSIC_CHANNEL_1_KEY = "homeMusicChannel.1"
         const val LEGACY_RADIO_ID = "legacy-primary-radio"
         const val CURRENT_EXPERIENCE_MIGRATION_KEY = "currentExperienceDefaults.v1"
     }

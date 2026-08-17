@@ -104,6 +104,9 @@ import com.armsone.stand.BuildConfig
 import com.armsone.stand.model.EnvironmentDisplayMode
 import com.armsone.stand.model.HomeClockScalePolicy
 import com.armsone.stand.model.InternetRadioConfiguration
+import com.armsone.stand.model.ExternalMusicService
+import com.armsone.stand.model.HomeMusicChannelKind
+import com.armsone.stand.model.HomeMusicChannelSelection
 import com.armsone.stand.model.LampPhase
 import com.armsone.stand.model.OrientationPreference
 import com.armsone.stand.model.PanelTransform
@@ -115,7 +118,7 @@ import com.armsone.stand.model.StandExperienceMode
 import com.armsone.stand.model.SimplifiedBrightnessModePolicy
 import com.armsone.stand.model.WeatherPiece
 import com.armsone.stand.platform.InternetRadioState
-import com.armsone.stand.platform.RadioVolumePolicy
+import com.armsone.stand.platform.VolumeAdjustmentPolicy
 import com.armsone.stand.ui.components.ClockDateAndSeconds
 import com.armsone.stand.ui.components.ClockSeconds
 import com.armsone.stand.ui.components.FlipClock
@@ -141,7 +144,8 @@ fun StandHomeScreen(
     onBrightnessAdjustmentStarted: () -> Unit,
     onBrightnessLevelChanged: (Float) -> Unit,
     onBrightnessAdjustmentFinished: () -> Unit,
-    onInternetRadioVolumeChanged: (Float) -> Unit,
+    readSystemVolume: () -> Float,
+    onSystemVolumeChanged: (Float) -> Unit,
     onClockScaleChanged: (Float) -> Unit,
     onToggleTorch: () -> Unit,
     onCycleMode: () -> Unit,
@@ -156,6 +160,8 @@ fun StandHomeScreen(
     onSendBoyisoTokTok: () -> Unit,
     onToggleRadio: (String) -> Unit,
     onEditRadio: (String) -> Unit,
+    onOpenExternalMusic: (ExternalMusicService) -> Unit = {},
+    onEndExternalMusic: () -> Unit = {},
     modifier: Modifier = Modifier,
     catalogNow: LocalDateTime? = null,
 ) {
@@ -229,14 +235,15 @@ fun StandHomeScreen(
                 onBrightnessAdjustmentFinished()
                 adjustmentFeedback = null
             },
-            onInternetRadioVolumeChanged = { value ->
-                onInternetRadioVolumeChanged(value)
+            readSystemVolume = readSystemVolume,
+            onSystemVolumeChanged = { value ->
+                onSystemVolumeChanged(value)
                 adjustmentFeedback = HomeAdjustmentFeedback(
-                    title = "라디오 볼륨",
+                    title = "시스템 볼륨",
                     value = "${(value * 100f).roundToInt()}%",
                 )
             },
-            onRadioVolumeAdjustmentFinished = { adjustmentFeedback = null },
+            onSystemVolumeAdjustmentFinished = { adjustmentFeedback = null },
             onClockScaleChanged = { value ->
                 onClockScaleChanged(value)
                 adjustmentFeedback = HomeAdjustmentFeedback(
@@ -267,6 +274,8 @@ fun StandHomeScreen(
                     isExpanded = isExpanded,
                     onToggleRadio = onToggleRadio,
                     onEditRadio = onEditRadio,
+                    onOpenExternalMusic = onOpenExternalMusic,
+                    onEndExternalMusic = onEndExternalMusic,
                     onClockTap = onScreenTap,
                     onClockDoubleTap = {},
                     catalogNow = catalogNow,
@@ -603,7 +612,7 @@ private fun HomeAdjustmentFeedbackPanel(
             horizontalArrangement = Arrangement.spacedBy(9.dp),
         ) {
             Icon(
-                imageVector = if (feedback.title == "라디오 볼륨") {
+                imageVector = if (feedback.title == "시스템 볼륨") {
                     Icons.AutoMirrored.Filled.VolumeUp
                 } else {
                     Icons.Default.LightMode
@@ -638,8 +647,9 @@ private fun HomeGestureLayer(
     onBrightnessAdjustmentStarted: () -> Unit,
     onBrightnessLevelChanged: (Float) -> Unit,
     onBrightnessAdjustmentFinished: () -> Unit,
-    onInternetRadioVolumeChanged: (Float) -> Unit,
-    onRadioVolumeAdjustmentFinished: () -> Unit,
+    readSystemVolume: () -> Float,
+    onSystemVolumeChanged: (Float) -> Unit,
+    onSystemVolumeAdjustmentFinished: () -> Unit,
     onClockScaleChanged: (Float) -> Unit,
     modifier: Modifier = Modifier,
     content: @Composable BoxScope.() -> Unit,
@@ -654,11 +664,12 @@ private fun HomeGestureLayer(
     val latestOnBrightnessAdjustmentFinished = rememberUpdatedState(
         onBrightnessAdjustmentFinished,
     )
-    val latestOnInternetRadioVolumeChanged = rememberUpdatedState(
-        onInternetRadioVolumeChanged,
+    val latestReadSystemVolume = rememberUpdatedState(readSystemVolume)
+    val latestOnSystemVolumeChanged = rememberUpdatedState(
+        onSystemVolumeChanged,
     )
-    val latestOnRadioVolumeAdjustmentFinished = rememberUpdatedState(
-        onRadioVolumeAdjustmentFinished,
+    val latestOnSystemVolumeAdjustmentFinished = rememberUpdatedState(
+        onSystemVolumeAdjustmentFinished,
     )
     val latestOnClockScaleChanged = rememberUpdatedState(onClockScaleChanged)
     var layerHeightPx by remember { mutableStateOf(0f) }
@@ -845,8 +856,8 @@ private fun HomeGestureLayer(
                                 latestOnBrightnessAdjustmentStarted.value()
                                 HomeAdjustmentAxis.VERTICAL_BRIGHTNESS
                             } else {
-                                startingLevel = latestState.value.internetRadioVolume
-                                HomeAdjustmentAxis.HORIZONTAL_RADIO_VOLUME
+                                startingLevel = latestReadSystemVolume.value()
+                                HomeAdjustmentAxis.HORIZONTAL_SYSTEM_VOLUME
                             }
                         }
 
@@ -861,10 +872,10 @@ private fun HomeGestureLayer(
                                     ),
                                 )
                             }
-                            HomeAdjustmentAxis.HORIZONTAL_RADIO_VOLUME -> {
+                            HomeAdjustmentAxis.HORIZONTAL_SYSTEM_VOLUME -> {
                                 change.consume()
-                                latestOnInternetRadioVolumeChanged.value(
-                                    RadioVolumePolicy.level(
+                                latestOnSystemVolumeChanged.value(
+                                    VolumeAdjustmentPolicy.level(
                                         startingAt = startingLevel,
                                         horizontalTranslationPx = translation.x,
                                         viewportWidthPx = size.width.toFloat(),
@@ -890,8 +901,8 @@ private fun HomeGestureLayer(
                         if (!change.pressed) {
                             if (axis == HomeAdjustmentAxis.VERTICAL_BRIGHTNESS) {
                                 latestOnBrightnessAdjustmentFinished.value()
-                            } else if (axis == HomeAdjustmentAxis.HORIZONTAL_RADIO_VOLUME) {
-                                latestOnRadioVolumeAdjustmentFinished.value()
+                            } else if (axis == HomeAdjustmentAxis.HORIZONTAL_SYSTEM_VOLUME) {
+                                latestOnSystemVolumeAdjustmentFinished.value()
                             }
                             finished = true
                         }
@@ -899,8 +910,8 @@ private fun HomeGestureLayer(
 
                     if (!finished && axis == HomeAdjustmentAxis.VERTICAL_BRIGHTNESS) {
                         latestOnBrightnessAdjustmentFinished.value()
-                    } else if (!finished && axis == HomeAdjustmentAxis.HORIZONTAL_RADIO_VOLUME) {
-                        latestOnRadioVolumeAdjustmentFinished.value()
+                    } else if (!finished && axis == HomeAdjustmentAxis.HORIZONTAL_SYSTEM_VOLUME) {
+                        latestOnSystemVolumeAdjustmentFinished.value()
                     }
                 }
             },
@@ -909,7 +920,7 @@ private fun HomeGestureLayer(
 
 private enum class HomeAdjustmentAxis {
     VERTICAL_BRIGHTNESS,
-    HORIZONTAL_RADIO_VOLUME,
+    HORIZONTAL_SYSTEM_VOLUME,
     CLOCK_SCALE,
 }
 
@@ -1002,6 +1013,8 @@ private fun DashboardCanvas(
     isExpanded: Boolean,
     onToggleRadio: (String) -> Unit,
     onEditRadio: (String) -> Unit,
+    onOpenExternalMusic: (ExternalMusicService) -> Unit,
+    onEndExternalMusic: () -> Unit,
     onClockTap: () -> Unit,
     onClockDoubleTap: () -> Unit,
     catalogNow: LocalDateTime?,
@@ -1136,33 +1149,163 @@ private fun DashboardCanvas(
                 canvasHeightDp = canvasHeight.value,
             )
 
-            val radioConfigurations = state.settings.internetRadioChannels.take(2)
-            if (radioConfigurations.size == 2 && layout.radiosGrouped) {
-                GroupedRadioPanel(
+            val musicChannels = state.settings.homeMusicChannels.take(2)
+            if (musicChannels.size == 2 && layout.radiosGrouped) {
+                GroupedMusicPanel(
                     state = state,
-                    configurations = radioConfigurations,
+                    selections = musicChannels,
                     contentAlpha = contentAlpha,
-                    onClick = onToggleRadio,
-                    onLongClick = onEditRadio,
+                    onToggleRadio = onToggleRadio,
+                    onEditRadio = onEditRadio,
+                    onOpenExternalMusic = onOpenExternalMusic,
+                    onEndExternalMusic = onEndExternalMusic,
                     modifier = Modifier
                         .align(Alignment.Center)
                         .panelTransform(layout.radio, canvasWidth.value, canvasHeight.value),
                 )
             } else {
-                radioConfigurations.forEachIndexed { index, configuration ->
+                musicChannels.forEachIndexed { index, selection ->
                     val transform = if (index == 0) layout.radio else layout.secondaryRadio
-                    RadioPanel(
+                    MusicPanel(
                         state = state,
-                        configuration = configuration,
+                        selection = selection,
                         contentAlpha = contentAlpha,
-                        onClick = { onToggleRadio(configuration.id) },
-                        onLongClick = { onEditRadio(configuration.id) },
+                        onToggleRadio = onToggleRadio,
+                        onEditRadio = onEditRadio,
+                        onOpenExternalMusic = onOpenExternalMusic,
+                        onEndExternalMusic = onEndExternalMusic,
                         modifier = Modifier
                             .align(Alignment.Center)
                             .panelTransform(transform, canvasWidth.value, canvasHeight.value),
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+internal fun MusicPanel(
+    state: StandUiState,
+    selection: HomeMusicChannelSelection,
+    contentAlpha: Float,
+    onToggleRadio: (String) -> Unit,
+    onEditRadio: (String) -> Unit,
+    onOpenExternalMusic: (ExternalMusicService) -> Unit,
+    onEndExternalMusic: () -> Unit,
+    drawsSurface: Boolean = true,
+    modifier: Modifier = Modifier,
+) {
+    if (selection.kind == HomeMusicChannelKind.INTERNET_RADIO) {
+        val radio = state.settings.internetRadioChannels.firstOrNull { it.id == selection.radioID }
+        RadioPanel(
+            state = state,
+            configuration = radio,
+            contentAlpha = contentAlpha,
+            onClick = { radio?.id?.let(onToggleRadio) },
+            onLongClick = { radio?.id?.let(onEditRadio) },
+            drawsSurface = drawsSurface,
+            modifier = modifier,
+        )
+        return
+    }
+
+    val service = if (selection.kind == HomeMusicChannelKind.SPOTIFY) {
+        ExternalMusicService.SPOTIFY
+    } else {
+        ExternalMusicService.YOUTUBE_MUSIC
+    }
+    val active = state.externalMusicService == service
+    val detail = if (active) "음악 듣기 모드" else "대기 중"
+    Surface(
+        modifier = modifier
+            .width(144.dp)
+            .height(60.dp)
+            .combinedClickable(
+                onClick = { onOpenExternalMusic(service) },
+                onLongClick = if (active) onEndExternalMusic else null,
+            )
+            .semantics(mergeDescendants = true) {
+                contentDescription = "${service.displayName}, $detail"
+                stateDescription = detail
+                role = Role.Button
+            }
+            .then(
+                if (drawsSurface) Modifier.standPanelSurface(
+                    isDimmed = contentAlpha <= 0.2f,
+                    cornerRadius = 13.dp,
+                    splitGap = 2.dp,
+                ) else Modifier,
+            ),
+        color = Color.Transparent,
+        shape = RoundedCornerShape(13.dp),
+        shadowElevation = 0.dp,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 11.dp, vertical = 9.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Icon(
+                imageVector = if (service == ExternalMusicService.SPOTIFY) {
+                    Icons.Default.GraphicEq
+                } else {
+                    Icons.Default.PlayArrow
+                },
+                contentDescription = null,
+                tint = Color.White.copy(alpha = contentAlpha),
+                modifier = Modifier.size(24.dp),
+            )
+            Column(Modifier.weight(1f)) {
+                Text(
+                    service.displayName,
+                    color = Color.White.copy(alpha = contentAlpha),
+                    style = MaterialTheme.typography.labelLarge,
+                    maxLines = 1,
+                )
+                Text(
+                    detail,
+                    color = Color.White.copy(alpha = contentAlpha * 0.52f),
+                    style = MaterialTheme.typography.labelSmall,
+                    maxLines = 1,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+internal fun GroupedMusicPanel(
+    state: StandUiState,
+    selections: List<HomeMusicChannelSelection>,
+    contentAlpha: Float,
+    onToggleRadio: (String) -> Unit,
+    onEditRadio: (String) -> Unit,
+    onOpenExternalMusic: (ExternalMusicService) -> Unit,
+    onEndExternalMusic: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .width(288.dp)
+            .height(60.dp)
+            .standPanelSurface(
+                isDimmed = contentAlpha <= 0.2f,
+                cornerRadius = 13.dp,
+                splitGap = 2.dp,
+            ),
+    ) {
+        selections.take(2).forEach { selection ->
+            MusicPanel(
+                state = state,
+                selection = selection,
+                contentAlpha = contentAlpha,
+                onToggleRadio = onToggleRadio,
+                onEditRadio = onEditRadio,
+                onOpenExternalMusic = onOpenExternalMusic,
+                onEndExternalMusic = onEndExternalMusic,
+                drawsSurface = false,
+            )
         }
     }
 }

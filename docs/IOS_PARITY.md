@@ -257,3 +257,11 @@ UI 검증은 보류했다.
 - GitHub `android-v32` Release를 공개하고, `SM-F968N`과 Android 10 `SM-T500`의 versionCode 30
   설치본에서 업데이트 안내→다운로드→서명 검사→설치를 진행해 versionCode 32와 기존 녹음 파일
   유지를 확인했다. 최초 사용자는 Android의 `이 출처 허용`을 한 번 켜야 한다.
+# 2026-08-17 iOS 작업 트리 델타
+
+| 항목 | Android 대응 | 검증 |
+|---|---|---|
+| 홈 좌우 드래그 시스템 볼륨 | `AudioManager.STREAM_MUSIC` 현재값을 기준으로 조절하고 HUD를 `시스템 볼륨`으로 표시 | 관련 JVM 테스트·컴파일 통과 |
+| 공통 음량 정책 명칭 | `RadioVolumePolicy`를 `VolumeAdjustmentPolicy`로 변경하고 라디오 플레이어에도 공유 | 관련 JVM 테스트 통과 |
+| 편집 패널 자유 배치 | 저장 좌표를 캔버스·안전영역으로 제한하지 않도록 변경 | 관련 JVM 테스트 통과 |
+| UI 카탈로그 고정 날짜 | Android는 카탈로그 인자를 전달할 때만 고정 날짜를 사용하므로 기존부터 일치 | 소스 역대조 |

@@ -126,7 +126,7 @@ class ScreenLayoutTest {
     }
 
     @Test
-    fun panelBoundaryClampKeepsTheWholePanelInsideInsets() {
+    fun panelEditingAllowsMovingBeyondTheCanvasInsets() {
         val center = PanelEditingPolicy.clampedCenter(
             proposed = FloatOffset(x = 400f, y = 800f),
             panelSize = FloatSize(width = 100f, height = 80f),
@@ -134,7 +134,7 @@ class ScreenLayoutTest {
             insets = FloatInsets(top = 100f, left = 20f, bottom = 120f, right = 20f),
         )
 
-        assertEquals(FloatOffset(x = 250f, y = 540f), center)
+        assertEquals(FloatOffset(x = 400f, y = 800f), center)
     }
 
     @Test

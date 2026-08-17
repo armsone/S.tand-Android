@@ -53,6 +53,7 @@ import com.armsone.stand.model.RadioShareImportPolicy
 import com.armsone.stand.model.ScreenLayoutCodec
 import com.armsone.stand.model.ClockFontChoice
 import com.armsone.stand.model.ClockHourMode
+import com.armsone.stand.model.ExternalMusicService
 import com.armsone.stand.boyiso.BoyisoManager
 import com.armsone.stand.boyiso.BoyisoQrCode
 import com.armsone.stand.boyiso.BoyisoRole
@@ -85,6 +86,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.delay
 import kotlin.random.Random
+import kotlin.math.roundToInt
 
 class MainActivity : ComponentActivity() {
     private val standViewModel: StandViewModel by viewModels()
@@ -213,7 +215,7 @@ class MainActivity : ComponentActivity() {
         )
 
         val state = standViewModel.uiState.value
-        applySessionWindowState(state.isSessionActive)
+        applySessionWindowState(state.isSessionActive || state.isExternalMusicModeActive)
         applyOrientationPreference(state.settings.orientationPreference)
     }
 
@@ -445,8 +447,8 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        LaunchedEffect(state.isSessionActive) {
-            applySessionWindowState(state.isSessionActive)
+        LaunchedEffect(state.isSessionActive, state.isExternalMusicModeActive) {
+            applySessionWindowState(state.isSessionActive || state.isExternalMusicModeActive)
         }
         LaunchedEffect(state.settings.orientationPreference) {
             applyOrientationPreference(state.settings.orientationPreference)
@@ -469,7 +471,8 @@ class MainActivity : ComponentActivity() {
                     onBrightnessAdjustmentStarted = standViewModel::beginBrightnessAdjustment,
                     onBrightnessLevelChanged = standViewModel::updateBrightnessLevel,
                     onBrightnessAdjustmentFinished = standViewModel::endBrightnessAdjustment,
-                    onInternetRadioVolumeChanged = standViewModel::updateInternetRadioVolume,
+                    readSystemVolume = ::currentSystemMusicVolume,
+                    onSystemVolumeChanged = ::updateSystemMusicVolume,
                     onClockScaleChanged = standViewModel::updateClockScale,
                     onToggleTorch = standViewModel::toggleTorchEnabled,
                     onCycleMode = standViewModel::cycleModePreference,
@@ -502,6 +505,8 @@ class MainActivity : ComponentActivity() {
                     boyisoCanSendTokTok = boyisoState.devices.isNotEmpty(),
                     onSendBoyisoTokTok = boyisoManager::sendTokTok,
                     onToggleRadio = standViewModel::toggleInternetRadio,
+                    onOpenExternalMusic = ::openExternalMusic,
+                    onEndExternalMusic = standViewModel::endExternalMusicMode,
                     onEditRadio = { channelID ->
                         radioEditorChannelID = channelID
                         secondaryReturnDestination = AppDestination.HOME
@@ -515,6 +520,9 @@ class MainActivity : ComponentActivity() {
                     onModePreferenceSelected = standViewModel::setModePreference,
                     onRestoreRecommended = standViewModel::restoreRecommendedSettings,
                     onToggleInternetRadio = standViewModel::toggleInternetRadio,
+                    onOpenExternalMusic = ::openExternalMusic,
+                    onEndExternalMusic = standViewModel::endExternalMusicMode,
+                    onAssignHomeMusicChannel = standViewModel::assignHomeMusicChannel,
                     onSaveInternetRadio = standViewModel::saveInternetRadioChannel,
                     onDeleteInternetRadio = standViewModel::deleteInternetRadioChannel,
                     onManageInternetRadios = {
@@ -940,6 +948,29 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun openExternalMusic(service: ExternalMusicService) {
+        val launchIntent = packageManager.getLaunchIntentForPackage(service.packageName)
+        if (launchIntent != null) {
+            standViewModel.beginExternalMusicMode(service)
+            showToast("로그인·재생 후 S.tand로 돌아오세요.")
+            startActivity(launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            return
+        }
+
+        standViewModel.markExternalMusicUnavailable(service)
+        showToast("${service.displayName} 앱을 먼저 설치해 주세요.")
+        val marketIntent = Intent(
+            Intent.ACTION_VIEW,
+            "market://details?id=${service.packageName}".toUri(),
+        )
+        val webIntent = Intent(
+            Intent.ACTION_VIEW,
+            "https://play.google.com/store/apps/details?id=${service.packageName}".toUri(),
+        )
+        runCatching { startActivity(marketIntent) }
+            .recoverCatching { startActivity(webIntent) }
+    }
+
     private fun applyOrientationPreference(preference: OrientationPreference) {
         val orientation = when (preference) {
             OrientationPreference.AUTOMATIC -> ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
@@ -1218,6 +1249,22 @@ class MainActivity : ComponentActivity() {
     private fun leaveBoyisoRoom() {
         boyisoManager.leaveRoom()
         standViewModel.setBoyisoSpeakerActive(false)
+    }
+
+    private fun currentSystemMusicVolume(): Float {
+        val audioManager = getSystemService(AudioManager::class.java)
+        val maximum = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+        return audioManager.getStreamVolume(AudioManager.STREAM_MUSIC).toFloat() / maximum
+    }
+
+    private fun updateSystemMusicVolume(level: Float) {
+        val audioManager = getSystemService(AudioManager::class.java)
+        val maximum = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+        audioManager.setStreamVolume(
+            AudioManager.STREAM_MUSIC,
+            (level.coerceIn(0f, 1f) * maximum).roundToInt(),
+            0,
+        )
     }
 
     private enum class AppDestination {

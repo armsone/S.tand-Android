@@ -13,7 +13,7 @@ class SettingsInformationArchitectureTest {
                 SettingsSectionKind.BOYISO,
                 SettingsSectionKind.SLEEP_SOUNDS,
                 SettingsSectionKind.INFORMATION,
-                SettingsSectionKind.INTERNET_RADIO,
+                SettingsSectionKind.MUSIC,
             ),
             SettingsInformationArchitecture.CardOrder,
         )

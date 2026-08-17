@@ -170,7 +170,7 @@ fun ScreenEditorScreen(
     val latestLayout = rememberUpdatedState(layout)
     val latestClockFont = rememberUpdatedState(clockFont)
     val latestClockHourMode = rememberUpdatedState(clockHourMode)
-    val validPanels = panelKeys(layout, state.settings.internetRadioChannels.size)
+    val validPanels = panelKeys(layout, state.settings.homeMusicChannels.size)
 
     LaunchedEffect(validPanels, selectedPanel) {
         if (selectedPanel !in validPanels) selectedPanel = validPanels.first()
@@ -413,14 +413,14 @@ private fun PanelCanvas(
                     scaleY = state.settings.clockScale
                 },
         ) {
-            val radioConfigurations = state.settings.internetRadioChannels.take(2)
+            val musicChannels = state.settings.homeMusicChannels.take(2)
             val fixedPanels = buildList {
                 add(EditorPanelKey.Clock)
                 add(EditorPanelKey.Seconds)
                 add(EditorPanelKey.Date)
                 add(EditorPanelKey.Battery)
                 add(EditorPanelKey.Radio)
-                if (radioConfigurations.isNotEmpty() && !layout.radiosGrouped) {
+                if (musicChannels.isNotEmpty() && !layout.radiosGrouped) {
                     add(EditorPanelKey.SecondaryRadio)
                 }
             }
@@ -435,23 +435,23 @@ private fun PanelCanvas(
                     onClick = when {
                         key == EditorPanelKey.Clock -> onClockClick
                         key == EditorPanelKey.Radio &&
-                            radioConfigurations.size == 2 &&
+                            musicChannels.size == 2 &&
                             layout.radiosGrouped -> {
                             {
                                 onLayoutChange(RadioGroupPolicy.split(layout))
                                 onSelectedPanelChange(EditorPanelKey.Radio)
                             }
                         }
-                        key == EditorPanelKey.Radio && radioConfigurations.isEmpty() -> onManageRadios
+                        key == EditorPanelKey.Radio && musicChannels.isEmpty() -> onManageRadios
                         key == EditorPanelKey.SecondaryRadio &&
-                            radioConfigurations.getOrNull(1) == null -> onManageRadios
+                            musicChannels.getOrNull(1) == null -> onManageRadios
                         else -> ({ onSelectedPanelChange(key) })
                     },
                     onGestureSelect = { onSelectedPanelChange(key) },
                     onDoubleClick = when {
                         key == EditorPanelKey.Clock -> onClockDoubleClick
                         key == EditorPanelKey.Radio &&
-                            radioConfigurations.size == 2 &&
+                            musicChannels.size == 2 &&
                             layout.radiosGrouped -> {
                             {
                                 onLayoutChange(RadioGroupPolicy.split(layout))
@@ -464,7 +464,7 @@ private fun PanelCanvas(
                         onLayoutChange(layout.withPanelTransform(key, transform))
                     },
                     onTransformEnd = if (
-                        radioConfigurations.size == 2 &&
+                        musicChannels.size == 2 &&
                         !layout.radiosGrouped &&
                         (key == EditorPanelKey.Radio || key == EditorPanelKey.SecondaryRadio)
                     ) {
@@ -504,34 +504,48 @@ private fun PanelCanvas(
                     if (key == EditorPanelKey.Radio || key == EditorPanelKey.SecondaryRadio) {
                         LiveEditorSelection(selected = selectedPanel == key) {
                             if (key == EditorPanelKey.Radio &&
-                                radioConfigurations.size == 2 &&
+                                musicChannels.size == 2 &&
                                 layout.radiosGrouped
                             ) {
-                                GroupedRadioPanel(
+                                GroupedMusicPanel(
                                     state = state,
-                                    configurations = radioConfigurations,
+                                    selections = musicChannels,
                                     contentAlpha = contentAlpha,
-                                    onClick = {
+                                    onToggleRadio = {
                                         onLayoutChange(RadioGroupPolicy.split(layout))
                                         onSelectedPanelChange(EditorPanelKey.Radio)
                                     },
+                                    onEditRadio = {},
+                                    onOpenExternalMusic = {
+                                        onLayoutChange(RadioGroupPolicy.split(layout))
+                                        onSelectedPanelChange(EditorPanelKey.Radio)
+                                    },
+                                    onEndExternalMusic = {},
                                 )
                             } else {
-                                val configuration = if (key == EditorPanelKey.SecondaryRadio) {
-                                    radioConfigurations.getOrNull(1)
+                                val selection = if (key == EditorPanelKey.SecondaryRadio) {
+                                    musicChannels.getOrNull(1)
                                 } else {
-                                    radioConfigurations.firstOrNull()
+                                    musicChannels.firstOrNull()
                                 }
-                                RadioPanel(
-                                    state = state,
-                                    configuration = configuration,
-                                    contentAlpha = contentAlpha,
-                                    onClick = if (configuration == null) {
-                                        onManageRadios
-                                    } else {
-                                        { onSelectedPanelChange(key) }
-                                    },
-                                )
+                                if (selection == null) {
+                                    RadioPanel(
+                                        state = state,
+                                        configuration = null,
+                                        contentAlpha = contentAlpha,
+                                        onClick = onManageRadios,
+                                    )
+                                } else {
+                                    MusicPanel(
+                                        state = state,
+                                        selection = selection,
+                                        contentAlpha = contentAlpha,
+                                        onToggleRadio = { onSelectedPanelChange(key) },
+                                        onEditRadio = {},
+                                        onOpenExternalMusic = { onSelectedPanelChange(key) },
+                                        onEndExternalMusic = {},
+                                    )
+                                }
                             }
                         }
                     } else {

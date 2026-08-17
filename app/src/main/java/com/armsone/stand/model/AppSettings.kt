@@ -75,6 +75,10 @@ data class AppSettings(
     val internetRadio: InternetRadioConfiguration? = null,
     val internetRadioChannels: List<InternetRadioConfiguration> = emptyList(),
     val selectedInternetRadioId: String? = null,
+    val homeMusicChannels: List<HomeMusicChannelSelection> = listOf(
+        HomeMusicChannelSelection.Spotify,
+        HomeMusicChannelSelection.YouTubeMusic,
+    ),
 ) {
     fun normalized(): AppSettings {
         val normalizedChannels = buildList {
@@ -103,6 +107,10 @@ data class AppSettings(
             internetRadio = selected,
             internetRadioChannels = normalizedChannels,
             selectedInternetRadioId = selected?.id,
+            homeMusicChannels = HomeMusicChannelPolicy.normalized(
+                requested = homeMusicChannels,
+                radioChannels = normalizedChannels,
+            ),
         )
     }
 

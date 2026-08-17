@@ -19,6 +19,10 @@ import com.armsone.stand.model.FaceDownLightingPolicy
 import com.armsone.stand.model.LampPhase
 import com.armsone.stand.model.LampTorchLightingPolicy
 import com.armsone.stand.model.InternetRadioMutationPolicy
+import com.armsone.stand.model.ExternalMusicPlaybackState
+import com.armsone.stand.model.ExternalMusicService
+import com.armsone.stand.model.HomeMusicChannelPolicy
+import com.armsone.stand.model.HomeMusicChannelSelection
 import com.armsone.stand.model.OrientationPreference
 import com.armsone.stand.model.SimplifiedBrightnessModePolicy
 import com.armsone.stand.model.StandDisplayTheme
@@ -309,6 +313,8 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
         foreground.set(keepRunning)
         if (keepRunning) return
         internetRadioPlayer.stop()
+        endExternalMusicMode()
+        audioMonitor.stop()
         lampJob?.cancel()
         brightnessTapJob?.cancel()
         brightnessEndpointLockJob?.cancel()
@@ -566,6 +572,7 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
             InternetRadioState.Idle,
             is InternetRadioState.Failed,
             -> {
+                endExternalMusicMode()
                 selectInternetRadio(channelID)
                 internetRadioPlayer.play(channel)
             }
@@ -582,10 +589,60 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
                 if (activeID == channelID) {
                     internetRadioPlayer.stop()
                 } else {
+                    endExternalMusicMode()
                     selectInternetRadio(channelID)
                     internetRadioPlayer.play(channel)
                 }
             }
+        }
+    }
+
+    fun beginExternalMusicMode(service: ExternalMusicService) {
+        internetRadioPlayer.stop()
+        mutableUiState.update { current ->
+            current.copy(
+                externalMusicService = service,
+                externalMusicPlaybackState = ExternalMusicPlaybackState.APP_OPENED,
+                externalMusicMessage = "${service.displayName}에서 로그인하고 음악을 재생한 뒤 S.tand로 돌아오세요.",
+            )
+        }
+        audioMonitor.stop()
+        syncSleepCareMonitoring()
+    }
+
+    fun markExternalMusicUnavailable(service: ExternalMusicService) {
+        mutableUiState.update { current ->
+            current.copy(
+                externalMusicService = null,
+                externalMusicPlaybackState = ExternalMusicPlaybackState.UNAVAILABLE,
+                externalMusicMessage = "${service.displayName} 앱을 설치한 뒤 다시 시도해 주세요.",
+            )
+        }
+        syncSleepCareMonitoring()
+    }
+
+    fun endExternalMusicMode() {
+        if (mutableUiState.value.externalMusicService == null) return
+        mutableUiState.update { current ->
+            current.copy(
+                externalMusicService = null,
+                externalMusicPlaybackState = ExternalMusicPlaybackState.IDLE,
+                externalMusicMessage = null,
+            )
+        }
+        syncSleepCareMonitoring()
+    }
+
+    fun assignHomeMusicChannel(slot: Int, selection: HomeMusicChannelSelection) {
+        settingsRepository.update { current ->
+            current.copy(
+                homeMusicChannels = HomeMusicChannelPolicy.assigning(
+                    current = current.homeMusicChannels,
+                    slot = slot,
+                    selection = selection,
+                    radioChannels = current.internetRadioChannels,
+                ),
+            )
         }
     }
 
@@ -1432,6 +1489,7 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
                     internetRadioPlayer.state.value !is InternetRadioState.Loading &&
                     internetRadioPlayer.state.value !is InternetRadioState.Playing &&
                     internetRadioPlayer.state.value !is InternetRadioState.Reconnecting &&
+                    !state.isExternalMusicModeActive &&
                     !state.batteryProtectionActive &&
                     microphonePermissionGranted
                 if (shouldMonitor) audioMonitor.start() else audioMonitor.stop()

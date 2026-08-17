@@ -4,6 +4,8 @@ import com.armsone.stand.model.AppSettings
 import com.armsone.stand.model.EnvironmentDisplayMode
 import com.armsone.stand.model.LampPhase
 import com.armsone.stand.model.StandExperienceMode
+import com.armsone.stand.model.ExternalMusicPlaybackState
+import com.armsone.stand.model.ExternalMusicService
 import com.armsone.stand.platform.AmbientCameraState
 import com.armsone.stand.platform.InternetRadioState
 
@@ -49,7 +51,12 @@ data class StandUiState(
     val isFaceDown: Boolean = false,
     val internetRadioState: InternetRadioState = InternetRadioState.Idle,
     val internetRadioVolume: Float = 1f,
+    val externalMusicService: ExternalMusicService? = null,
+    val externalMusicPlaybackState: ExternalMusicPlaybackState = ExternalMusicPlaybackState.IDLE,
+    val externalMusicMessage: String? = null,
 ) {
+    val isExternalMusicModeActive: Boolean
+        get() = externalMusicService != null
     val isDisplayDark: Boolean
         get() = isSessionActive && lampPhase == LampPhase.OFF && !controlsVisible
 

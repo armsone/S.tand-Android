@@ -35,7 +35,7 @@ sealed interface InternetRadioState {
     ) : InternetRadioState
 }
 
-object RadioVolumePolicy {
+object VolumeAdjustmentPolicy {
     const val HORIZONTAL_DRAG_TRAVEL_RATIO = 0.5f
 
     fun clamped(level: Float): Float = level.coerceIn(0f, 1f)
@@ -128,7 +128,7 @@ class InternetRadioPlayer(context: Context) : Closeable {
     }
 
     fun updateVolume(level: Float) {
-        val normalized = RadioVolumePolicy.clamped(level)
+        val normalized = VolumeAdjustmentPolicy.clamped(level)
         mutableVolume.value = normalized
         mediaPlayer?.setVolume(normalized, normalized)
     }

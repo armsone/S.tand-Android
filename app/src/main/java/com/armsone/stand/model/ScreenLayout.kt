@@ -298,25 +298,7 @@ object PanelEditingPolicy {
         canvasSize: FloatSize,
         insets: FloatInsets = FloatInsets(),
     ): FloatOffset {
-        val canvas = canvasSize.normalized()
-        if (canvas.width <= 0f || canvas.height <= 0f) return proposed.normalized()
-
-        val panel = panelSize.normalized()
-        val safeInsets = insets.normalized()
-        val candidate = FloatOffset(
-            x = proposed.x.takeIf { it.isFinite() } ?: canvas.width / 2f,
-            y = proposed.y.takeIf { it.isFinite() } ?: canvas.height / 2f,
-        )
-        val halfWidth = panel.width / 2f
-        val halfHeight = panel.height / 2f
-        val minimumX = safeInsets.left + halfWidth
-        val maximumX = max(minimumX, canvas.width - safeInsets.right - halfWidth)
-        val minimumY = safeInsets.top + halfHeight
-        val maximumY = max(minimumY, canvas.height - safeInsets.bottom - halfHeight)
-        return FloatOffset(
-            x = candidate.x.coerceIn(minimumX, maximumX),
-            y = candidate.y.coerceIn(minimumY, maximumY),
-        )
+        return proposed.normalized()
     }
 
     fun clampedTransform(
@@ -326,40 +308,7 @@ object PanelEditingPolicy {
         insets: FloatInsets = FloatInsets(),
         screenScale: Float = 1f,
     ): PanelTransform {
-        val result = transform.normalized()
-        val panel = panelSize.normalized()
-        val canvas = canvasSize.normalized()
-        if (
-            canvas.width <= 0f ||
-            canvas.height <= 0f ||
-            panel.width <= 0f ||
-            panel.height <= 0f
-        ) {
-            return result
-        }
-
-        val safeScreenScale = screenScale.takeIf { it.isFinite() } ?: 1f
-        val groupScale = max(1f, safeScreenScale)
-        val renderedSize = FloatSize(
-            width = panel.width * result.scale * groupScale,
-            height = panel.height * result.scale * groupScale,
-        ).normalized()
-        val proposedCenter = FloatOffset(
-            x = (canvas.width / 2f + result.x * canvas.width * groupScale)
-                .finiteOr(canvas.width / 2f),
-            y = (canvas.height / 2f + result.y * canvas.height * groupScale)
-                .finiteOr(canvas.height / 2f),
-        )
-        val center = clampedCenter(
-            proposed = proposedCenter,
-            panelSize = renderedSize,
-            canvasSize = canvas,
-            insets = insets,
-        )
-        return result.copy(
-            x = ((center.x - canvas.width / 2f) / (canvas.width * groupScale)).finiteOrZero(),
-            y = ((center.y - canvas.height / 2f) / (canvas.height * groupScale)).finiteOrZero(),
-        )
+        return transform.normalized()
     }
 
     fun bounds(center: FloatOffset, size: FloatSize): FloatRect {

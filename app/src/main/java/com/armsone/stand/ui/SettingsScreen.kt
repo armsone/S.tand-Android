@@ -12,6 +12,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -43,6 +44,8 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PauseCircle
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Info
@@ -61,6 +64,8 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -110,6 +115,9 @@ import com.armsone.stand.R
 import com.armsone.stand.model.AppSettings
 import com.armsone.stand.model.ClockFontChoice
 import com.armsone.stand.model.ClockVisualPolicy
+import com.armsone.stand.model.ExternalMusicService
+import com.armsone.stand.model.HomeMusicChannelKind
+import com.armsone.stand.model.HomeMusicChannelSelection
 import com.armsone.stand.model.SettingsInformationArchitecture
 import com.armsone.stand.model.SettingsSectionKind
 import com.armsone.stand.model.StandDisplayTheme
@@ -122,6 +130,18 @@ import com.armsone.stand.ui.theme.fontFamily
 import com.armsone.stand.ui.theme.fontWeight
 import kotlin.math.roundToInt
 
+private fun musicSelectionTitle(
+    selection: HomeMusicChannelSelection,
+    settings: AppSettings,
+): String = when (selection.kind) {
+    HomeMusicChannelKind.SPOTIFY -> ExternalMusicService.SPOTIFY.displayName
+    HomeMusicChannelKind.YOUTUBE_MUSIC -> ExternalMusicService.YOUTUBE_MUSIC.displayName
+    HomeMusicChannelKind.INTERNET_RADIO -> settings.internetRadioChannels
+        .firstOrNull { it.id == selection.radioID }
+        ?.displayName
+        ?: "인터넷 라디오"
+}
+
 @Composable
 fun SettingsScreen(
     state: StandUiState,
@@ -129,6 +149,9 @@ fun SettingsScreen(
     onModePreferenceSelected: (StandModePreference) -> Unit,
     onRestoreRecommended: () -> Unit,
     onToggleInternetRadio: (String) -> Unit,
+    onOpenExternalMusic: (ExternalMusicService) -> Unit = {},
+    onEndExternalMusic: () -> Unit = {},
+    onAssignHomeMusicChannel: (Int, HomeMusicChannelSelection) -> Unit = { _, _ -> },
     onSaveInternetRadio: (String?, String, String) -> String?,
     onDeleteInternetRadio: (String) -> Unit,
     onManageInternetRadios: () -> Unit,
@@ -234,7 +257,7 @@ fun SettingsScreen(
                     count = SettingsInformationArchitecture.CardOrder.size,
                     key = { index -> SettingsInformationArchitecture.CardOrder[index].name },
                     span = { index ->
-                        if (SettingsInformationArchitecture.CardOrder[index] == SettingsSectionKind.INTERNET_RADIO) {
+                        if (SettingsInformationArchitecture.CardOrder[index] == SettingsSectionKind.MUSIC) {
                             GridItemSpan(maxLineSpan)
                         } else {
                             GridItemSpan(1)
@@ -242,15 +265,127 @@ fun SettingsScreen(
                     },
                 ) { index ->
                     when (val section = SettingsInformationArchitecture.CardOrder[index]) {
-                    SettingsSectionKind.INTERNET_RADIO -> SettingsCard(
-                        title = "인터넷 라디오",
-                        subtitle = if (settings.internetRadioChannels.isEmpty()) {
-                            "이 화면에서 채널을 추가하고 바로 재생합니다."
-                        } else {
-                            "${settings.internetRadioChannels.size}개 채널 · 선택과 재생을 한곳에서"
-                        },
-                        icon = Icons.Default.Radio,
+                    SettingsSectionKind.MUSIC -> SettingsCard(
+                        title = "음악",
+                        subtitle = state.externalMusicService?.let { "${it.displayName} 음악 듣기 모드" }
+                            ?: if (settings.internetRadioChannels.isEmpty()) {
+                                "Spotify와 YouTube Music을 한곳에서 엽니다"
+                            } else {
+                                "${settings.internetRadioChannels.size}개 채널 · 한곳에서 바로 전환"
+                            },
+                        icon = Icons.Default.MusicNote,
                     ) {
+                        Text(
+                            "홈 버튼 배치",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        val musicChoices = remember(settings.internetRadioChannels) {
+                            listOf(
+                                HomeMusicChannelSelection.Spotify,
+                                HomeMusicChannelSelection.YouTubeMusic,
+                            ) + settings.internetRadioChannels.map {
+                                HomeMusicChannelSelection.radio(it.id)
+                            }
+                        }
+                        settings.homeMusicChannels.take(2).forEachIndexed { slot, selection ->
+                            var menuExpanded by remember(slot) { mutableStateOf(false) }
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 48.dp)
+                                    .background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(13.dp))
+                                    .padding(horizontal = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    if (slot == 0) "첫 번째 버튼" else "두 번째 버튼",
+                                    modifier = Modifier.weight(1f),
+                                )
+                                Box {
+                                    TextButton(onClick = { menuExpanded = true }) {
+                                        Text(musicSelectionTitle(selection, settings))
+                                    }
+                                    DropdownMenu(
+                                        expanded = menuExpanded,
+                                        onDismissRequest = { menuExpanded = false },
+                                    ) {
+                                        musicChoices.forEach { choice ->
+                                            DropdownMenuItem(
+                                                text = { Text(musicSelectionTitle(choice, settings)) },
+                                                trailingIcon = if (choice == selection) {
+                                                    { Icon(Icons.Default.Check, contentDescription = "선택됨") }
+                                                } else null,
+                                                onClick = {
+                                                    onAssignHomeMusicChannel(slot, choice)
+                                                    menuExpanded = false
+                                                },
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        ExternalMusicService.entries.forEach { service ->
+                            val active = state.externalMusicService == service
+                            Surface(
+                                onClick = { onOpenExternalMusic(service) },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 58.dp),
+                                color = if (active) {
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                } else {
+                                    Color.White.copy(alpha = 0.06f)
+                                },
+                                shape = RoundedCornerShape(15.dp),
+                                border = BorderStroke(
+                                    1.dp,
+                                    if (active) MaterialTheme.colorScheme.primary.copy(alpha = 0.30f)
+                                    else Color.White.copy(alpha = 0.08f),
+                                ),
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                ) {
+                                    Icon(
+                                        if (service == ExternalMusicService.SPOTIFY) Icons.Default.MusicNote
+                                        else Icons.Default.PlayArrow,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(20.dp),
+                                    )
+                                    Column(Modifier.weight(1f)) {
+                                        Text(service.displayName, fontWeight = FontWeight.SemiBold)
+                                        Text(
+                                            if (active) "음악 듣기 모드 · 앱 다시 열기" else "로그인하고 음악 앱 열기",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = Color.White.copy(alpha = 0.54f),
+                                            maxLines = 1,
+                                        )
+                                    }
+                                    if (active) {
+                                        IconButton(onClick = onEndExternalMusic, modifier = Modifier.size(44.dp)) {
+                                            Icon(Icons.Default.Close, contentDescription = "음악 듣기 모드 끝내기", modifier = Modifier.size(16.dp))
+                                        }
+                                    } else {
+                                        Icon(
+                                            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                            contentDescription = "열기",
+                                            modifier = Modifier.size(18.dp),
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        state.externalMusicMessage?.let {
+                            Text(
+                                it,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                         settings.internetRadioChannels.forEach { channel ->
                             val active = when (val radioState = state.internetRadioState) {
                                 is InternetRadioState.Loading -> radioState.channelID == channel.id
@@ -397,7 +532,7 @@ fun SettingsScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Text(
-                            "목록의 첫 두 채널이 홈 패널에 순서대로 표시됩니다. 왼쪽 버튼으로 바로 듣고, 연결이 끊기면 자동 재연결합니다. 재생 중에는 소리 감지와 녹음을 잠시 멈춥니다.",
+                            "Spotify와 YouTube Music에서 로그인·재생한 뒤 S.tand로 돌아오면 음악 듣기 모드를 유지합니다. 이 모드와 인터넷 라디오 재생 중에는 소리 감지와 녹음을 잠시 멈춥니다.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )

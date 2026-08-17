@@ -1,7 +1,7 @@
 package com.armsone.stand.model
 
 enum class SettingsSectionKind {
-    INTERNET_RADIO,
+    MUSIC,
     SCREEN_AND_CLOCK,
     PERMISSIONS,
     SLEEP_SOUNDS,
@@ -16,6 +16,6 @@ object SettingsInformationArchitecture {
         SettingsSectionKind.BOYISO,
         SettingsSectionKind.SLEEP_SOUNDS,
         SettingsSectionKind.INFORMATION,
-        SettingsSectionKind.INTERNET_RADIO,
+        SettingsSectionKind.MUSIC,
     )
 }
