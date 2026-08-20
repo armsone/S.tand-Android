@@ -86,7 +86,7 @@ internal fun StandControlKind.presentation(
         )
 
         StandControlKind.RECORDINGS -> StandControlPresentation(
-            title = "잠소리 확인",
+            title = "잠소리",
             status = if (state.recordingCount == 0) "잠소리 없음" else "잠소리 ${state.recordingCount}개",
             icon = Icons.Default.Mic,
         )
@@ -98,7 +98,7 @@ internal fun StandControlKind.presentation(
         )
 
         StandControlKind.SETTINGS -> StandControlPresentation(
-            title = "설정 열기",
+            title = "설정",
             status = "화면·감지",
             icon = Icons.Default.Settings,
         )

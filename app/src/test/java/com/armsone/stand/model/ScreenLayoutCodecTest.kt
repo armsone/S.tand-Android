@@ -61,7 +61,7 @@ class ScreenLayoutCodecTest {
     fun unknownDuplicateAndMissingControlKindsAreNormalized() {
         val encoded = ScreenLayoutCodec.encode(StandScreenLayout.Portrait)
         val altered = encoded.replace(
-            oldValue = "controlOrder=recordings,settings,boyiso",
+            oldValue = "controlOrder=recordings,boyiso,settings",
             newValue =
                 "controlOrder=settings,futureControl,orientation,aiShot,settings,flashlight",
         )

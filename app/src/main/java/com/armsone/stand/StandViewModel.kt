@@ -11,6 +11,7 @@ import com.armsone.stand.audio.AudioMonitorState
 import com.armsone.stand.data.SettingsRepository
 import com.armsone.stand.model.AmbientLightPolicy
 import com.armsone.stand.model.AppSettings
+import com.armsone.stand.model.AppBrightnessSystemSyncPolicy
 import com.armsone.stand.model.BatteryProtectionPolicy
 import com.armsone.stand.model.BoyisoStartleLightingPolicy
 import com.armsone.stand.model.BoyisoStartleLightingProfile
@@ -296,6 +297,7 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
             didAutomaticallyStart = true
             startNightSession()
         } else if (mutableUiState.value.isSessionActive) {
+            syncSystemDisplayBrightness()
             syncDeviceSensorMonitoring()
             seedAmbientBrightnessFallback()
             refreshEnvironmentMode(immediate = true)
@@ -389,6 +391,7 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
             )
         }
         if (foreground.get()) {
+            syncSystemDisplayBrightness()
             syncDeviceSensorMonitoring()
             seedAmbientBrightnessFallback()
         }
@@ -516,6 +519,7 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
         val previousMode = mutableUiState.value.environmentMode
         mutableUiState.update { current ->
             current.copy(
+                displayBrightness = normalized,
                 lampIntensity = normalized,
                 lampPhase = if (normalized <= 0f) LampPhase.OFF else LampPhase.HOLDING,
                 environmentMode = mode,
@@ -674,7 +678,8 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
             currentSettings.internetRadioChannels.size >=
             AppSettings.MAXIMUM_INTERNET_RADIO_CHANNEL_COUNT
         ) {
-            return "라디오 채널은 최대 2개까지 저장할 수 있습니다."
+            return "라디오 채널은 최대 " +
+                "${AppSettings.MAXIMUM_INTERNET_RADIO_CHANNEL_COUNT}개까지 저장할 수 있습니다."
         }
         val savedConfiguration = existing?.let { configuration.copy(id = it.id) } ?: configuration
         if (
@@ -865,7 +870,10 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun onSystemDisplayBrightnessChanged() {
-        if (foreground.get() && seedAmbientBrightnessFallback()) {
+        if (!foreground.get()) return
+        val adoptedDisplayBrightness = syncSystemDisplayBrightness()
+        val seededAmbientFallback = seedAmbientBrightnessFallback()
+        if (adoptedDisplayBrightness || seededAmbientFallback) {
             refreshEnvironmentMode(immediate = false)
         }
     }
@@ -1089,6 +1097,47 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
         return true
     }
 
+    private fun syncSystemDisplayBrightness(): Boolean {
+        val state = mutableUiState.value
+        if (!AppBrightnessSystemSyncPolicy.shouldAdoptSystemBrightness(
+                isAdjustingBrightness = brightnessAdjustmentActive,
+                modePreference = state.settings.modePreference,
+                isFaceDown = state.isFaceDown,
+            )
+        ) {
+            return false
+        }
+        val systemBrightness = runCatching {
+            AndroidSystemSettings.System.getInt(
+                getApplication<Application>().contentResolver,
+                AndroidSystemSettings.System.SCREEN_BRIGHTNESS,
+                -1,
+            )
+        }.getOrDefault(-1)
+        val normalized = DisplayBrightnessPolicy.normalized(systemBrightness) ?: return false
+        if (normalized == state.displayBrightness) return false
+
+        if (state.isSessionActive) {
+            lampJob?.cancel()
+            movementTriggeredLamp = false
+            boyisoStartleLightingProfile = null
+            finishStartleEvent()
+        }
+        mutableUiState.update { current ->
+            current.copy(
+                displayBrightness = normalized,
+                lampIntensity = if (current.isSessionActive) normalized else current.lampIntensity,
+                lampPhase = if (current.isSessionActive) {
+                    if (normalized <= 0f) LampPhase.OFF else LampPhase.HOLDING
+                } else {
+                    current.lampPhase
+                },
+                experienceMode = modeExperience(current.environmentMode),
+            )
+        }
+        return true
+    }
+
     private fun syncAmbientCameraSampling() {
         ambientCameraSamplingJob?.cancel()
         ambientCameraSamplingJob = null
@@ -1192,31 +1241,24 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
         val state = mutableUiState.value
         val settings = state.settings
         val normalizedBrightness = if (settings.ambientSensingEnabled) {
-            state.normalizedAmbientLight
+            state.normalizedAmbientLight ?: state.displayBrightness
         } else {
-            null
+            state.displayBrightness
         }
         val usesCameraFallback = settings.modePreference == StandModePreference.AUTOMATIC &&
             settings.ambientSensingEnabled &&
             settings.cameraAmbientSensingEnabled &&
             !sensorMonitor.state.value.lightSensorAvailable
         val fallbackBrightness = if (usesCameraFallback) {
-            settings.lampIntensity
+            state.displayBrightness
         } else {
             normalizedBrightness
         }
-        val fallbackTarget = if (
-            settings.modePreference == StandModePreference.AUTOMATIC &&
-            fallbackBrightness == null
-        ) {
-            state.environmentMode
-        } else {
-            AmbientLightPolicy.targetMode(
-                preference = settings.modePreference,
-                normalizedBrightness = fallbackBrightness ?: 1f,
-                threshold = settings.brightnessModeThreshold,
-            )
-        }
+        val fallbackTarget = AmbientLightPolicy.targetMode(
+            preference = settings.modePreference,
+            normalizedBrightness = fallbackBrightness,
+            threshold = settings.brightnessModeThreshold,
+        )
         val target = if (usesCameraFallback) {
             AmbientCameraModePolicy.targetMode(
                 current = state.environmentMode,
@@ -1309,12 +1351,12 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
         }
         movementTriggeredLamp = triggeredByMovement
         boyisoStartleLightingProfile = if (triggeredByMovement) boyisoProfile else null
-        val restingIntensity = state.settings.lampIntensity
+        val restingIntensity = state.displayBrightness
         val maximumIntensity = if (triggeredByMovement) {
             boyisoProfile?.peakIntensity
-                ?: max(state.settings.lampIntensity, SimplifiedBrightnessModePolicy.OBJECT_TAP_LEVEL)
+                ?: max(state.displayBrightness, SimplifiedBrightnessModePolicy.OBJECT_TAP_LEVEL)
         } else {
-            state.settings.lampIntensity
+            state.displayBrightness
         }
         val initialIntensity = boyisoProfile?.startingIntensity ?: maximumIntensity
         mutableUiState.update {
@@ -1380,7 +1422,7 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
             if (mutableUiState.value.environmentMode != EnvironmentDisplayMode.MATE) return@launch
             val startedAt = SystemClock.elapsedRealtime()
             val durationMillis = max(100L, (state.settings.fadeDurationSeconds * 1_000).toLong())
-            val targetIntensity = if (triggeredByMovement) state.settings.lampIntensity else 0f
+            val targetIntensity = if (triggeredByMovement) state.displayBrightness else 0f
             while (true) {
                 val elapsed = SystemClock.elapsedRealtime() - startedAt
                 val progress = (elapsed.toFloat() / durationMillis).coerceIn(0f, 1f)
@@ -1578,7 +1620,7 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
             torchController.turnOff()
             return
         }
-        val visualMaximum = state.settings.lampIntensity.coerceAtLeast(0.01f)
+        val visualMaximum = state.displayBrightness.coerceAtLeast(0.01f)
         val fadeProgress = (state.lampIntensity / visualMaximum).coerceIn(0f, 1f)
         torchController.setLevel(maximumLevel * fadeProgress)
     }

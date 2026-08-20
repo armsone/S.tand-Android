@@ -22,20 +22,23 @@ class InternetRadioConfigurationTest {
         assertNull(InternetRadioReconnectPolicy.delaySeconds(5))
     }
 
-    @Test fun settingsKeepAtMostTwoChannelsAndPreserveSelection() {
+    @Test fun settingsKeepAtMostFourChannelsAndPreserveSelection() {
         val first = InternetRadioConfiguration("첫째", "https://one.example/live", "one")
         val second = InternetRadioConfiguration("둘째", "https://two.example/live", "two")
         val third = InternetRadioConfiguration("셋째", "https://three.example/live", "three")
+        val fourth = InternetRadioConfiguration("넷째", "https://four.example/live", "four")
+        val fifth = InternetRadioConfiguration("다섯째", "https://five.example/live", "five")
 
         val normalized = AppSettings(
             internetRadio = second,
-            internetRadioChannels = listOf(first, second, third),
+            internetRadioChannels = listOf(first, second, third, fourth, fifth),
             selectedInternetRadioId = "two",
         ).normalized()
 
-        assertEquals(listOf("one", "two"), normalized.internetRadioChannels.map { it.id })
+        assertEquals(listOf("one", "two", "three", "four"), normalized.internetRadioChannels.map { it.id })
         assertEquals("two", normalized.internetRadio?.id)
-        assertTrue(normalized.internetRadioChannels.size <= 2)
+        assertTrue(normalized.internetRadioChannels.size <= 4)
+        assertEquals(4, AppSettings.MAXIMUM_INTERNET_RADIO_CHANNEL_COUNT)
     }
 
     @Test fun radioMutationsOnlyStopPlaybackWhenTheActiveStreamChanges() {

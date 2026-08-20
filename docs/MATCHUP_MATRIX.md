@@ -4,6 +4,16 @@
 
 - iOS 기준: `../S.tand` clean `main` / `2335ec382883c769bf70113ce6a724014af4eaa9` / `1.0.0 (0.29.5)`
 - Android 기준: 현재 작업 트리 / `0.0.1` / versionCode 52
+
+## 2026-08-20 추가 노트
+
+iOS 기준이 `1c92b69` (`1.0.0 (0.32.5)`)로 이동하며 `home_portrait`/`home_landscape`의 라디오
+fixture 전제(2 radios, 이동식 캔버스 패널)가 바뀌었다. 최신 Android는 이동식 `radio`/
+`secondaryRadio` 캔버스 패널을 제거하고 로고 아래 고정 6카드 수평 스트립(`MusicChannelStrip`)을
+사용한다. 아래 인벤토리의 `home_*` fixture 설명과 신규 paired capture는 다음 캡처 라운드에서
+"4 radio slots, fixed music strip"으로 갱신해야 하며, 이번 소스 변경만으로는 표의 상태를
+`matched`로 올리지 않는다. 자세한 소스 매핑은 `MATCHUP_MUSIC_PARITY.md`와
+`docs/IOS_PARITY.md`의 2026-08-20 델타를 참조한다.
 - 공통 fixture: `ui_catalog_v2`, `ko-KR`, `Asia/Seoul`, dark, animations off, fontScale 1.0
 - 고정 시각: `2026-08-15T07:42:05+09:00`; state별 palette는 manifest의 `stateThemeOverrides`에 기록
 - 추가 profile: large text, phone portrait/landscape, tablet 600dp+ portrait/landscape

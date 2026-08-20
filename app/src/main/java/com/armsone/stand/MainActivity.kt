@@ -512,6 +512,11 @@ class MainActivity : ComponentActivity() {
                         secondaryReturnDestination = AppDestination.HOME
                         destination = AppDestination.RADIO
                     },
+                    onRegisterRadio = {
+                        radioEditorChannelID = null
+                        secondaryReturnDestination = AppDestination.HOME
+                        destination = AppDestination.RADIO
+                    },
                 )
 
                 AppDestination.SETTINGS -> SettingsScreen(

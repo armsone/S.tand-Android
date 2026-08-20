@@ -18,8 +18,9 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Public
-import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material3.Button
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
@@ -85,7 +86,7 @@ fun InternetRadioManagementScreen(
         ) {
             item {
                 Text(
-                    text = "목록의 첫 두 채널이 홈에 표시됩니다",
+                    text = "등록한 채널마다 홈 음악 스트립에 고정 카드가 배정됩니다",
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -130,13 +131,19 @@ fun InternetRadioManagementScreen(
                         },
                         trailingContent = {
                             Row {
-                                if (channels.size > 1) {
-                                    IconButton(
-                                        onClick = { onMove(channel.id, if (index == 0) 1 else 0) },
-                                    ) {
+                                if (index > 0) {
+                                    IconButton(onClick = { onMove(channel.id, index - 1) }) {
                                         Icon(
-                                            Icons.Default.SwapVert,
-                                            contentDescription = "${channel.displayName} 홈 순서 변경",
+                                            Icons.Default.KeyboardArrowUp,
+                                            contentDescription = "${channel.displayName} 위로 이동",
+                                        )
+                                    }
+                                }
+                                if (index < channels.size - 1) {
+                                    IconButton(onClick = { onMove(channel.id, index + 1) }) {
+                                        Icon(
+                                            Icons.Default.KeyboardArrowDown,
+                                            contentDescription = "${channel.displayName} 아래로 이동",
                                         )
                                     }
                                 }

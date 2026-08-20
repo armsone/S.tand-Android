@@ -116,7 +116,7 @@ data class AppSettings(
 
     companion object {
         const val DEFAULT_CLOCK_SCALE = 1.0059053f
-        const val MAXIMUM_INTERNET_RADIO_CHANNEL_COUNT = 2
+        const val MAXIMUM_INTERNET_RADIO_CHANNEL_COUNT = 4
         val Recommended = AppSettings()
     }
 }
@@ -134,6 +134,27 @@ object CurrentExperienceMigration {
         orientationPreference = OrientationPreference.AUTOMATIC,
         torchEnabled = true,
     ).normalized()
+}
+
+/** Moves the former default bottom-control order to the iOS 0.32.5 order without overriding custom orders. */
+object LatestControlOrderMigration {
+    private val PreviousDefaultOrder = listOf(
+        StandControlKind.RECORDINGS,
+        StandControlKind.SETTINGS,
+        StandControlKind.BOYISO,
+    )
+
+    fun apply(previous: AppSettings): AppSettings = previous.copy(
+        portraitLayout = migrated(previous.portraitLayout),
+        landscapeLayout = migrated(previous.landscapeLayout),
+    ).normalized()
+
+    private fun migrated(layout: StandScreenLayout): StandScreenLayout =
+        if (layout.controlOrder == PreviousDefaultOrder) {
+            layout.copy(controlOrder = StandControlKind.DefaultOrder)
+        } else {
+            layout
+        }
 }
 
 /** Maps an Android light sensor's very wide lux range onto the 0...1 UI rail. */

@@ -7,10 +7,12 @@ import android.media.AudioAttributes
 import android.media.MediaPlayer
 import android.media.audiofx.LoudnessEnhancer
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -23,6 +25,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -65,6 +68,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -76,19 +80,26 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.input.pointer.util.VelocityTracker
+import androidx.compose.ui.input.pointer.util.addPointerInputChange
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.armsone.stand.model.RecordingSwipeDeletePolicy
 import com.armsone.stand.recording.RecordingClip
 import com.armsone.stand.recording.RecordingSessionGroup
 import com.armsone.stand.recording.RecordingSessionPolicy
@@ -99,7 +110,9 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlin.math.max
+import kotlin.math.roundToInt
 import kotlin.math.roundToLong
 
 private enum class RecordingsPage(val title: String) {
@@ -212,6 +225,14 @@ fun RecordingsScreen(
 
     LaunchedEffect(isBusy) {
         if (isBusy) player.stop()
+    }
+
+    val performSwipeDelete: (RecordingClip) -> Unit = { clip ->
+        if (!isBusy) {
+            if (player.activeClip?.file?.absolutePath == clip.file.absolutePath) player.stop()
+            selectedPaths = selectedPaths - clip.file.absolutePath
+            onDelete(clip)
+        }
     }
 
     LaunchedEffect(player.activeClip?.file, player.isPlaying) {
@@ -459,6 +480,7 @@ fun RecordingsScreen(
                                 },
                                 onShare = onShare,
                                 onDelete = { pendingDelete = it },
+                                onSwipeDelete = performSwipeDelete,
                             )
                         }
 
@@ -477,6 +499,7 @@ fun RecordingsScreen(
                                     },
                                     onShare = onShare,
                                     onDelete = { pendingDelete = it },
+                                    onSwipeDelete = performSwipeDelete,
                                 )
                             }
                         }
@@ -491,6 +514,7 @@ fun RecordingsScreen(
                                     onToggleExpanded = { mergedExpanded = !mergedExpanded },
                                     onShare = onShare,
                                     onDelete = { pendingDelete = it },
+                                    onSwipeDelete = performSwipeDelete,
                                 )
                             }
                         }
@@ -925,6 +949,7 @@ private fun RecordingSessionCard(
     onToggleSelection: (RecordingClip) -> Unit,
     onShare: (RecordingClip) -> Unit,
     onDelete: (RecordingClip) -> Unit,
+    onSwipeDelete: (RecordingClip) -> Unit,
 ) {
     val selectedCount = session.clips.count { !it.isMerged && it.file.absolutePath in selectedPaths }
     Surface(
@@ -1010,21 +1035,23 @@ private fun RecordingSessionCard(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     session.clips.forEach { clip ->
-                        RecordingRow(
-                            clip = clip,
-                            isActive = player.activeClip?.file?.absolutePath == clip.file.absolutePath,
-                            isPlaying = player.activeClip?.file?.absolutePath == clip.file.absolutePath &&
-                                player.isPlaying,
-                            isPreparing = player.activeClip?.file?.absolutePath == clip.file.absolutePath &&
-                                player.isPreparing,
-                            selectionMode = selectionMode,
-                            isSelected = clip.file.absolutePath in selectedPaths,
-                            enabled = !isBusy,
-                            onToggleSelection = { onToggleSelection(clip) },
-                            onPlay = { player.toggle(clip) },
-                            onShare = { onShare(clip) },
-                            onDelete = { onDelete(clip) },
-                        )
+                        SwipeToDeleteRow(enabled = !isBusy, onDelete = { onSwipeDelete(clip) }) {
+                            RecordingRow(
+                                clip = clip,
+                                isActive = player.activeClip?.file?.absolutePath == clip.file.absolutePath,
+                                isPlaying = player.activeClip?.file?.absolutePath == clip.file.absolutePath &&
+                                    player.isPlaying,
+                                isPreparing = player.activeClip?.file?.absolutePath == clip.file.absolutePath &&
+                                    player.isPreparing,
+                                selectionMode = selectionMode,
+                                isSelected = clip.file.absolutePath in selectedPaths,
+                                enabled = !isBusy,
+                                onToggleSelection = { onToggleSelection(clip) },
+                                onPlay = { player.toggle(clip) },
+                                onShare = { onShare(clip) },
+                                onDelete = { onDelete(clip) },
+                            )
+                        }
                     }
                 }
             }
@@ -1120,6 +1147,7 @@ private fun RecordingListCard(
     onToggleSelection: (RecordingClip) -> Unit,
     onShare: (RecordingClip) -> Unit,
     onDelete: (RecordingClip) -> Unit,
+    onSwipeDelete: (RecordingClip) -> Unit,
 ) {
     RecordingSurface {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1132,20 +1160,23 @@ private fun RecordingListCard(
                 )
             }
             clips.forEach { clip ->
-                RecordingRow(
-                    clip = clip,
-                    isActive = player.activeClip?.file?.absolutePath == clip.file.absolutePath,
-                    isPlaying = player.activeClip?.file?.absolutePath == clip.file.absolutePath && player.isPlaying,
-                    isPreparing = player.activeClip?.file?.absolutePath == clip.file.absolutePath &&
-                        player.isPreparing,
-                    selectionMode = selectionMode,
-                    isSelected = clip.file.absolutePath in selectedPaths,
-                    enabled = !isBusy,
-                    onToggleSelection = { onToggleSelection(clip) },
-                    onPlay = { player.toggle(clip) },
-                    onShare = { onShare(clip) },
-                    onDelete = { onDelete(clip) },
-                )
+                SwipeToDeleteRow(enabled = !isBusy, onDelete = { onSwipeDelete(clip) }) {
+                    RecordingRow(
+                        clip = clip,
+                        isActive = player.activeClip?.file?.absolutePath == clip.file.absolutePath,
+                        isPlaying = player.activeClip?.file?.absolutePath == clip.file.absolutePath &&
+                            player.isPlaying,
+                        isPreparing = player.activeClip?.file?.absolutePath == clip.file.absolutePath &&
+                            player.isPreparing,
+                        selectionMode = selectionMode,
+                        isSelected = clip.file.absolutePath in selectedPaths,
+                        enabled = !isBusy,
+                        onToggleSelection = { onToggleSelection(clip) },
+                        onPlay = { player.toggle(clip) },
+                        onShare = { onShare(clip) },
+                        onDelete = { onDelete(clip) },
+                    )
+                }
             }
         }
     }
@@ -1160,6 +1191,7 @@ private fun MergedRecordingsCard(
     onToggleExpanded: () -> Unit,
     onShare: (RecordingClip) -> Unit,
     onDelete: (RecordingClip) -> Unit,
+    onSwipeDelete: (RecordingClip) -> Unit,
 ) {
     Surface(
         modifier = Modifier
@@ -1200,24 +1232,117 @@ private fun MergedRecordingsCard(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     clips.forEach { clip ->
-                        RecordingRow(
-                            clip = clip,
-                            isActive = player.activeClip?.file?.absolutePath == clip.file.absolutePath,
-                            isPlaying = player.activeClip?.file?.absolutePath == clip.file.absolutePath &&
-                                player.isPlaying,
-                            isPreparing = player.activeClip?.file?.absolutePath == clip.file.absolutePath &&
-                                player.isPreparing,
-                            selectionMode = false,
-                            isSelected = false,
-                            enabled = !isBusy,
-                            onToggleSelection = {},
-                            onPlay = { player.toggle(clip) },
-                            onShare = { onShare(clip) },
-                            onDelete = { onDelete(clip) },
+                        SwipeToDeleteRow(enabled = !isBusy, onDelete = { onSwipeDelete(clip) }) {
+                            RecordingRow(
+                                clip = clip,
+                                isActive = player.activeClip?.file?.absolutePath == clip.file.absolutePath,
+                                isPlaying = player.activeClip?.file?.absolutePath == clip.file.absolutePath &&
+                                    player.isPlaying,
+                                isPreparing = player.activeClip?.file?.absolutePath == clip.file.absolutePath &&
+                                    player.isPreparing,
+                                selectionMode = false,
+                                isSelected = false,
+                                enabled = !isBusy,
+                                onToggleSelection = {},
+                                onPlay = { player.toggle(clip) },
+                                onShare = { onShare(clip) },
+                                onDelete = { onDelete(clip) },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Matches iOS `RecordingSwipeDeletePolicy`: horizontal-dominant left swipe past 56dp
+ * deletes immediately, reveal is clamped to 112dp, and a non-qualifying release or
+ * cancelled gesture springs the row back to its resting position.
+ */
+@Composable
+private fun SwipeToDeleteRow(
+    enabled: Boolean,
+    onDelete: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    val offsetX = remember { Animatable(0f) }
+    val velocityTracker = remember { VelocityTracker() }
+    val scope = rememberCoroutineScope()
+    val density = LocalDensity.current
+    val maximumRevealPx = with(density) { RecordingSwipeDeletePolicy.MAXIMUM_REVEAL.dp.toPx() }
+    var isDeleting by remember { mutableStateOf(false) }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .pointerInput(enabled, isDeleting) {
+                if (!enabled || isDeleting) return@pointerInput
+                detectHorizontalDragGestures(
+                    onDragStart = { velocityTracker.resetTracking() },
+                    onDragCancel = { scope.launch { offsetX.animateTo(0f) } },
+                    onDragEnd = {
+                        val predictedEndX = offsetX.value +
+                            velocityTracker.calculateVelocity().x * 0.3f
+                        val shouldDelete = RecordingSwipeDeletePolicy.isDeleteGesture(
+                            translationX = with(density) { offsetX.value.toDp().value },
+                            translationY = 0f,
+                            predictedEndTranslationX = with(density) { predictedEndX.toDp().value },
+                        )
+                        scope.launch {
+                            if (shouldDelete) {
+                                isDeleting = true
+                                onDelete()
+                            } else {
+                                offsetX.animateTo(0f)
+                            }
+                        }
+                    },
+                ) { change, dragAmount ->
+                    change.consume()
+                    velocityTracker.addPointerInputChange(change)
+                    scope.launch {
+                        offsetX.snapTo(
+                            (offsetX.value + dragAmount).coerceIn(-maximumRevealPx, 0f),
                         )
                     }
                 }
             }
+            .semantics {
+                if (enabled && !isDeleting) {
+                    customActions = listOf(
+                        CustomAccessibilityAction("바로 삭제") {
+                            isDeleting = true
+                            onDelete()
+                            true
+                        },
+                    )
+                }
+            },
+    ) {
+        if (offsetX.value < 0f) {
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(MaterialTheme.colorScheme.error.copy(alpha = 0.85f)),
+                contentAlignment = Alignment.CenterEnd,
+            ) {
+                Icon(
+                    Icons.Default.Delete,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onError,
+                    modifier = Modifier.padding(end = 22.dp),
+                )
+            }
+        }
+        Box(
+            modifier = Modifier.offset {
+                IntOffset(offsetX.value.roundToInt(), 0)
+            },
+        ) {
+            content()
         }
     }
 }

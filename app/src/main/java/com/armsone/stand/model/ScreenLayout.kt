@@ -34,8 +34,8 @@ enum class StandControlKind(val rawValue: String) {
     companion object {
         val DefaultOrder: List<StandControlKind> = listOf(
             RECORDINGS,
-            SETTINGS,
             BOYISO,
+            SETTINGS,
         )
 
         fun fromRawValue(rawValue: String): StandControlKind? =

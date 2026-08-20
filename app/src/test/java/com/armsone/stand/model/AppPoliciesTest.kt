@@ -18,8 +18,8 @@ class AppPoliciesTest {
         assertEquals(
             listOf(
                 StandControlKind.RECORDINGS,
-                StandControlKind.SETTINGS,
                 StandControlKind.BOYISO,
+                StandControlKind.SETTINGS,
             ),
             settings.portraitLayout.controlOrder,
         )
@@ -50,6 +50,31 @@ class AppPoliciesTest {
         assertEquals(ClockFontChoice.POPPINS, migrated.clockFont)
         assertEquals(StandDisplayTheme.GRAYSCALE, migrated.displayTheme)
         assertFalse(migrated.recordingEnabled)
+    }
+
+    @Test
+    fun latestControlOrderMigrationUpdatesOnlyTheFormerDefaultOrder() {
+        val previousDefault = listOf(
+            StandControlKind.RECORDINGS,
+            StandControlKind.SETTINGS,
+            StandControlKind.BOYISO,
+        )
+        val migrated = LatestControlOrderMigration.apply(
+            AppSettings.Recommended.copy(
+                portraitLayout = StandScreenLayout.Portrait.copy(controlOrder = previousDefault),
+                landscapeLayout = StandScreenLayout.Landscape.copy(controlOrder = previousDefault),
+            ),
+        )
+        assertEquals(StandControlKind.DefaultOrder, migrated.portraitLayout.controlOrder)
+        assertEquals(StandControlKind.DefaultOrder, migrated.landscapeLayout.controlOrder)
+
+        val customOrder = StandControlKind.DefaultOrder.reversed()
+        val custom = LatestControlOrderMigration.apply(
+            AppSettings.Recommended.copy(
+                portraitLayout = StandScreenLayout.Portrait.copy(controlOrder = customOrder),
+            ),
+        )
+        assertEquals(customOrder, custom.portraitLayout.controlOrder)
     }
 
     @Test
@@ -89,6 +114,38 @@ class AppPoliciesTest {
     }
 
     @Test
+    fun automaticModeAdoptsSystemBrightnessUnlessTheUserIsAdjustingOrFaceDown() {
+        assertTrue(
+            AppBrightnessSystemSyncPolicy.shouldAdoptSystemBrightness(
+                isAdjustingBrightness = false,
+                modePreference = StandModePreference.AUTOMATIC,
+                isFaceDown = false,
+            ),
+        )
+        assertFalse(
+            AppBrightnessSystemSyncPolicy.shouldAdoptSystemBrightness(
+                isAdjustingBrightness = true,
+                modePreference = StandModePreference.AUTOMATIC,
+                isFaceDown = false,
+            ),
+        )
+        assertFalse(
+            AppBrightnessSystemSyncPolicy.shouldAdoptSystemBrightness(
+                isAdjustingBrightness = false,
+                modePreference = StandModePreference.OBJECT,
+                isFaceDown = false,
+            ),
+        )
+        assertFalse(
+            AppBrightnessSystemSyncPolicy.shouldAdoptSystemBrightness(
+                isAdjustingBrightness = false,
+                modePreference = StandModePreference.AUTOMATIC,
+                isFaceDown = true,
+            ),
+        )
+    }
+
+    @Test
     fun batteryProtectionOnlyStopsLowUnpluggedDevice() {
         assertTrue(BatteryProtectionPolicy.shouldProtect(0.2f, isCharging = false))
         assertFalse(BatteryProtectionPolicy.shouldProtect(0.2f, isCharging = true))
@@ -105,6 +162,101 @@ class AppPoliciesTest {
                 wasProtecting = false,
                 shouldProtectNow = false,
             ),
+        )
+    }
+
+    @Test
+    fun musicChannelStripCardWidthMatchesIosThresholdAndPhoneLandscapeScale() {
+        assertEquals(168f, MusicChannelStripLayoutPolicy.cardWidth(760f), 0f)
+        assertEquals(168f, MusicChannelStripLayoutPolicy.cardWidth(700f), 0f)
+        assertEquals(177f, MusicChannelStripLayoutPolicy.cardWidth(400f), 0f)
+        assertEquals(148f, MusicChannelStripLayoutPolicy.cardWidth(300f), 0f)
+        assertEquals(
+            168f * MusicChannelStripLayoutPolicy.PHONE_LANDSCAPE_CARD_WIDTH_SCALE,
+            MusicChannelStripLayoutPolicy.cardWidth(760f, isPhoneLandscape = true),
+            0f,
+        )
+    }
+
+    @Test
+    fun musicChannelStripScrollClampsWithinContentBounds() {
+        val cardWidth = 148f
+        val maximumScroll = MusicChannelStripLayoutPolicy.maximumScroll(
+            viewportWidth = 360f,
+            cardCount = 6,
+            cardWidth = cardWidth,
+        )
+        assertTrue(maximumScroll > 0f)
+        assertEquals(
+            0f,
+            MusicChannelStripLayoutPolicy.clampedOffset(120f, maximumScroll),
+            0f,
+        )
+        assertEquals(
+            -maximumScroll,
+            MusicChannelStripLayoutPolicy.clampedOffset(-maximumScroll - 500f, maximumScroll),
+            0f,
+        )
+        assertEquals(
+            0f,
+            MusicChannelStripLayoutPolicy.maximumScroll(viewportWidth = 2000f, cardCount = 6, cardWidth = cardWidth),
+            0f,
+        )
+    }
+
+    @Test
+    fun phoneLandscapeSideControlsAppearOnlyForNonExpandedLandscape() {
+        assertTrue(
+            PhoneLandscapeSideControlsPolicy.isEnabled(isPortrait = false, isExpandedWidth = false),
+        )
+        assertFalse(
+            PhoneLandscapeSideControlsPolicy.isEnabled(isPortrait = true, isExpandedWidth = false),
+        )
+        assertFalse(
+            PhoneLandscapeSideControlsPolicy.isEnabled(isPortrait = false, isExpandedWidth = true),
+        )
+    }
+
+    @Test
+    fun recordingSwipeDeletesOnAFullDragOrQuickLeftFlickOnly() {
+        assertTrue(
+            RecordingSwipeDeletePolicy.isDeleteGesture(
+                translationX = -60f,
+                translationY = 4f,
+                predictedEndTranslationX = -72f,
+            ),
+        )
+        assertTrue(
+            RecordingSwipeDeletePolicy.isDeleteGesture(
+                translationX = -34f,
+                translationY = 3f,
+                predictedEndTranslationX = -90f,
+            ),
+        )
+        assertFalse(
+            RecordingSwipeDeletePolicy.isDeleteGesture(
+                translationX = -48f,
+                translationY = 3f,
+                predictedEndTranslationX = -52f,
+            ),
+        )
+        assertFalse(
+            RecordingSwipeDeletePolicy.isDeleteGesture(
+                translationX = -80f,
+                translationY = 95f,
+                predictedEndTranslationX = -110f,
+            ),
+        )
+    }
+
+    @Test
+    fun recordingSwipeRevealIsClampedToMaximumReveal() {
+        assertEquals(0f, RecordingSwipeDeletePolicy.clampedReveal(40f), 0f)
+        assertEquals(-40f, RecordingSwipeDeletePolicy.clampedReveal(-40f), 0f)
+        assertEquals(
+            -RecordingSwipeDeletePolicy.MAXIMUM_REVEAL,
+            RecordingSwipeDeletePolicy.clampedReveal(-500f),
+            0f,
         )
     }
 }

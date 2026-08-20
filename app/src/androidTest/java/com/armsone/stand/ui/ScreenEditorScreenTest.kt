@@ -22,7 +22,6 @@ import com.armsone.stand.model.InternetRadioConfiguration
 import com.armsone.stand.model.StandScreenLayout
 import com.armsone.stand.ui.theme.STandTheme
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Rule
 import org.junit.Test
 
@@ -133,10 +132,14 @@ class ScreenEditorScreenTest {
         composeRule.onNodeWithTag("editor_panel_weather_2").assertExists()
     }
 
+    /**
+     * Latest iOS `RootView.swift` no longer has a movable radio panel key in its screen editor;
+     * the home music strip below the header is fixed. Android's editor must match.
+     */
     @Test
-    fun groupedRadioSingleTapSplitsTheTwoPanels() {
+    fun screenEditorNoLongerOffersAMovableRadioPanel() {
         var layout by mutableStateOf(
-            StandScreenLayout.Portrait.copy(radiosGrouped = true),
+            StandScreenLayout.Portrait,
         )
         val channels = listOf(
             InternetRadioConfiguration("첫 채널", "https://example.com/one", "one"),
@@ -167,10 +170,8 @@ class ScreenEditorScreenTest {
             }
         }
 
-        composeRule.onNodeWithTag("editor_panel_radio").performTouchInput { click() }
-        composeRule.waitForIdle()
-
-        assertFalse(layout.radiosGrouped)
+        composeRule.onNodeWithTag("editor_panel_radio").assertDoesNotExist()
+        composeRule.onNodeWithTag("editor_panel_secondary_radio").assertDoesNotExist()
+        composeRule.onNodeWithTag("editor_panel_clock").assertIsDisplayed()
     }
-
 }

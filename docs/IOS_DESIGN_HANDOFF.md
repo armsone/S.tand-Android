@@ -16,6 +16,14 @@ iOS 버전: `1.0.0 (0.26.0)`
 `IOS_TO_ANDROID_TECHNICAL_RECIPE.md`, 실제 확인 상태는 `IOS_PARITY.md`에 기록한다.
 과거 `24f1ec2 / 0.23.3` 전달본과 그 문서에서 파생한 완료 판정은 최신 기준이 아니다.
 
+### 2026-08-20 음악 6카드·고정 스트립 델타 참고
+
+iOS가 `1c92b69` (`1.0.0 (0.32.5)`)까지 진행하며 홈 음악 표시를 로고 아래 고정 6카드 수평
+스트립(외부 서비스 2개 + 안정적 라디오 슬롯 4개)으로 통일하고, 화면 편집에서 이동 가능한 라디오
+패널을 제거했다. 잠소리 관리에는 좌측 스와이프 즉시 삭제(`RecordingSwipeDeletePolicy`)가
+추가됐다. 세부 소스 대조와 Android 이식 결정은 `docs/IOS_PARITY.md`의 2026-08-20 델타 절과
+`docs/MATCHUP_MUSIC_PARITY.md`를 우선 참조한다.
+
 ## 기준 우선순위
 
 1. iOS `PROJECT_RULES.md`

@@ -1,5 +1,8 @@
 package com.armsone.stand.model
 
+import kotlin.math.abs
+import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
 
 enum class ScreenTapLampAction { BRIGHTEN, DIM }
@@ -70,6 +73,16 @@ object SimplifiedBrightnessModePolicy {
 
     fun tapLevel(from: EnvironmentDisplayMode): Float =
         if (from == EnvironmentDisplayMode.OBJECT) MATE_TAP_LEVEL else OBJECT_TAP_LEVEL
+}
+
+object AppBrightnessSystemSyncPolicy {
+    fun shouldAdoptSystemBrightness(
+        isAdjustingBrightness: Boolean,
+        modePreference: StandModePreference,
+        isFaceDown: Boolean,
+    ): Boolean = !isAdjustingBrightness &&
+        modePreference == StandModePreference.AUTOMATIC &&
+        !isFaceDown
 }
 
 object HoldDurationAdjustment {
@@ -159,4 +172,60 @@ object FaceDownLightingPolicy {
         isSessionActive && isFaceDown
 
     fun allowsTorch(isFaceDown: Boolean): Boolean = !isFaceDown
+}
+
+/** Fixed horizontal music strip below the top header, matching the iOS source tokens. */
+object MusicChannelStripLayoutPolicy {
+    const val SPACING = 8f
+    const val SIDE_INSET = 12f
+    const val PHONE_LANDSCAPE_CARD_WIDTH_SCALE = 0.8f
+    const val CARD_HEIGHT = 60f
+
+    fun cardWidth(viewportWidth: Float, isPhoneLandscape: Boolean = false): Float {
+        val baseWidth = if (viewportWidth < 700f) {
+            max(148f, (viewportWidth - 46f) / 2f)
+        } else {
+            168f
+        }
+        return if (isPhoneLandscape) baseWidth * PHONE_LANDSCAPE_CARD_WIDTH_SCALE else baseWidth
+    }
+
+    fun contentWidth(cardCount: Int, cardWidth: Float): Float {
+        if (cardCount <= 0) return 0f
+        return cardCount * cardWidth + (cardCount - 1) * SPACING
+    }
+
+    fun maximumScroll(viewportWidth: Float, cardCount: Int, cardWidth: Float): Float = max(
+        0f,
+        contentWidth(cardCount, cardWidth) - max(0f, viewportWidth - SIDE_INSET * 2),
+    )
+
+    fun clampedOffset(offset: Float, maximumScroll: Float): Float =
+        min(0f, max(-maximumScroll, offset))
+
+    fun leadingAlignedOffset(cardIndex: Int, cardWidth: Float, maximumScroll: Float): Float =
+        clampedOffset(-max(0, cardIndex) * (cardWidth + SPACING), maximumScroll)
+}
+
+/** Fixed control column beside the music strip on phone landscape, adaptive from 600dp. */
+object PhoneLandscapeSideControlsPolicy {
+    fun isEnabled(isPortrait: Boolean, isExpandedWidth: Boolean): Boolean =
+        !isPortrait && !isExpandedWidth
+}
+
+/** Matches iOS RecordingSwipeDeletePolicy: left-swipe-only immediate delete. */
+object RecordingSwipeDeletePolicy {
+    const val DELETE_THRESHOLD = 56f
+    const val MAXIMUM_REVEAL = 112f
+
+    fun isDeleteGesture(
+        translationX: Float,
+        translationY: Float,
+        predictedEndTranslationX: Float,
+    ): Boolean {
+        val horizontalDistance = min(translationX, predictedEndTranslationX)
+        return horizontalDistance <= -DELETE_THRESHOLD && abs(translationX) > abs(translationY)
+    }
+
+    fun clampedReveal(translationX: Float): Float = translationX.coerceIn(-MAXIMUM_REVEAL, 0f)
 }

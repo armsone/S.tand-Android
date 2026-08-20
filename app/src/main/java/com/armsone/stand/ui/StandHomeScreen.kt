@@ -17,6 +17,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -108,6 +109,8 @@ import com.armsone.stand.model.ExternalMusicService
 import com.armsone.stand.model.HomeMusicChannelKind
 import com.armsone.stand.model.HomeMusicChannelSelection
 import com.armsone.stand.model.LampPhase
+import com.armsone.stand.model.MusicChannelStripLayoutPolicy
+import com.armsone.stand.model.PhoneLandscapeSideControlsPolicy
 import com.armsone.stand.model.OrientationPreference
 import com.armsone.stand.model.PanelTransform
 import com.armsone.stand.model.StandDisplayTheme
@@ -160,6 +163,7 @@ fun StandHomeScreen(
     onSendBoyisoTokTok: () -> Unit,
     onToggleRadio: (String) -> Unit,
     onEditRadio: (String) -> Unit,
+    onRegisterRadio: () -> Unit = {},
     onOpenExternalMusic: (ExternalMusicService) -> Unit = {},
     onEndExternalMusic: () -> Unit = {},
     modifier: Modifier = Modifier,
@@ -272,10 +276,6 @@ fun StandHomeScreen(
                     contentAlpha = contentAlpha,
                     burnInOffset = burnInOffset,
                     isExpanded = isExpanded,
-                    onToggleRadio = onToggleRadio,
-                    onEditRadio = onEditRadio,
-                    onOpenExternalMusic = onOpenExternalMusic,
-                    onEndExternalMusic = onEndExternalMusic,
                     onClockTap = onScreenTap,
                     onClockDoubleTap = {},
                     catalogNow = catalogNow,
@@ -293,6 +293,11 @@ fun StandHomeScreen(
                 )
             }
 
+            val usesPhoneLandscapeSideControls = PhoneLandscapeSideControlsPolicy.isEnabled(
+                isPortrait = isPortrait,
+                isExpandedWidth = isExpanded,
+            )
+
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -306,29 +311,73 @@ fun StandHomeScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Header(state = state, contentAlpha = contentAlpha)
+
+                if (usesPhoneLandscapeSideControls) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        MusicChannelStrip(
+                            state = state,
+                            contentAlpha = contentAlpha,
+                            isPhoneLandscape = true,
+                            onToggleRadio = onToggleRadio,
+                            onEditRadio = onEditRadio,
+                            onRegisterRadio = onRegisterRadio,
+                            onOpenExternalMusic = onOpenExternalMusic,
+                            onEndExternalMusic = onEndExternalMusic,
+                            modifier = Modifier.weight(1f),
+                        )
+                        PhoneLandscapeSideControls(
+                            state = state,
+                            onOpenRecordings = onOpenRecordings,
+                            onOpenSettings = onOpenSettings,
+                            onOpenBoyiso = onOpenBoyiso,
+                            boyisoStatus = boyisoStatus,
+                            boyisoCanSendTokTok = boyisoCanSendTokTok,
+                            onSendBoyisoTokTok = onSendBoyisoTokTok,
+                        )
+                    }
+                } else {
+                    MusicChannelStrip(
+                        state = state,
+                        contentAlpha = contentAlpha,
+                        isPhoneLandscape = false,
+                        onToggleRadio = onToggleRadio,
+                        onEditRadio = onEditRadio,
+                        onRegisterRadio = onRegisterRadio,
+                        onOpenExternalMusic = onOpenExternalMusic,
+                        onEndExternalMusic = onEndExternalMusic,
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    )
+                }
+
                 Spacer(Modifier.weight(1f))
 
-                HomeControls(
-                    state = state,
-                    isPortrait = isPortrait,
-                    isExpanded = isExpanded,
-                    onToggleTorch = onToggleTorch,
-                    onCycleMode = onCycleMode,
-                    onToggleSession = onToggleSession,
-                    onToggleOrientation = onToggleOrientation,
-                    onOpenRecordings = onOpenRecordings,
-                    onOpenAiShot = onOpenAiShot,
-                    onOpenSettings = onOpenSettings,
-                    onOpenBoyiso = onOpenBoyiso,
-                    boyisoStatus = boyisoStatus,
-                    boyisoCanSendTokTok = boyisoCanSendTokTok,
-                    onSendBoyisoTokTok = onSendBoyisoTokTok,
-                )
+                if (!usesPhoneLandscapeSideControls) {
+                    HomeControls(
+                        state = state,
+                        isPortrait = isPortrait,
+                        isExpanded = isExpanded,
+                        onToggleTorch = onToggleTorch,
+                        onCycleMode = onCycleMode,
+                        onToggleSession = onToggleSession,
+                        onToggleOrientation = onToggleOrientation,
+                        onOpenRecordings = onOpenRecordings,
+                        onOpenAiShot = onOpenAiShot,
+                        onOpenSettings = onOpenSettings,
+                        onOpenBoyiso = onOpenBoyiso,
+                        boyisoStatus = boyisoStatus,
+                        boyisoCanSendTokTok = boyisoCanSendTokTok,
+                        onSendBoyisoTokTok = onSendBoyisoTokTok,
+                    )
+                }
             }
 
             Text(
                 text = "${BuildConfig.BUILD_NUMBER} · 밝기 " +
-                    "${(state.lampIntensity.coerceIn(0f, 1f) * 100f).roundToInt()}%",
+                    "${(state.displayBrightness.coerceIn(0f, 1f) * 100f).roundToInt()}%",
                 color = Color.White.copy(
                     alpha = if (state.isDisplayDark) 0f else 0.28f,
                 ),
@@ -343,7 +392,7 @@ fun StandHomeScreen(
                     .semantics {
                         contentDescription =
                             "빌드 번호 ${BuildConfig.BUILD_NUMBER}, 현재 밝기 " +
-                            "${(state.lampIntensity.coerceIn(0f, 1f) * 100f).roundToInt()}퍼센트"
+                            "${(state.displayBrightness.coerceIn(0f, 1f) * 100f).roundToInt()}퍼센트"
                     },
             )
         }
@@ -679,7 +728,7 @@ private fun HomeGestureLayer(
         modifier = modifier
             .onSizeChanged { layerHeightPx = it.height.toFloat() }
             .semantics {
-                val currentLevel = state.lampIntensity.coerceIn(0f, 1f)
+                val currentLevel = state.displayBrightness.coerceIn(0f, 1f)
                 contentDescription = "홈 화면 제어"
                 progressBarRangeInfo = ProgressBarRangeInfo(currentLevel, 0f..1f, 9)
                 setProgress { requestedLevel ->
@@ -850,7 +899,7 @@ private fun HomeGestureLayer(
                         if (axis == null && translation.getDistance() >= viewConfiguration.touchSlop) {
                             axis = if (abs(translation.y) > abs(translation.x)) {
                                 val current = latestState.value
-                                startingLevel = current.lampIntensity
+                                startingLevel = current.displayBrightness
                                     .takeIf { current.isSessionActive }
                                     ?: current.settings.lampIntensity
                                 latestOnBrightnessAdjustmentStarted.value()
@@ -1011,10 +1060,6 @@ private fun DashboardCanvas(
     contentAlpha: Float,
     burnInOffset: com.armsone.stand.ui.components.BurnInOffset,
     isExpanded: Boolean,
-    onToggleRadio: (String) -> Unit,
-    onEditRadio: (String) -> Unit,
-    onOpenExternalMusic: (ExternalMusicService) -> Unit,
-    onEndExternalMusic: () -> Unit,
     onClockTap: () -> Unit,
     onClockDoubleTap: () -> Unit,
     catalogNow: LocalDateTime?,
@@ -1148,37 +1193,123 @@ private fun DashboardCanvas(
                 canvasWidthDp = canvasWidth.value,
                 canvasHeightDp = canvasHeight.value,
             )
+        }
+    }
+}
 
-            val musicChannels = state.settings.homeMusicChannels.take(2)
-            if (musicChannels.size == 2 && layout.radiosGrouped) {
-                GroupedMusicPanel(
+/** The iOS-style fixed horizontal music strip below the top brand/header. */
+@Composable
+internal fun MusicChannelStrip(
+    state: StandUiState,
+    contentAlpha: Float,
+    isPhoneLandscape: Boolean,
+    onToggleRadio: (String) -> Unit,
+    onEditRadio: (String) -> Unit,
+    onRegisterRadio: () -> Unit,
+    onOpenExternalMusic: (ExternalMusicService) -> Unit,
+    onEndExternalMusic: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val channels = state.settings.homeMusicChannels
+    val density = LocalDensity.current
+    var offsetDp by remember { mutableStateOf(0f) }
+
+    BoxWithConstraints(
+        modifier = modifier.height(MusicChannelStripLayoutPolicy.CARD_HEIGHT.dp),
+    ) {
+        val viewportWidthDp = maxWidth.value
+        val cardWidthDp = MusicChannelStripLayoutPolicy.cardWidth(viewportWidthDp, isPhoneLandscape)
+        val maximumScrollDp = MusicChannelStripLayoutPolicy.maximumScroll(
+            viewportWidth = viewportWidthDp,
+            cardCount = channels.size,
+            cardWidth = cardWidthDp,
+        )
+
+        LaunchedEffect(maximumScrollDp) {
+            offsetDp = MusicChannelStripLayoutPolicy.clampedOffset(offsetDp, maximumScrollDp)
+        }
+
+        Row(
+            modifier = Modifier
+                .offset(x = (MusicChannelStripLayoutPolicy.SIDE_INSET + offsetDp).dp)
+                .then(
+                    if (maximumScrollDp > 0f) {
+                        Modifier.pointerInput(maximumScrollDp) {
+                            detectHorizontalDragGestures { change, dragAmountPx ->
+                                change.consume()
+                                val dragAmountDp = with(density) { dragAmountPx.toDp().value }
+                                offsetDp = MusicChannelStripLayoutPolicy.clampedOffset(
+                                    offsetDp + dragAmountDp,
+                                    maximumScrollDp,
+                                )
+                            }
+                        }
+                    } else {
+                        Modifier
+                    },
+                ),
+            horizontalArrangement = Arrangement.spacedBy(MusicChannelStripLayoutPolicy.SPACING.dp),
+        ) {
+            channels.forEach { selection ->
+                MusicPanel(
                     state = state,
-                    selections = musicChannels,
+                    selection = selection,
                     contentAlpha = contentAlpha,
+                    width = cardWidthDp.dp,
                     onToggleRadio = onToggleRadio,
                     onEditRadio = onEditRadio,
+                    onRegisterRadio = onRegisterRadio,
                     onOpenExternalMusic = onOpenExternalMusic,
                     onEndExternalMusic = onEndExternalMusic,
-                    modifier = Modifier
-                        .align(Alignment.Center)
-                        .panelTransform(layout.radio, canvasWidth.value, canvasHeight.value),
                 )
-            } else {
-                musicChannels.forEachIndexed { index, selection ->
-                    val transform = if (index == 0) layout.radio else layout.secondaryRadio
-                    MusicPanel(
-                        state = state,
-                        selection = selection,
-                        contentAlpha = contentAlpha,
-                        onToggleRadio = onToggleRadio,
-                        onEditRadio = onEditRadio,
-                        onOpenExternalMusic = onOpenExternalMusic,
-                        onEndExternalMusic = onEndExternalMusic,
-                        modifier = Modifier
-                            .align(Alignment.Center)
-                            .panelTransform(transform, canvasWidth.value, canvasHeight.value),
-                    )
-                }
+            }
+        }
+    }
+}
+
+/** Phone landscape fixed control column beside the music strip (600dp+ stays adaptive). */
+@Composable
+internal fun PhoneLandscapeSideControls(
+    state: StandUiState,
+    onOpenRecordings: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onOpenBoyiso: () -> Unit,
+    boyisoStatus: String,
+    boyisoCanSendTokTok: Boolean,
+    onSendBoyisoTokTok: () -> Unit,
+) {
+    val controlOrder = listOf(
+        StandControlKind.RECORDINGS,
+        StandControlKind.BOYISO,
+        StandControlKind.SETTINGS,
+    )
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        controlOrder.forEach { kind ->
+            val defaultAction = when (kind) {
+                StandControlKind.RECORDINGS -> onOpenRecordings
+                StandControlKind.SETTINGS -> onOpenSettings
+                else -> onOpenBoyiso
+            }
+            Surface(
+                color = Color.Transparent,
+                shape = RoundedCornerShape(14.dp),
+                shadowElevation = 0.dp,
+                modifier = Modifier
+                    .size(width = 57.dp, height = MusicChannelStripLayoutPolicy.CARD_HEIGHT.dp)
+                    .standPanelSurface(isDimmed = false, cornerRadius = 14.dp, splitGap = 2.dp)
+                    .combinedClickable(
+                        onClick = if (kind == StandControlKind.BOYISO && boyisoCanSendTokTok) {
+                            onSendBoyisoTokTok
+                        } else {
+                            defaultAction
+                        },
+                        onLongClick = onOpenBoyiso.takeIf { kind == StandControlKind.BOYISO },
+                    ),
+            ) {
+                StandControlTileContent(
+                    presentation = kind.presentation(state, boyisoStatus = boyisoStatus),
+                    showReorderHandle = false,
+                )
             }
         }
     }
@@ -1193,6 +1324,8 @@ internal fun MusicPanel(
     onEditRadio: (String) -> Unit,
     onOpenExternalMusic: (ExternalMusicService) -> Unit,
     onEndExternalMusic: () -> Unit,
+    onRegisterRadio: () -> Unit = {},
+    width: androidx.compose.ui.unit.Dp = 144.dp,
     drawsSurface: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
@@ -1202,7 +1335,8 @@ internal fun MusicPanel(
             state = state,
             configuration = radio,
             contentAlpha = contentAlpha,
-            onClick = { radio?.id?.let(onToggleRadio) },
+            width = width,
+            onClick = { radio?.id?.let(onToggleRadio) ?: onRegisterRadio() },
             onLongClick = { radio?.id?.let(onEditRadio) },
             drawsSurface = drawsSurface,
             modifier = modifier,
@@ -1219,7 +1353,7 @@ internal fun MusicPanel(
     val detail = if (active) "음악 듣기 모드" else "대기 중"
     Surface(
         modifier = modifier
-            .width(144.dp)
+            .width(width)
             .height(60.dp)
             .combinedClickable(
                 onClick = { onOpenExternalMusic(service) },
@@ -1275,48 +1409,13 @@ internal fun MusicPanel(
 }
 
 @Composable
-internal fun GroupedMusicPanel(
-    state: StandUiState,
-    selections: List<HomeMusicChannelSelection>,
-    contentAlpha: Float,
-    onToggleRadio: (String) -> Unit,
-    onEditRadio: (String) -> Unit,
-    onOpenExternalMusic: (ExternalMusicService) -> Unit,
-    onEndExternalMusic: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Row(
-        modifier = modifier
-            .width(288.dp)
-            .height(60.dp)
-            .standPanelSurface(
-                isDimmed = contentAlpha <= 0.2f,
-                cornerRadius = 13.dp,
-                splitGap = 2.dp,
-            ),
-    ) {
-        selections.take(2).forEach { selection ->
-            MusicPanel(
-                state = state,
-                selection = selection,
-                contentAlpha = contentAlpha,
-                onToggleRadio = onToggleRadio,
-                onEditRadio = onEditRadio,
-                onOpenExternalMusic = onOpenExternalMusic,
-                onEndExternalMusic = onEndExternalMusic,
-                drawsSurface = false,
-            )
-        }
-    }
-}
-
-@Composable
 internal fun RadioPanel(
     state: StandUiState,
     configuration: InternetRadioConfiguration?,
     contentAlpha: Float,
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
+    width: androidx.compose.ui.unit.Dp = 144.dp,
     drawsSurface: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
@@ -1347,6 +1446,7 @@ internal fun RadioPanel(
         }
     }
     val accessibilityHint = when {
+        configuration == null -> "인터넷 라디오 주소를 등록합니다."
         isActive && state.internetRadioState is InternetRadioState.Loading ->
             "인터넷 라디오 연결을 취소합니다."
         isActive && state.internetRadioState is InternetRadioState.Reconnecting ->
@@ -1357,7 +1457,7 @@ internal fun RadioPanel(
     }
     Surface(
         modifier = modifier
-            .width(144.dp)
+            .width(width)
             .height(60.dp)
             .combinedClickable(
                 onClick = onClick,
@@ -1412,38 +1512,6 @@ internal fun RadioPanel(
                     maxLines = 1,
                 )
             }
-        }
-    }
-}
-
-@Composable
-internal fun GroupedRadioPanel(
-    state: StandUiState,
-    configurations: List<InternetRadioConfiguration>,
-    contentAlpha: Float,
-    onClick: (String) -> Unit,
-    onLongClick: (String) -> Unit = {},
-    modifier: Modifier = Modifier,
-) {
-    Row(
-        modifier = modifier
-            .width(288.dp)
-            .height(60.dp)
-            .standPanelSurface(
-                isDimmed = contentAlpha <= 0.2f,
-                cornerRadius = 13.dp,
-                splitGap = 2.dp,
-            ),
-    ) {
-        configurations.take(2).forEach { configuration ->
-            RadioPanel(
-                state = state,
-                configuration = configuration,
-                contentAlpha = contentAlpha,
-                onClick = { onClick(configuration.id) },
-                onLongClick = { onLongClick(configuration.id) },
-                drawsSurface = false,
-            )
         }
     }
 }

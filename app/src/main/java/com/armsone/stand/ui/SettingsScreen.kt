@@ -276,7 +276,7 @@ fun SettingsScreen(
                         icon = Icons.Default.MusicNote,
                     ) {
                         Text(
-                            "홈 버튼 배치",
+                            "홈 음악 채널 순서",
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -288,7 +288,7 @@ fun SettingsScreen(
                                 HomeMusicChannelSelection.radio(it.id)
                             }
                         }
-                        settings.homeMusicChannels.take(2).forEachIndexed { slot, selection ->
+                        settings.homeMusicChannels.forEachIndexed { slot, selection ->
                             var menuExpanded by remember(slot) { mutableStateOf(false) }
                             Row(
                                 modifier = Modifier
@@ -299,7 +299,7 @@ fun SettingsScreen(
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Text(
-                                    if (slot == 0) "첫 번째 버튼" else "두 번째 버튼",
+                                    "${slot + 1}번째 카드",
                                     modifier = Modifier.weight(1f),
                                 )
                                 Box {
@@ -311,9 +311,11 @@ fun SettingsScreen(
                                         onDismissRequest = { menuExpanded = false },
                                     ) {
                                         musicChoices.forEach { choice ->
+                                            val isCurrent = choice.kind == selection.kind &&
+                                                choice.radioID == selection.radioID
                                             DropdownMenuItem(
                                                 text = { Text(musicSelectionTitle(choice, settings)) },
-                                                trailingIcon = if (choice == selection) {
+                                                trailingIcon = if (isCurrent) {
                                                     { Icon(Icons.Default.Check, contentDescription = "선택됨") }
                                                 } else null,
                                                 onClick = {
@@ -326,6 +328,12 @@ fun SettingsScreen(
                                 }
                             }
                         }
+                        Text(
+                            "각 카드의 목록에서 선택하면 홈 화면 음악 스트립의 카드 순서를 바꿉니다. " +
+                                "라디오 카드는 채널 목록의 연필로 같은 자리에서 바로 수정할 수 있습니다.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                         ExternalMusicService.entries.forEach { service ->
                             val active = state.externalMusicService == service
                             Surface(

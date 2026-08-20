@@ -8,6 +8,8 @@ import com.armsone.stand.model.ClockHourMode
 import com.armsone.stand.model.CurrentExperienceMigration
 import com.armsone.stand.model.OrientationPreference
 import com.armsone.stand.model.InternetRadioConfiguration
+import com.armsone.stand.model.LatestControlOrderMigration
+import com.armsone.stand.model.HomeMusicChannelPolicy
 import com.armsone.stand.model.HomeMusicChannelSelection
 import com.armsone.stand.model.ScreenLayoutCodec
 import com.armsone.stand.model.StandScreenLayout
@@ -45,16 +47,26 @@ class SettingsRepository(context: Context) {
     }
 
     private fun loadAndMigrate(): AppSettings {
-        val loaded = load()
-        if (booleanValue(CURRENT_EXPERIENCE_MIGRATION_KEY, false)) return loaded
-
-        return CurrentExperienceMigration.apply(loaded).also { migrated ->
+        var current = load()
+        if (!booleanValue(CURRENT_EXPERIENCE_MIGRATION_KEY, false)) {
+            val before = current
+            current = CurrentExperienceMigration.apply(current)
             persist(
-                migrated,
-                preservedUnreadableStrings = unreadableStringPayloads(loaded, migrated),
+                current,
+                preservedUnreadableStrings = unreadableStringPayloads(before, current),
             )
             preferences.edit { putBoolean(CURRENT_EXPERIENCE_MIGRATION_KEY, true) }
         }
+        if (!booleanValue(LATEST_CONTROL_ORDER_MIGRATION_KEY, false)) {
+            val migrated = LatestControlOrderMigration.apply(current)
+            persist(
+                migrated,
+                preservedUnreadableStrings = unreadableStringPayloads(current, migrated),
+            )
+            preferences.edit { putBoolean(LATEST_CONTROL_ORDER_MIGRATION_KEY, true) }
+            current = migrated
+        }
+        return current
     }
 
     private fun unreadableStringPayloads(
@@ -130,10 +142,9 @@ class SettingsRepository(context: Context) {
             internetRadio = radioSnapshot.selected,
             internetRadioChannels = radioSnapshot.channels,
             selectedInternetRadioId = radioSnapshot.selected?.id,
-            homeMusicChannels = listOfNotNull(
-                HomeMusicChannelSelection.decode(stringValue(HOME_MUSIC_CHANNEL_0_KEY)),
-                HomeMusicChannelSelection.decode(stringValue(HOME_MUSIC_CHANNEL_1_KEY)),
-            ),
+            homeMusicChannels = HOME_MUSIC_CHANNEL_KEYS.mapNotNull { key ->
+                HomeMusicChannelSelection.decode(stringValue(key))
+            },
         ).normalized()
     }
 
@@ -224,8 +235,10 @@ class SettingsRepository(context: Context) {
                 remove(RADIO_URL_KEY)
             }
             putString(SELECTED_RADIO_ID_KEY, value.selectedInternetRadioId)
-            putString(HOME_MUSIC_CHANNEL_0_KEY, value.homeMusicChannels.getOrNull(0)?.encoded())
-            putString(HOME_MUSIC_CHANNEL_1_KEY, value.homeMusicChannels.getOrNull(1)?.encoded())
+            HOME_MUSIC_CHANNEL_KEYS.forEachIndexed { index, key ->
+                val encoded = value.homeMusicChannels.getOrNull(index)?.encoded()
+                if (encoded == null) remove(key) else putString(key, encoded)
+            }
             repeat(AppSettings.MAXIMUM_INTERNET_RADIO_CHANNEL_COUNT) { index ->
                 val channel = value.internetRadioChannels.getOrNull(index)
                 if (channel == null) {
@@ -260,9 +273,10 @@ class SettingsRepository(context: Context) {
         const val RADIO_NAME_PREFIX = "internetRadioName."
         const val RADIO_URL_PREFIX = "internetRadioUrl."
         const val SELECTED_RADIO_ID_KEY = "selectedInternetRadioId"
-        const val HOME_MUSIC_CHANNEL_0_KEY = "homeMusicChannel.0"
-        const val HOME_MUSIC_CHANNEL_1_KEY = "homeMusicChannel.1"
+        val HOME_MUSIC_CHANNEL_KEYS: List<String> = (0 until HomeMusicChannelPolicy.CARD_COUNT)
+            .map { index -> "homeMusicChannel.$index" }
         const val LEGACY_RADIO_ID = "legacy-primary-radio"
         const val CURRENT_EXPERIENCE_MIGRATION_KEY = "currentExperienceDefaults.v1"
+        const val LATEST_CONTROL_ORDER_MIGRATION_KEY = "latestControlOrder.v2"
     }
 }

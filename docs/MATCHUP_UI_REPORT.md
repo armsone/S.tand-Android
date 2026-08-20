@@ -43,3 +43,16 @@ Material icon은 의미가 같아도 SF Symbol과 path/bounds/stroke가 달라 m
 - iOS/Android 서로 다른 pixel profile은 임의 리스케일하지 않고 component anchor와 앱 bounds를 기준으로 비교
 
 따라서 이번 산출물은 source/render coverage와 재현 가능한 Android capture 기반을 완성했지만, 강화 matchup의 전체 parity 완료 증거는 아니다.
+
+2026-08-20에는 `SM-F968N`에서 최신 6카드 스트립 카탈로그 11개 테스트를 연속 2회 실행해
+각 패스 실패 0을 확인했다. 다만 트라이폴드의 두 물리 디스플레이 중 캡처 대상이 패스 사이에
+달라져 `home_portrait`의 앱 프레임이 달라졌으므로 exact SHA stable 판정은 올리지 않았다.
+
+## 2026-08-20 추가 노트
+
+iOS `1c92b69` (`1.0.0 (0.32.5)`)에서 홈 라디오 표시가 이동식 2패널에서 고정 6카드 수평
+스트립으로 바뀌었고, Android도 같은 소스 구조(`MusicChannelStrip`)로 이식했다. 위 15상태
+카탈로그의 `home_*` fixture와 manifest는 아직 이 변경 전 캡처이므로, 다음 재캡처 라운드 전까지
+홈 행의 판정은 `unresolved`를 유지한다. 잠소리 관리의 좌측 스와이프 즉시 삭제(`바로 삭제`
+접근성 액션)도 이번에 새로 추가된 소스 동작이라 기존 `recordings_management` capture에는
+반영되어 있지 않다.

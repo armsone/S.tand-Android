@@ -2,9 +2,11 @@
 
 감사일: 2026-08-14 KST
 
-iOS 기준: `main` / `33711c009b7568779504a73685d616d6ec115db0`, `1.0.0 (0.25.1)`
+iOS 기준: `main` / `1c92b69`, `1.0.0 (0.32.5)`
 
-Android 기준: 작업 트리의 versionName `0.0.1`, versionCode `52`, 빌드 `0.0.52`
+Android 기준: 작업 트리의 versionName `0.0.1`, versionCode `55`, 빌드 `0.0.55`
+
+- 밝기·모드 핵심 경로: 자동 모드에서 Android 시스템 밝기를 앱의 기본 조명과 홈 하단 표시에 반영하고, 조도 센서·카메라 대체 판정은 오브제/매이트 전환에 유지한다. 세부 표와 미검증 실기기 항목은 `BRIGHTNESS_MODE_PARITY_MATRIX.md` 참조.
 
 ## 2026-08-15 iOS 0.29.5 잠소리·수면 리포트 델타
 
@@ -265,3 +267,30 @@ UI 검증은 보류했다.
 | 공통 음량 정책 명칭 | `RadioVolumePolicy`를 `VolumeAdjustmentPolicy`로 변경하고 라디오 플레이어에도 공유 | 관련 JVM 테스트 통과 |
 | 편집 패널 자유 배치 | 저장 좌표를 캔버스·안전영역으로 제한하지 않도록 변경 | 관련 JVM 테스트 통과 |
 | UI 카탈로그 고정 날짜 | Android는 카탈로그 인자를 전달할 때만 고정 날짜를 사용하므로 기존부터 일치 | 소스 역대조 |
+
+## 2026-08-20 iOS 1.0.0 (0.32.5) 음악 6카드·고정 스트립·잠소리 스와이프 삭제 델타
+
+iOS 기준: `../S.tand`의 `1c92b69`, `1.0.0 (0.32.5)`. `AppSettings.swift`, `RootView.swift`,
+`SettingsView.swift`, `RecordingsView.swift`, `StandViewModel.swift`,
+`STandTests/AudioAnalysisTests.swift`를 읽기 전용으로 대조했다. 기존 미커밋 밝기/모드 변경
+(`StandViewModel.kt`, `StandPolicies.kt`, `StandHomeScreen.kt`, `StandUiState.kt`,
+`AppPoliciesTest.kt`)은 되돌리지 않고 그 위에 이번 델타를 적용했다.
+
+| 항목 | Android 대응 | 근거/검증 |
+|---|---|---|
+| 6카드 음악 채널 모델 | `HomeMusicChannelSelection`에 `radioSlot`을 추가하고 `HomeMusicChannelPolicy.normalized`를 iOS `normalizedHomeMusicChannels`와 동일한 순서 규칙(요청 순서 유지 → 없는 Spotify/YouTube Music 보강 → 빈 슬롯 포함 4개 라디오 슬롯 보강)으로 이식 | `구현`·`단위`(`HomeMusicChannelPolicyTest`), 실기기 대기 |
+| 라디오 채널 4개 확장 | `AppSettings.MAXIMUM_INTERNET_RADIO_CHANNEL_COUNT`를 2→4로 올리고 기존 2개 슬롯 저장값·`SettingsRepository`의 `internetRadioId/Name/Url.<index>` 로딩 루프가 그대로 4개까지 확장되도록 유지 | `구현`·`단위`, 실기기 대기 |
+| 홈 음악 채널 저장 키 이전 | `homeMusicChannel.0`..`.5` 6개 키로 확장하고 `HomeMusicChannelSelection.decode`가 구 `radio:<id>` 형식(슬롯 없음)과 신 `radio:<slot>:<id>` 형식을 모두 복호화 | `구현`·`단위`(레거시 디코드 테스트) |
+| 고정 수평 음악 스트립 | 로고/헤더 아래 `MusicChannelStrip`을 새로 추가하고 기존 캔버스 이동식 `radio`/`secondaryRadio` 패널 렌더링을 제거. 간격 8dp, 좌우 여백 12dp, 카드 높이 60dp, 카드 폭 임계값·가로 폰 0.8배율, 클램프된 가로 드래그 스크롤을 `MusicChannelStripLayoutPolicy`로 이식 | `구현`·`단위`(`AppPoliciesTest`의 strip 레이아웃 테스트), 실기기 시각 검증 대기 |
+| 화면 편집에서 라디오 패널 제거 | 최신 iOS `RootView.swift`에는 이동 가능한 라디오 편집 패널이 더 이상 존재하지 않는다. Android `ScreenEditorScreen.kt`의 `EditorPanelKey.Radio`/`SecondaryRadio`와 관련 병합·분리(`RadioGroupPolicy`) 연결을 제거했다 | `구현`, 실기기 대기 |
+| 설정 음악 카드 6슬롯 | `SettingsScreen.kt`의 홈 버튼 배치를 2개→6개 카드로 확장하고 제목을 iOS 문구 `홈 음악 채널 순서`로 맞췄다. iOS는 드래그 재정렬(`moveHomeMusicChannel`)을 쓰지만 Android는 기존에 있던 카드별 드롭다운 선택 방식을 유지해 같은 결과(카드 순서 변경)를 접근성 친화적으로 제공한다. 이 상호작용 차이는 의도적 플랫폼 차이로 문서화한다 | `구현`, 실기기 대기 |
+| 잠소리 좌측 스와이프 즉시 삭제 | `RecordingSwipeDeletePolicy`(임계 56dp, 최대 노출 112dp, 좌우 우세 판정)를 이식하고 `RecordingsScreen.kt`의 세션·기타·합본 목록 각 행에 `SwipeToDeleteRow`를 적용했다. 접근성 커스텀 액션 이름은 `바로 삭제`로 iOS와 동일하며, 기존 명시적 삭제 버튼·확인 다이얼로그 흐름은 그대로 보존했다 | `구현`·`단위`(`AppPoliciesTest`의 스와이프 판정 테스트), 실기기 제스처 검증 대기 |
+| 하단 버튼 명칭 | `잠소리`/`설정`/`보이소`로 정확히 맞추고 기본 순서를 iOS `[.recordings, .boyiso, .settings]`와 동일하게 `StandControlKind.DefaultOrder`를 `[RECORDINGS, BOYISO, SETTINGS]`로 수정 | `구현`·`단위`(`AppPoliciesTest`) |
+| 폰 가로 고정 컨트롤 | `PhoneLandscapeSideControlsPolicy.isEnabled(!isPortrait && !isExpandedWidth)`를 이식해 600dp 미만 가로에서는 음악 스트립 옆에 고정 세로 컨트롤 칼럼을, 600dp 이상은 기존 적응형 하단 배치를 유지 | `구현`·`단위`, 실기기 시각 검증 대기 |
+| MusicKit 다음 곡 동작 | Android에는 Apple MusicKit에 해당하는 공개 인앱 재생·다음곡 API가 없다. Spotify/YouTube Music은 각 공식 앱을 여는 안전한 외부 실행만 지원하므로 iOS의 곡 제목 탭 재생/다음곡 구분(`ExternalMusicTitleTapPolicy`)은 이식하지 않았다. 이는 Android 공개 API 부재로 인한 플랫폼 제약이며, 추측 구현을 만들지 않고 기존 "앱 열기" 동작만 유지한다 | `플랫폼 차이`, 대체 불가 |
+
+검증: `testDebugUnitTest` 177개, `assembleDebug`, `assembleDebugAndroidTest`, `lintDebug`가
+통과했다. 동일 APK를 `SM-F968N`에 데이터 유지 설치하고 versionCode 55, 실행, 고정 6카드
+스트립과 `[잠소리, 보이소, 설정]` 순서를 직접 확인했다. UI 카탈로그 11개 계측 테스트는 두 번
+모두 실패 0이었지만, 트라이폴드의 다중 디스플레이 캡처가 두 번째 패스에서 앱 프레임을 다르게
+기록해 exact SHA 안정성 판정은 보류한다.

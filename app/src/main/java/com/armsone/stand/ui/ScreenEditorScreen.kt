@@ -122,7 +122,6 @@ import com.armsone.stand.model.HomeEditorResetPolicy
 import com.armsone.stand.model.OrientationPreference
 import com.armsone.stand.model.PanelEditingPolicy
 import com.armsone.stand.model.PanelTransform
-import com.armsone.stand.model.RadioGroupPolicy
 import com.armsone.stand.model.StandControlKind
 import com.armsone.stand.model.StandDisplayTheme
 import com.armsone.stand.model.StandScreenLayout
@@ -170,7 +169,7 @@ fun ScreenEditorScreen(
     val latestLayout = rememberUpdatedState(layout)
     val latestClockFont = rememberUpdatedState(clockFont)
     val latestClockHourMode = rememberUpdatedState(clockHourMode)
-    val validPanels = panelKeys(layout, state.settings.homeMusicChannels.size)
+    val validPanels = panelKeys(layout)
 
     LaunchedEffect(validPanels, selectedPanel) {
         if (selectedPanel !in validPanels) selectedPanel = validPanels.first()
@@ -413,17 +412,12 @@ private fun PanelCanvas(
                     scaleY = state.settings.clockScale
                 },
         ) {
-            val musicChannels = state.settings.homeMusicChannels.take(2)
-            val fixedPanels = buildList {
-                add(EditorPanelKey.Clock)
-                add(EditorPanelKey.Seconds)
-                add(EditorPanelKey.Date)
-                add(EditorPanelKey.Battery)
-                add(EditorPanelKey.Radio)
-                if (musicChannels.isNotEmpty() && !layout.radiosGrouped) {
-                    add(EditorPanelKey.SecondaryRadio)
-                }
-            }
+            val fixedPanels = listOf(
+                EditorPanelKey.Clock,
+                EditorPanelKey.Seconds,
+                EditorPanelKey.Date,
+                EditorPanelKey.Battery,
+            )
             fixedPanels.forEach { key ->
                 EditablePanelNode(
                     key = key,
@@ -432,140 +426,35 @@ private fun PanelCanvas(
                     screenScale = state.settings.clockScale,
                     protectedInsets = protectedInsets,
                     selected = selectedPanel == key,
-                    onClick = when {
-                        key == EditorPanelKey.Clock -> onClockClick
-                        key == EditorPanelKey.Radio &&
-                            musicChannels.size == 2 &&
-                            layout.radiosGrouped -> {
-                            {
-                                onLayoutChange(RadioGroupPolicy.split(layout))
-                                onSelectedPanelChange(EditorPanelKey.Radio)
-                            }
-                        }
-                        key == EditorPanelKey.Radio && musicChannels.isEmpty() -> onManageRadios
-                        key == EditorPanelKey.SecondaryRadio &&
-                            musicChannels.getOrNull(1) == null -> onManageRadios
-                        else -> ({ onSelectedPanelChange(key) })
+                    onClick = if (key == EditorPanelKey.Clock) {
+                        onClockClick
+                    } else {
+                        ({ onSelectedPanelChange(key) })
                     },
                     onGestureSelect = { onSelectedPanelChange(key) },
-                    onDoubleClick = when {
-                        key == EditorPanelKey.Clock -> onClockDoubleClick
-                        key == EditorPanelKey.Radio &&
-                            musicChannels.size == 2 &&
-                            layout.radiosGrouped -> {
-                            {
-                                onLayoutChange(RadioGroupPolicy.split(layout))
-                                onSelectedPanelChange(EditorPanelKey.Radio)
-                            }
-                        }
-                        else -> null
-                    },
+                    onDoubleClick = if (key == EditorPanelKey.Clock) onClockDoubleClick else null,
                     onTransformChange = { transform ->
                         onLayoutChange(layout.withPanelTransform(key, transform))
                     },
-                    onTransformEnd = if (
-                        musicChannels.size == 2 &&
-                        !layout.radiosGrouped &&
-                        (key == EditorPanelKey.Radio || key == EditorPanelKey.SecondaryRadio)
-                    ) {
-                        { finalTransform ->
-                            val movedLayout = layout.withPanelTransform(key, finalTransform)
-                            val firstSize = measuredPanelSizes[EditorPanelKey.Radio]
-                            val secondSize = measuredPanelSizes[EditorPanelKey.SecondaryRadio]
-                            val mergedLayout = if (firstSize != null && secondSize != null) {
-                                RadioGroupPolicy.mergeIfOverlapping(
-                                    layout = movedLayout,
-                                    firstBounds = PanelEditingPolicy.transformedBounds(
-                                        transform = movedLayout.radio,
-                                        panelSize = firstSize,
-                                        canvasSize = canvas,
-                                        screenScale = state.settings.clockScale,
-                                    ),
-                                    secondBounds = PanelEditingPolicy.transformedBounds(
-                                        transform = movedLayout.secondaryRadio,
-                                        panelSize = secondSize,
-                                        canvasSize = canvas,
-                                        screenScale = state.settings.clockScale,
-                                    ),
-                                )
-                            } else {
-                                movedLayout
-                            }
-                            onLayoutChange(mergedLayout)
-                            if (mergedLayout.radiosGrouped) {
-                                onSelectedPanelChange(EditorPanelKey.Radio)
-                            }
-                        }
-                    } else {
-                        null
-                    },
+                    onTransformEnd = null,
                     onMeasured = { measuredPanelSizes[key] = it },
                 ) {
-                    if (key == EditorPanelKey.Radio || key == EditorPanelKey.SecondaryRadio) {
-                        LiveEditorSelection(selected = selectedPanel == key) {
-                            if (key == EditorPanelKey.Radio &&
-                                musicChannels.size == 2 &&
-                                layout.radiosGrouped
-                            ) {
-                                GroupedMusicPanel(
-                                    state = state,
-                                    selections = musicChannels,
-                                    contentAlpha = contentAlpha,
-                                    onToggleRadio = {
-                                        onLayoutChange(RadioGroupPolicy.split(layout))
-                                        onSelectedPanelChange(EditorPanelKey.Radio)
-                                    },
-                                    onEditRadio = {},
-                                    onOpenExternalMusic = {
-                                        onLayoutChange(RadioGroupPolicy.split(layout))
-                                        onSelectedPanelChange(EditorPanelKey.Radio)
-                                    },
-                                    onEndExternalMusic = {},
-                                )
-                            } else {
-                                val selection = if (key == EditorPanelKey.SecondaryRadio) {
-                                    musicChannels.getOrNull(1)
-                                } else {
-                                    musicChannels.firstOrNull()
-                                }
-                                if (selection == null) {
-                                    RadioPanel(
-                                        state = state,
-                                        configuration = null,
-                                        contentAlpha = contentAlpha,
-                                        onClick = onManageRadios,
-                                    )
-                                } else {
-                                    MusicPanel(
-                                        state = state,
-                                        selection = selection,
-                                        contentAlpha = contentAlpha,
-                                        onToggleRadio = { onSelectedPanelChange(key) },
-                                        onEditRadio = {},
-                                        onOpenExternalMusic = { onSelectedPanelChange(key) },
-                                        onEndExternalMusic = {},
-                                    )
-                                }
-                            }
-                        }
-                    } else {
-                        LiveEditorPanelContent(
-                            key = key,
-                            state = state,
-                            clockFont = clockFont,
-                            clockHourMode = clockHourMode,
+                    LiveEditorPanelContent(
+                        key = key,
+                        state = state,
+                        clockFont = clockFont,
+                        clockHourMode = clockHourMode,
+                        isPortrait = isPortrait,
+                        contentAlpha = contentAlpha,
+                        selected = selectedPanel == key,
+                        secondsShowsBackground = !clockSecondsOverlapsClock(
+                            layout = layout,
+                            canvasWidthDp = canvasWidthDp,
+                            canvasHeightDp = canvasHeightDp,
                             isPortrait = isPortrait,
-                            contentAlpha = contentAlpha,
-                            selected = selectedPanel == key,
-                            secondsShowsBackground = !clockSecondsOverlapsClock(
-                                layout = layout,
-                                canvasWidthDp = canvasWidthDp,
-                                canvasHeightDp = canvasHeightDp,
-                                isPortrait = isPortrait,
-                            ),
-                            catalogNow = catalogNow,
-                        )
-                    }
+                        ),
+                        catalogNow = catalogNow,
+                    )
                 }
             }
 
@@ -911,10 +800,6 @@ private fun LiveEditorPanelContent(
                     )
                 }
             }
-
-            EditorPanelKey.Radio,
-            EditorPanelKey.SecondaryRadio,
-            -> Unit
 
             is EditorPanelKey.Weather -> Unit
         }
@@ -1629,8 +1514,6 @@ private sealed interface EditorPanelKey {
     data object Date : EditorPanelKey
     data object Status : EditorPanelKey
     data object Battery : EditorPanelKey
-    data object Radio : EditorPanelKey
-    data object SecondaryRadio : EditorPanelKey
 }
 
 private val EditorPanelKeySaver = Saver<EditorPanelKey, String>(
@@ -1642,8 +1525,6 @@ private val EditorPanelKeySaver = Saver<EditorPanelKey, String>(
             EditorPanelKey.Date -> "date"
             EditorPanelKey.Status -> "status"
             EditorPanelKey.Battery -> "battery"
-            EditorPanelKey.Radio -> "radio"
-            EditorPanelKey.SecondaryRadio -> "secondaryRadio"
         }
     },
     restore = { saved ->
@@ -1653,8 +1534,6 @@ private val EditorPanelKeySaver = Saver<EditorPanelKey, String>(
             saved == "date" -> EditorPanelKey.Date
             saved == "status" -> EditorPanelKey.Status
             saved == "battery" -> EditorPanelKey.Battery
-            saved == "radio" -> EditorPanelKey.Radio
-            saved == "secondaryRadio" -> EditorPanelKey.SecondaryRadio
             saved.startsWith("weather:") -> saved.substringAfter(':').toIntOrNull()
                 ?.let { groupId -> EditorPanelKey.Weather(groupId) }
             else -> null
@@ -1675,8 +1554,6 @@ private val EditorPanelKey.title: String
         EditorPanelKey.Date -> "날짜"
         EditorPanelKey.Status -> "상태"
         EditorPanelKey.Battery -> "배터리"
-        EditorPanelKey.Radio -> "라디오"
-        EditorPanelKey.SecondaryRadio -> "두 번째 라디오"
     }
 
 private val EditorPanelKey.testTag: String
@@ -1687,8 +1564,6 @@ private val EditorPanelKey.testTag: String
         EditorPanelKey.Date -> "editor_panel_date"
         EditorPanelKey.Status -> "editor_panel_status"
         EditorPanelKey.Battery -> "editor_panel_battery"
-        EditorPanelKey.Radio -> "editor_panel_radio"
-        EditorPanelKey.SecondaryRadio -> "editor_panel_secondary_radio"
     }
 
 private val EditorPanelKey.icon: ImageVector
@@ -1699,8 +1574,6 @@ private val EditorPanelKey.icon: ImageVector
         EditorPanelKey.Date -> Icons.Default.CalendarMonth
         EditorPanelKey.Status -> Icons.Default.Info
         EditorPanelKey.Battery -> Icons.Default.BatteryChargingFull
-        EditorPanelKey.Radio -> Icons.Default.GraphicEq
-        EditorPanelKey.SecondaryRadio -> Icons.Default.GraphicEq
     }
 
 private fun EditorPanelKey.titleFor(layout: StandScreenLayout): String = when (this) {
@@ -1721,17 +1594,12 @@ private fun EditorPanelKey.titleFor(layout: StandScreenLayout): String = when (t
     else -> title
 }
 
-private fun panelKeys(
-    layout: StandScreenLayout,
-    radioCount: Int = 1,
-): List<EditorPanelKey> = buildList {
+private fun panelKeys(layout: StandScreenLayout): List<EditorPanelKey> = buildList {
     add(EditorPanelKey.Clock)
     add(EditorPanelKey.Seconds)
     layout.weatherGroupIds.distinct().sorted().forEach { add(EditorPanelKey.Weather(it)) }
     add(EditorPanelKey.Date)
     add(EditorPanelKey.Battery)
-    add(EditorPanelKey.Radio)
-    if (radioCount >= 1 && !layout.radiosGrouped) add(EditorPanelKey.SecondaryRadio)
 }
 
 private fun StandScreenLayout.weatherPieces(groupId: Int): List<WeatherPiece> =
@@ -1747,8 +1615,6 @@ private fun StandScreenLayout.transformFor(key: EditorPanelKey): PanelTransform 
     EditorPanelKey.Date -> date
     EditorPanelKey.Status -> status
     EditorPanelKey.Battery -> battery
-    EditorPanelKey.Radio -> radio
-    EditorPanelKey.SecondaryRadio -> secondaryRadio
 }
 
 private fun StandScreenLayout.withPanelTransform(
@@ -1767,8 +1633,6 @@ private fun StandScreenLayout.withPanelTransform(
     EditorPanelKey.Date -> copy(date = transform)
     EditorPanelKey.Status -> copy(status = transform)
     EditorPanelKey.Battery -> copy(battery = transform)
-    EditorPanelKey.Radio -> copy(radio = transform)
-    EditorPanelKey.SecondaryRadio -> copy(secondaryRadio = transform)
 }
 
 private fun bestWeatherMergeCandidate(

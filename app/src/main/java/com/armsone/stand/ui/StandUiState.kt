@@ -21,6 +21,8 @@ data class WeatherUiState(
 data class StandUiState(
     val settings: AppSettings = AppSettings.Recommended,
     val isSessionActive: Boolean = false,
+    /** Base app illumination, separate from temporary startle/fade intensity. */
+    val displayBrightness: Float = settings.lampIntensity,
     val lampIntensity: Float = 0f,
     val lampPhase: LampPhase = LampPhase.OFF,
     val environmentMode: EnvironmentDisplayMode = EnvironmentDisplayMode.OBJECT,

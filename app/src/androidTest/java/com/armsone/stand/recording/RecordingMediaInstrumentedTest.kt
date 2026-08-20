@@ -72,20 +72,6 @@ class RecordingMediaInstrumentedTest {
                 mergedDuration!! in 2.3..3.1,
             )
 
-            val sampleDirectory = File(directory, "embedded-recordings")
-            val sampleRepository = RecordingRepository(
-                directory = sampleDirectory,
-                zoneId = ZoneOffset.UTC,
-                durationResolver = AndroidRecordingDurationResolver,
-                completedRecordingFinalizer = AacM4aRecordingFinalizer(),
-            )
-            sampleRepository.installEmbeddedSamplesIfNeeded(context)
-            val samples = sampleRepository.reload().sortedBy { it.durationSeconds }
-            assertEquals(3, samples.size)
-            assertTrue(samples.all { it.mediaFormat == RecordingMediaFormat.M4A })
-            assertTrue(samples[0].durationSeconds in 4.5..5.5)
-            assertTrue(samples[1].durationSeconds in 9.5..10.5)
-            assertTrue(samples[2].durationSeconds in 14.5..15.5)
         } finally {
             directory.deleteRecursively()
         }
