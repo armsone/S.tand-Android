@@ -73,17 +73,23 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.font.FontFamily
@@ -186,6 +192,8 @@ fun StandHomeScreen(
     ) {
         val isPortrait = maxHeight > maxWidth
         val isExpanded = maxWidth >= 600.dp
+        val viewportWidthDp = maxWidth.value
+        val viewportHeightDp = maxHeight.value
         val visibleIntensity = if (state.isFaceDown || state.lampPhase == LampPhase.OFF) {
             0f
         } else {
@@ -295,7 +303,8 @@ fun StandHomeScreen(
 
             val usesPhoneLandscapeSideControls = PhoneLandscapeSideControlsPolicy.isEnabled(
                 isPortrait = isPortrait,
-                isExpandedWidth = isExpanded,
+                viewportWidth = viewportWidthDp,
+                viewportHeight = viewportHeightDp,
             )
 
             Column(
@@ -1229,18 +1238,25 @@ internal fun MusicChannelStrip(
             offsetDp = MusicChannelStripLayoutPolicy.clampedOffset(offsetDp, maximumScrollDp)
         }
 
-        Row(
+        Box(
             modifier = Modifier
-                .offset(x = (MusicChannelStripLayoutPolicy.SIDE_INSET + offsetDp).dp)
+                .fillMaxSize()
+                .testTag("music_channel_strip")
+                .clipToBounds()
+                .musicChannelStripEdgeMask(
+                    showsLeadingFade = offsetDp < -0.5f,
+                    showsTrailingFade = offsetDp > -maximumScrollDp + 0.5f,
+                )
                 .then(
                     if (maximumScrollDp > 0f) {
                         Modifier.pointerInput(maximumScrollDp) {
                             detectHorizontalDragGestures { change, dragAmountPx ->
                                 change.consume()
                                 val dragAmountDp = with(density) { dragAmountPx.toDp().value }
-                                offsetDp = MusicChannelStripLayoutPolicy.clampedOffset(
-                                    offsetDp + dragAmountDp,
-                                    maximumScrollDp,
+                                offsetDp = MusicChannelStripLayoutPolicy.draggedOffset(
+                                    offset = offsetDp,
+                                    dragAmount = dragAmountDp,
+                                    maximumScroll = maximumScrollDp,
                                 )
                             }
                         }
@@ -1248,26 +1264,70 @@ internal fun MusicChannelStrip(
                         Modifier
                     },
                 ),
-            horizontalArrangement = Arrangement.spacedBy(MusicChannelStripLayoutPolicy.SPACING.dp),
         ) {
-            channels.forEach { selection ->
-                MusicPanel(
-                    state = state,
-                    selection = selection,
-                    contentAlpha = contentAlpha,
-                    width = cardWidthDp.dp,
-                    onToggleRadio = onToggleRadio,
-                    onEditRadio = onEditRadio,
-                    onRegisterRadio = onRegisterRadio,
-                    onOpenExternalMusic = onOpenExternalMusic,
-                    onEndExternalMusic = onEndExternalMusic,
-                )
+            Row(
+                modifier = Modifier.offset(
+                    x = (MusicChannelStripLayoutPolicy.SIDE_INSET + offsetDp).dp,
+                ),
+                horizontalArrangement = Arrangement.spacedBy(
+                    MusicChannelStripLayoutPolicy.SPACING.dp,
+                ),
+            ) {
+                channels.forEach { selection ->
+                    MusicPanel(
+                        state = state,
+                        selection = selection,
+                        contentAlpha = contentAlpha,
+                        width = cardWidthDp.dp,
+                        onToggleRadio = onToggleRadio,
+                        onEditRadio = onEditRadio,
+                        onRegisterRadio = onRegisterRadio,
+                        onOpenExternalMusic = onOpenExternalMusic,
+                        onEndExternalMusic = onEndExternalMusic,
+                    )
+                }
             }
         }
     }
 }
 
-/** Phone landscape fixed control column beside the music strip (600dp+ stays adaptive). */
+private fun Modifier.musicChannelStripEdgeMask(
+    showsLeadingFade: Boolean,
+    showsTrailingFade: Boolean,
+): Modifier {
+    if (!showsLeadingFade && !showsTrailingFade) return this
+    return graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+        .drawWithContent {
+            drawContent()
+            if (showsLeadingFade) {
+                val fadeWidth = 24.dp.toPx().coerceAtMost(size.width)
+                drawRect(
+                    brush = Brush.horizontalGradient(
+                        colors = listOf(Color.Transparent, Color.Black),
+                        startX = 0f,
+                        endX = fadeWidth,
+                    ),
+                    size = Size(fadeWidth, size.height),
+                    blendMode = BlendMode.DstIn,
+                )
+            }
+            if (showsTrailingFade) {
+                val fadeWidth = 28.dp.toPx().coerceAtMost(size.width)
+                drawRect(
+                    brush = Brush.horizontalGradient(
+                        colors = listOf(Color.Black, Color.Transparent),
+                        startX = size.width - fadeWidth,
+                        endX = size.width,
+                    ),
+                    topLeft = Offset(size.width - fadeWidth, 0f),
+                    size = Size(fadeWidth, size.height),
+                    blendMode = BlendMode.DstIn,
+                )
+            }
+        }
+}
+
+/** Phone landscape controls fixed to the right of the independently sliding music strip. */
 @Composable
 internal fun PhoneLandscapeSideControls(
     state: StandUiState,
@@ -1278,11 +1338,9 @@ internal fun PhoneLandscapeSideControls(
     boyisoCanSendTokTok: Boolean,
     onSendBoyisoTokTok: () -> Unit,
 ) {
-    val controlOrder = listOf(
-        StandControlKind.RECORDINGS,
-        StandControlKind.BOYISO,
-        StandControlKind.SETTINGS,
-    )
+    val controlOrder = state.settings.landscapeLayout.controlOrder.filter {
+        it in StandControlKind.DefaultOrder
+    }
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         controlOrder.forEach { kind ->
             val defaultAction = when (kind) {
@@ -1295,7 +1353,10 @@ internal fun PhoneLandscapeSideControls(
                 shape = RoundedCornerShape(14.dp),
                 shadowElevation = 0.dp,
                 modifier = Modifier
-                    .size(width = 57.dp, height = MusicChannelStripLayoutPolicy.CARD_HEIGHT.dp)
+                    .size(
+                        width = PhoneLandscapeSideControlsPolicy.CONTROL_WIDTH.dp,
+                        height = MusicChannelStripLayoutPolicy.CARD_HEIGHT.dp,
+                    )
                     .standPanelSurface(isDimmed = false, cornerRadius = 14.dp, splitGap = 2.dp)
                     .combinedClickable(
                         onClick = if (kind == StandControlKind.BOYISO && boyisoCanSendTokTok) {

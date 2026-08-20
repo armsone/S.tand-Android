@@ -157,6 +157,13 @@ object LatestControlOrderMigration {
         }
 }
 
+/** Applies the representative iPhone landscape composition once while preserving every other choice. */
+object LatestLandscapeLayoutMigration {
+    fun apply(previous: AppSettings): AppSettings = previous.copy(
+        landscapeLayout = StandScreenLayout.Landscape,
+    ).normalized()
+}
+
 /** Maps an Android light sensor's very wide lux range onto the 0...1 UI rail. */
 object AmbientLightPolicy {
     private const val REFERENCE_LUX = 1_000.0

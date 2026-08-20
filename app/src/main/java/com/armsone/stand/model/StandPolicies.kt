@@ -203,14 +203,24 @@ object MusicChannelStripLayoutPolicy {
     fun clampedOffset(offset: Float, maximumScroll: Float): Float =
         min(0f, max(-maximumScroll, offset))
 
+    fun draggedOffset(offset: Float, dragAmount: Float, maximumScroll: Float): Float =
+        clampedOffset(offset + dragAmount, maximumScroll)
+
     fun leadingAlignedOffset(cardIndex: Int, cardWidth: Float, maximumScroll: Float): Float =
         clampedOffset(-max(0, cardIndex) * (cardWidth + SPACING), maximumScroll)
 }
 
-/** Fixed control column beside the music strip on phone landscape, adaptive from 600dp. */
+/** Fixed control column beside the music strip on phone-shaped landscape canvases. */
 object PhoneLandscapeSideControlsPolicy {
-    fun isEnabled(isPortrait: Boolean, isExpandedWidth: Boolean): Boolean =
-        !isPortrait && !isExpandedWidth
+    const val CONTROL_WIDTH = 57.12f
+    const val TABLET_MINIMUM_SHORT_EDGE = 600f
+
+    fun isEnabled(
+        isPortrait: Boolean,
+        viewportWidth: Float,
+        viewportHeight: Float,
+    ): Boolean = !isPortrait &&
+        min(viewportWidth, viewportHeight) < TABLET_MINIMUM_SHORT_EDGE
 }
 
 /** Matches iOS RecordingSwipeDeletePolicy: left-swipe-only immediate delete. */

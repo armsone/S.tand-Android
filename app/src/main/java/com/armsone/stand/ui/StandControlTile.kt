@@ -28,6 +28,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.armsone.stand.model.OrientationPreference
 import com.armsone.stand.model.StandControlKind
 import kotlin.math.roundToInt
@@ -134,14 +135,16 @@ internal fun StandControlTileContent(
             Text(
                 text = presentation.title,
                 color = Color.White.copy(alpha = 0.86f),
-                style = MaterialTheme.typography.labelSmall,
+                fontSize = 10.5.sp,
+                fontWeight = FontWeight.SemiBold,
                 textAlign = TextAlign.Center,
                 maxLines = 1,
             )
             Text(
                 text = presentation.status,
                 color = Color.White.copy(alpha = 0.42f),
-                style = MaterialTheme.typography.labelSmall,
+                fontSize = 8.5.sp,
+                fontWeight = FontWeight.Medium,
                 textAlign = TextAlign.Center,
                 maxLines = 1,
             )

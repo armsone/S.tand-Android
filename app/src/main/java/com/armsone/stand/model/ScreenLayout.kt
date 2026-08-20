@@ -144,27 +144,31 @@ data class StandScreenLayout(
             get() {
                 val weather = PanelTransform(
                     x = 0f,
-                    y = -0.25582024f,
-                    scale = 0.68640333f,
+                    y = -0.067452006f,
+                    scale = 0.55f,
                 )
                 return StandScreenLayout(
                     clock = PanelTransform(
                         x = 0f,
-                        y = 0.07155323f,
-                        scale = 1.2810187f,
+                        y = 0.21553229f,
+                        scale = 1.1122912f,
                     ),
-                    seconds = PanelTransform(x = 0.25088888f, y = 0.21401048f),
+                    seconds = PanelTransform(
+                        x = 0.192f,
+                        y = 0.29101223f,
+                        scale = 0.82054085f,
+                    ),
                     weatherIcon = weather,
                     weatherTemperature = weather,
                     weatherCondition = weather,
-                    date = PanelTransform(x = -0.176f, y = -0.0826527f),
-                    status = PanelTransform(x = 0f, y = 0.4646597f),
-                    brightnessRule = PanelTransform(x = 0f, y = 0.32f),
-                    battery = PanelTransform(x = 0f, y = 0.29780105f),
-                    radio = PanelTransform(x = 0.40844443f, y = -0.276274f, scale = 0.75f),
+                    date = PanelTransform(x = 0f, y = 0.43815008f, scale = 0.85f),
+                    status = PanelTransform(x = 0f, y = 0.5f),
+                    brightnessRule = PanelTransform(x = 0f, y = 0.34f),
+                    battery = PanelTransform(x = 0f, y = 0.5245899f),
+                    radio = PanelTransform(x = 0.4f, y = -0.3f, scale = 0.75f),
                     secondaryRadio = PanelTransform(
-                        x = -0.40577778f,
-                        y = -0.276274f,
+                        x = -0.4f,
+                        y = -0.3f,
                         scale = 0.75f,
                     ),
                     radiosGrouped = false,

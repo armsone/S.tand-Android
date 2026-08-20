@@ -31,19 +31,21 @@ class ScreenLayoutTest {
         assertEquals(StandControlKind.DefaultOrder, portrait.controlOrder)
 
         val landscape = StandScreenLayout.Landscape
-        assertEquals(PanelTransform(0f, 0.07155323f, 1.2810187f), landscape.clock)
-        assertEquals(PanelTransform(0.25088888f, 0.21401048f, 1f), landscape.seconds)
+        assertEquals(PanelTransform(0f, 0.21553229f, 1.1122912f), landscape.clock)
+        assertEquals(PanelTransform(0.192f, 0.29101223f, 0.82054085f), landscape.seconds)
         assertEquals(
-            PanelTransform(0f, -0.25582024f, 0.68640333f),
+            PanelTransform(0f, -0.067452006f, 0.55f),
             landscape.weatherIcon,
         )
-        assertEquals(PanelTransform(-0.176f, -0.0826527f, 1f), landscape.date)
-        assertEquals(PanelTransform(0f, 0.4646597f, 1f), landscape.status)
-        assertEquals(PanelTransform(0f, 0.32f, 1f), landscape.brightnessRule)
-        assertEquals(PanelTransform(0f, 0.29780105f, 1f), landscape.battery)
-        assertEquals(PanelTransform(0.40844443f, -0.276274f, 0.75f), landscape.radio)
+        assertEquals(landscape.weatherIcon, landscape.weatherTemperature)
+        assertEquals(landscape.weatherIcon, landscape.weatherCondition)
+        assertEquals(PanelTransform(0f, 0.43815008f, 0.85f), landscape.date)
+        assertEquals(PanelTransform(0f, 0.5f, 1f), landscape.status)
+        assertEquals(PanelTransform(0f, 0.34f, 1f), landscape.brightnessRule)
+        assertEquals(PanelTransform(0f, 0.5245899f, 1f), landscape.battery)
+        assertEquals(PanelTransform(0.4f, -0.3f, 0.75f), landscape.radio)
         assertEquals(
-            PanelTransform(-0.40577778f, -0.276274f, 0.75f),
+            PanelTransform(-0.4f, -0.3f, 0.75f),
             landscape.secondaryRadio,
         )
         assertFalse(landscape.radiosGrouped)

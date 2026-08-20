@@ -9,6 +9,7 @@ import com.armsone.stand.model.CurrentExperienceMigration
 import com.armsone.stand.model.OrientationPreference
 import com.armsone.stand.model.InternetRadioConfiguration
 import com.armsone.stand.model.LatestControlOrderMigration
+import com.armsone.stand.model.LatestLandscapeLayoutMigration
 import com.armsone.stand.model.HomeMusicChannelPolicy
 import com.armsone.stand.model.HomeMusicChannelSelection
 import com.armsone.stand.model.ScreenLayoutCodec
@@ -64,6 +65,15 @@ class SettingsRepository(context: Context) {
                 preservedUnreadableStrings = unreadableStringPayloads(current, migrated),
             )
             preferences.edit { putBoolean(LATEST_CONTROL_ORDER_MIGRATION_KEY, true) }
+            current = migrated
+        }
+        if (!booleanValue(LATEST_LANDSCAPE_LAYOUT_MIGRATION_KEY, false)) {
+            val migrated = LatestLandscapeLayoutMigration.apply(current)
+            persist(
+                migrated,
+                preservedUnreadableStrings = unreadableStringPayloads(current, migrated),
+            )
+            preferences.edit { putBoolean(LATEST_LANDSCAPE_LAYOUT_MIGRATION_KEY, true) }
             current = migrated
         }
         return current
@@ -278,5 +288,6 @@ class SettingsRepository(context: Context) {
         const val LEGACY_RADIO_ID = "legacy-primary-radio"
         const val CURRENT_EXPERIENCE_MIGRATION_KEY = "currentExperienceDefaults.v1"
         const val LATEST_CONTROL_ORDER_MIGRATION_KEY = "latestControlOrder.v2"
+        const val LATEST_LANDSCAPE_LAYOUT_MIGRATION_KEY = "landscapeLayoutDefault.v4"
     }
 }

@@ -4,7 +4,15 @@
 
 iOS 기준: `main` / `1c92b69`, `1.0.0 (0.32.5)`
 
-Android 기준: 작업 트리의 versionName `0.0.1`, versionCode `55`, 빌드 `0.0.55`
+Android 기준: 작업 트리의 versionName `0.0.1`, versionCode `57`, 빌드 `0.0.57`
+
+## 2026-08-20 iPhone 가로 기본 배치 누락 보완
+
+- iOS `1c92b69`의 `StandScreenLayout.landscape` 수치를 Android 가로 기본 배치에 직접 대응했다. 시계·초·날씨 3조각·날짜·상태·밝기 기준·배터리·두 라디오의 위치와 크기가 대상이다.
+- iOS와 같은 일회성 가로 기본값 마이그레이션을 추가해 기존 설치에서도 가로 배치만 새 기준으로 바꾸고 세로 배치와 글꼴·대기 시간 등 다른 선택은 유지한다.
+- iPhone 가로의 고정 음악 카드 옆 제어 버튼 폭도 iOS의 `57.12`와 일치시켰다.
+- versionCode 57에서는 첨부된 iPhone 가로 원본(1280×588, SHA-256 `325504f0f34b5cef8db1ce4f7301af8fc13d1a52ca0b923e901982889631dbce`)을 추가 기준으로 삼았다. 오른쪽 잠소리·보이소·설정 3개 버튼을 고정하고, 왼쪽 음악 채널만 고정 영역 안에서 좌우 드래그되도록 입력 범위와 clipping을 분리했으며 24/28pt 대응 양끝 페이드를 적용했다.
+- 관련 `ScreenLayoutTest`·`AppPoliciesTest`와 `assembleDebug`, 가로 슬라이딩 계측 테스트 소스 빌드가 통과했고 `SM-F968N`에 versionCode 57 설치·실행을 확인했다. 슬라이딩 계측 실행은 검증 도중 기기 디스플레이가 꺼져 Compose hierarchy를 만들지 못해 환경 실패했으며, 이를 기능 통과로 과장하지 않는다. iOS와 Android의 최신 실화면 paired capture는 별도 검증으로 남는다.
 
 - 밝기·모드 핵심 경로: 자동 모드에서 Android 시스템 밝기를 앱의 기본 조명과 홈 하단 표시에 반영하고, 조도 센서·카메라 대체 판정은 오브제/매이트 전환에 유지한다. 세부 표와 미검증 실기기 항목은 `BRIGHTNESS_MODE_PARITY_MATRIX.md` 참조.
 

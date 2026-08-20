@@ -4,18 +4,29 @@ import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.isDisplayed
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipe
+import androidx.compose.ui.test.swipeLeft
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
 import androidx.test.platform.app.InstrumentationRegistry
 import com.armsone.stand.boyiso.BoyisoConfiguration
 import com.armsone.stand.boyiso.BoyisoState
@@ -38,6 +49,8 @@ import org.junit.Before
 import org.junit.FixMethodOrder
 import org.junit.Rule
 import org.junit.Test
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.runners.MethodSorters
 
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
@@ -84,6 +97,32 @@ class MatchupUiCatalogTest {
 
         setOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE)
         capture("home_landscape")
+    }
+
+    @Test
+    fun phoneLandscapeMusicStripSlidesWhileSettingsControlStaysFixed() {
+        composeRule.setContent {
+            CompositionLocalProvider(LocalDensity provides Density(density = 1f, fontScale = 1f)) {
+                STandTheme(displayTheme = StandDisplayTheme.COLOR) {
+                    Box(Modifier.size(width = 730.dp, height = 313.dp)) {
+                        CatalogHome(state = homeState())
+                    }
+                }
+            }
+        }
+        composeRule.waitForIdle()
+
+        val strip = composeRule.onNodeWithTag("music_channel_strip")
+        val before = strip.captureToImage().asAndroidBitmap()
+        val settingsBefore = composeRule.onNodeWithText("설정").fetchSemanticsNode().boundsInRoot
+
+        strip.performTouchInput { swipeLeft(durationMillis = 800) }
+        composeRule.waitForIdle()
+
+        val after = strip.captureToImage().asAndroidBitmap()
+        val settingsAfter = composeRule.onNodeWithText("설정").fetchSemanticsNode().boundsInRoot
+        assertFalse("음악 채널 영역이 왼쪽 스와이프 후에도 바뀌지 않았습니다.", before.sameAs(after))
+        assertEquals(settingsBefore, settingsAfter)
     }
 
     @Test

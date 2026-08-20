@@ -3,7 +3,7 @@
 기준일: 2026-08-15 KST
 
 - iOS 기준: `../S.tand` clean `main` / `2335ec382883c769bf70113ce6a724014af4eaa9` / `1.0.0 (0.29.5)`
-- Android 기준: 현재 작업 트리 / `0.0.1` / versionCode 52
+- Android 기준: 현재 작업 트리 / `0.0.1` / versionCode 57
 
 ## 2026-08-20 추가 노트
 
@@ -33,7 +33,9 @@ Compose root로 캡처하며 저장 경로·SHA·app bounds를 저장소 manifes
 |---|---|---|---|---|---|
 | `first_launch_permissions` | 최초 권한 설명 | 신규/권한 누락 예약 실행 | 동일 | permissions-missing/phone portrait | 확인 필요 |
 | `home_portrait` | 오브제 홈 | 일반 실행 | 일반 실행 | 2 radios, fixed clock/weather/phone portrait | 확인 필요 |
-| `home_landscape` | 오브제 홈 가로 | 기기 회전 | 기기 회전 | same fixture/phone landscape | 확인 필요 |
+| `home_landscape` | 오브제 홈 가로 | 기기 회전 | 기기 회전 | iOS 0.32.5 대표 iPhone 기본 좌표·배율 이식, fresh paired capture 필요 | 확인 필요 |
+| `home_landscape` | 상단 음악 채널 | horizontal drag/clipping/edge fade | iPhone 원본 1280×588 / Android phone landscape | 오른쪽 제어 버튼 전까지의 음악 영역만 좌우 드래그, 24/28pt edge fade | 부모 음악 viewport가 드래그를 선점하고 영역 밖을 자르며 같은 edge fade 적용 | 화면 꺼짐으로 fresh runtime capture 실패 | Android 실기기 swipe + before/after capture | source High | 구현·단위 테스트, 실화면 확인 필요 |
+| `home_landscape` | 잠소리·보이소·설정 | fixed placement/order | same | 음악 영역 오른쪽 상단에 3개 고정, 설정이 맨 오른쪽 | 같은 순서와 57.12dp 폭, 음악 영역과 별도 고정 Row | 화면 꺼짐으로 fresh screenshot 없음 | 실기기 landscape capture | source/image High | 구현·설치, 실화면 확인 필요 |
 | `home_mate` | 매이트 홈/잠금 | 자동 또는 유지 선택 | 동일 | mate locked | 확인 필요 |
 | `home_startle` | 화들짝 일시 상태 | 60초 뒤 유효 이벤트 | 동일 | dark recent camera + event | 확인 필요 |
 | `home_inactive` | 세션 중지 시작 화면 | 보호 중지 | 동일 | session inactive | 확인 필요 |
@@ -94,7 +96,7 @@ Compose root로 캡처하며 저장 경로·SHA·app bounds를 저장소 manifes
 | `home_portrait` | flip clock | font/card/gap/baseline | fixed 07:42:05 | selected font, split mask, seconds panel | Compose flip clock | time currently live | inject fixed clock then pixel compare | source Medium | 확인 필요 |
 | `home_portrait` | bottom controls | titles/status/icons/order | 3 clips/disconnected | 잠소리 확인, 보이소, 설정 열기 | same semantic controls | icon/geometry 미측정 | paired anatomy compare | source High | 확인 필요 |
 | `home_portrait` | bottom build | exact text/opacity/position | same | iOS build + brightness | Android build + brightness | platform versions differ(content/state) | classify/mask only version value, retain geometry | source High | 확인 필요 |
-| `home_landscape` | root/app bounds | orientation/geometry | same fixture/landscape | landscapeLeft normalized app frame | not freshly captured | missing pair | orientation-normalized capture | Low | 확인 필요 |
+| `home_landscape` | root/app bounds | orientation/geometry | same fixture/landscape | landscapeLeft normalized app frame | SM-F968N versionCode 56 실제 가로 캡처 확인 | fresh iOS pair missing | deterministic paired capture | Medium | Android 실기기 확인, paired 확인 필요 |
 | `home_mate` | center lock | icon/text/opacity | mate locked | 매이트 잠금 overlay | Android lock overlay | pixel mismatch unknown | paired capture + action trace | source High | 확인 필요 |
 | `home_startle` | mode/banner/background | state transition | 60s+dark event | `화들짝 모드`, temporary lamp/optional torch | Android same state names/policy | 5s/30s trace not paired | monotonic trace and captures at enter/exit | source High | 확인 필요 |
 | `home_inactive` | start content | exact text/CTA | inactive | `S.tand가 곁에 있을게요`, `S.tand 시작` | 동일하게 수정 | fresh capture 없음 | capture + start trace | source High | 확인 필요 |

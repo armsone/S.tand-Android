@@ -78,6 +78,28 @@ class AppPoliciesTest {
     }
 
     @Test
+    fun latestLandscapeLayoutMigrationResetsOnlyLandscapeAndPreservesLaterEditsWhenNotReapplied() {
+        val portrait = StandScreenLayout.Portrait.copy(
+            clock = PanelTransform(x = 0.12f, y = -0.08f, scale = 0.9f),
+        )
+        val previous = AppSettings.Recommended.copy(
+            portraitLayout = portrait,
+            landscapeLayout = StandScreenLayout.Landscape.copy(
+                clock = PanelTransform(x = -0.3f, y = 0.25f, scale = 0.6f),
+            ),
+            clockFont = ClockFontChoice.KAKAO_BIG_SANS,
+            holdDurationSeconds = 45f,
+        )
+
+        val migrated = LatestLandscapeLayoutMigration.apply(previous)
+
+        assertEquals(StandScreenLayout.Landscape, migrated.landscapeLayout)
+        assertEquals(portrait, migrated.portraitLayout)
+        assertEquals(ClockFontChoice.KAKAO_BIG_SANS, migrated.clockFont)
+        assertEquals(45f, migrated.holdDurationSeconds, 0f)
+    }
+
+    @Test
     fun cameraAmbientSensingIsOptIn() {
         assertFalse(AppSettings.Recommended.cameraAmbientSensingEnabled)
     }
@@ -205,15 +227,47 @@ class AppPoliciesTest {
     }
 
     @Test
-    fun phoneLandscapeSideControlsAppearOnlyForNonExpandedLandscape() {
+    fun phoneLandscapeSideControlsUseShortEdgeToKeepWideFoldablesInPhoneLayout() {
+        assertEquals(57.12f, PhoneLandscapeSideControlsPolicy.CONTROL_WIDTH, 0.001f)
         assertTrue(
-            PhoneLandscapeSideControlsPolicy.isEnabled(isPortrait = false, isExpandedWidth = false),
+            PhoneLandscapeSideControlsPolicy.isEnabled(
+                isPortrait = false,
+                viewportWidth = 730f,
+                viewportHeight = 313f,
+            ),
         )
         assertFalse(
-            PhoneLandscapeSideControlsPolicy.isEnabled(isPortrait = true, isExpandedWidth = false),
+            PhoneLandscapeSideControlsPolicy.isEnabled(
+                isPortrait = true,
+                viewportWidth = 393f,
+                viewportHeight = 852f,
+            ),
         )
         assertFalse(
-            PhoneLandscapeSideControlsPolicy.isEnabled(isPortrait = false, isExpandedWidth = true),
+            PhoneLandscapeSideControlsPolicy.isEnabled(
+                isPortrait = false,
+                viewportWidth = 960f,
+                viewportHeight = 600f,
+            ),
+        )
+    }
+
+    @Test
+    fun musicChannelStripDragMovesOnlyWithinItsScrollableRange() {
+        assertEquals(
+            -120f,
+            MusicChannelStripLayoutPolicy.draggedOffset(0f, -120f, 420f),
+            0f,
+        )
+        assertEquals(
+            -420f,
+            MusicChannelStripLayoutPolicy.draggedOffset(-120f, -500f, 420f),
+            0f,
+        )
+        assertEquals(
+            0f,
+            MusicChannelStripLayoutPolicy.draggedOffset(-120f, 500f, 420f),
+            0f,
         )
     }
 
