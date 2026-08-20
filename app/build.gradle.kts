@@ -11,7 +11,7 @@ android {
         applicationId = "com.armsone.stand"
         minSdk = 26
         targetSdk = 37
-        versionCode = 58
+        versionCode = 59
         versionName = "0.0.1"
 
         buildConfigField("String", "BUILD_NUMBER", "\"0.0.58\"")

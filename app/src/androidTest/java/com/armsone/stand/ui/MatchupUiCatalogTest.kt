@@ -17,14 +17,15 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipe
-import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.test.platform.app.InstrumentationRegistry
@@ -101,11 +102,15 @@ class MatchupUiCatalogTest {
 
     @Test
     fun phoneLandscapeMusicStripSlidesWhileSettingsControlStaysFixed() {
+        val state = homeState().let { current ->
+            current.copy(settings = current.settings.normalized())
+        }
+        assertEquals(6, state.settings.homeMusicChannels.size)
         composeRule.setContent {
             CompositionLocalProvider(LocalDensity provides Density(density = 1f, fontScale = 1f)) {
                 STandTheme(displayTheme = StandDisplayTheme.COLOR) {
                     Box(Modifier.size(width = 730.dp, height = 313.dp)) {
-                        CatalogHome(state = homeState())
+                        CatalogHome(state = state)
                     }
                 }
             }
@@ -116,7 +121,9 @@ class MatchupUiCatalogTest {
         val before = strip.captureToImage().asAndroidBitmap()
         val settingsBefore = composeRule.onNodeWithText("설정").fetchSemanticsNode().boundsInRoot
 
-        strip.performTouchInput { swipeLeft(durationMillis = 800) }
+        strip.performSemanticsAction(SemanticsActions.ScrollBy) { scrollBy ->
+            assertEquals(true, scrollBy(300f, 0f))
+        }
         composeRule.waitForIdle()
 
         val after = strip.captureToImage().asAndroidBitmap()

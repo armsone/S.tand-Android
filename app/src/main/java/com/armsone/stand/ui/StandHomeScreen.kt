@@ -13,11 +13,11 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -1220,54 +1220,27 @@ internal fun MusicChannelStrip(
     modifier: Modifier = Modifier,
 ) {
     val channels = state.settings.homeMusicChannels
-    val density = LocalDensity.current
-    var offsetDp by remember { mutableStateOf(0f) }
+    val scrollState = rememberScrollState()
 
     BoxWithConstraints(
         modifier = modifier.height(MusicChannelStripLayoutPolicy.CARD_HEIGHT.dp),
     ) {
         val viewportWidthDp = maxWidth.value
         val cardWidthDp = MusicChannelStripLayoutPolicy.cardWidth(viewportWidthDp, isPhoneLandscape)
-        val maximumScrollDp = MusicChannelStripLayoutPolicy.maximumScroll(
-            viewportWidth = viewportWidthDp,
-            cardCount = channels.size,
-            cardWidth = cardWidthDp,
-        )
-
-        LaunchedEffect(maximumScrollDp) {
-            offsetDp = MusicChannelStripLayoutPolicy.clampedOffset(offsetDp, maximumScrollDp)
-        }
-
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .testTag("music_channel_strip")
                 .clipToBounds()
                 .musicChannelStripEdgeMask(
-                    showsLeadingFade = offsetDp < -0.5f,
-                    showsTrailingFade = offsetDp > -maximumScrollDp + 0.5f,
+                    showsLeadingFade = scrollState.value > 0,
+                    showsTrailingFade = scrollState.value < scrollState.maxValue,
                 )
-                .then(
-                    if (maximumScrollDp > 0f) {
-                        Modifier.pointerInput(maximumScrollDp) {
-                            detectHorizontalDragGestures { change, dragAmountPx ->
-                                change.consume()
-                                val dragAmountDp = with(density) { dragAmountPx.toDp().value }
-                                offsetDp = MusicChannelStripLayoutPolicy.draggedOffset(
-                                    offset = offsetDp,
-                                    dragAmount = dragAmountDp,
-                                    maximumScroll = maximumScrollDp,
-                                )
-                            }
-                        }
-                    } else {
-                        Modifier
-                    },
-                ),
+                .horizontalScroll(scrollState),
         ) {
             Row(
-                modifier = Modifier.offset(
-                    x = (MusicChannelStripLayoutPolicy.SIDE_INSET + offsetDp).dp,
+                modifier = Modifier.padding(
+                    horizontal = MusicChannelStripLayoutPolicy.SIDE_INSET.dp,
                 ),
                 horizontalArrangement = Arrangement.spacedBy(
                     MusicChannelStripLayoutPolicy.SPACING.dp,

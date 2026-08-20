@@ -65,7 +65,10 @@ class StandHomeScreenTest {
         }
         composeRule.onNodeWithText("사진·영상은 저장하거나 전송하지 않습니다.", substring = true)
             .assertIsDisplayed()
-        composeRule.onNodeWithText("정확한 위치는 요청하지 않습니다.", substring = true)
+        composeRule.onNodeWithText(
+            "가능한 최소 정확도와 필요한 범위만 요청합니다.",
+            substring = true,
+        )
             .assertIsDisplayed()
         composeRule.onNodeWithContentDescription("권한 확인하고 시작")
             .performTouchInput { click() }
