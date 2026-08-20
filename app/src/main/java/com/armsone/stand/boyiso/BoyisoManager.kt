@@ -26,6 +26,11 @@ enum class BoyisoRole(val wireValue: String, val title: String, val description:
         title = "말할 사람",
         description = "이 기기에서 소리와 큰 뒤척임을 살펴 알립니다.",
     ),
+    WALKIE(
+        wireValue = MonitoringService.ROLE_WALKIE,
+        title = "무전기",
+        description = "주변 소리는 보내지 않고, 버튼을 눌러야만 연결된 화면을 부릅니다.",
+    ),
     ;
 
     companion object {
@@ -63,6 +68,7 @@ data class BoyisoEventSummary(
     val detail: String,
     val path: String,
     val timestampMillis: Long,
+    val role: BoyisoRole? = null,
 )
 
 data class BoyisoState(
@@ -87,6 +93,7 @@ data class BoyisoState(
             issueMessage != null -> issueMessage
             configuration.role == BoyisoRole.SPEAKER && microphoneMonitoring -> "말할 준비됨"
             configuration.role == BoyisoRole.SPEAKER -> "마이크 대기"
+            configuration.role == BoyisoRole.WALKIE -> "무전기 대기"
             devices.none { it.role == BoyisoRole.SPEAKER } -> "말할 사람 연결 대기"
             else -> "말할 사람 ${devices.count { it.role == BoyisoRole.SPEAKER }}대 연결"
         }
@@ -244,6 +251,14 @@ class BoyisoManager(context: Context) : AutoCloseable {
         )
     }
 
+    fun sendWalkiePress() {
+        if (!_state.value.running || _state.value.configuration.role != BoyisoRole.WALKIE) return
+        applicationContext.startService(
+            Intent(applicationContext, MonitoringService::class.java)
+                .setAction(MonitoringService.ACTION_WALKIE),
+        )
+    }
+
     fun receiveNotificationEvent(intent: Intent) {
         val kind = intent.getStringExtra(MonitoringService.EXTRA_EVENT_KIND).orEmpty()
         if (kind.isBlank()) return
@@ -256,6 +271,9 @@ class BoyisoManager(context: Context) : AutoCloseable {
                 timestampMillis = intent.getLongExtra(
                     MonitoringService.EXTRA_EVENT_TIMESTAMP,
                     System.currentTimeMillis(),
+                ),
+                role = BoyisoRole.fromWireValue(
+                    intent.getStringExtra(MonitoringService.EXTRA_EVENT_ROLE),
                 ),
             ),
         )

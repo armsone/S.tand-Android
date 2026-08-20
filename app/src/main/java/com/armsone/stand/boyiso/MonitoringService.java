@@ -37,6 +37,7 @@ public final class MonitoringService extends Service implements LanTransport.Lis
     static final String ACTION_STATE = "com.armsone.stand.boyiso.STATE";
     static final String ACTION_EVENT = "com.armsone.stand.boyiso.EVENT";
     static final String ACTION_TOKTOK = "com.armsone.stand.boyiso.TOKTOK";
+    static final String ACTION_WALKIE = "com.armsone.stand.boyiso.WALKIE";
     static final String ACTION_MOVEMENT = "com.armsone.stand.boyiso.MOVEMENT";
     static final String ACTION_UPDATE_STAND_STATE = "com.armsone.stand.boyiso.UPDATE_STAND_STATE";
     static final String ACTION_UPDATE_IDENTITY = "com.armsone.stand.boyiso.UPDATE_IDENTITY";
@@ -48,21 +49,26 @@ public final class MonitoringService extends Service implements LanTransport.Lis
     static final String EXTRA_DISPLAY_MODE = "displayMode";
     static final String EXTRA_SESSION_ACTIVE = "sessionActive";
     public static final String EXTRA_EVENT_SOURCE_NAME = "sourceName";
+    public static final String EXTRA_EVENT_ROLE = "role";
     public static final String EXTRA_EVENT_KIND = "kind";
     public static final String EXTRA_EVENT_DETAIL = "detail";
     public static final String EXTRA_EVENT_PATH = "path";
     public static final String EXTRA_EVENT_TIMESTAMP = "timestamp";
     static final String ROLE_HOST = "host";
     static final String ROLE_GUEST = "guest";
+    static final String ROLE_WALKIE = "walkie";
     private static final String CHANNEL_ID = "boyiso_monitoring";
     private static final String TOKTOK_CHANNEL_ID = "boyiso_toktok";
     private static final String DETECTION_CHANNEL_ID = "boyiso_detection";
+    private static final String WALKIE_CHANNEL_ID = "boyiso_walkie";
     private static final int NOTIFICATION_ID = 4101;
     private static final int TOKTOK_NOTIFICATION_ID = 4201;
     private static final int DETECTION_NOTIFICATION_ID = 4301;
+    private static final int WALKIE_NOTIFICATION_ID = 4401;
     private static final long STALE_MILLIS = 15_000;
 
     private final ParticipantTracker participants = new ParticipantTracker();
+    private final WalkiePressPolicy walkiePressPolicy = new WalkiePressPolicy();
     private ScheduledExecutorService scheduler;
     private LanTransport lan;
     private BleTransport ble;
@@ -112,6 +118,10 @@ public final class MonitoringService extends Service implements LanTransport.Lis
             sendTokTok();
             return START_NOT_STICKY;
         }
+        if (ACTION_WALKIE.equals(intent.getAction())) {
+            sendWalkiePress();
+            return START_NOT_STICKY;
+        }
         if (ACTION_MOVEMENT.equals(intent.getAction())) {
             sendMovement();
             return START_NOT_STICKY;
@@ -141,7 +151,7 @@ public final class MonitoringService extends Service implements LanTransport.Lis
             getSharedPreferences("boyiso", MODE_PRIVATE).edit()
                     .putString("device_name", sourceName).apply();
         }
-        if ((!ROLE_HOST.equals(role) && !ROLE_GUEST.equals(role)) || roomCode == null
+        if ((!ROLE_HOST.equals(role) && !ROLE_GUEST.equals(role) && !ROLE_WALKIE.equals(role)) || roomCode == null
                 || roomId == null || roomId.trim().isEmpty()) {
             stopSelf();
             return START_NOT_STICKY;
@@ -247,6 +257,17 @@ public final class MonitoringService extends Service implements LanTransport.Lis
         ble.sendFromGuest(event);
         remote.send(event);
         Log.i(TAG, "톡톡 보냄");
+    }
+
+    private void sendWalkiePress() {
+        long now = System.currentTimeMillis();
+        if (!walkiePressPolicy.tryAccept(running, role, now)) {
+            Log.i(TAG, "무전기 호출 생략: 연결·역할 또는 연속 누르기 보호");
+            return;
+        }
+        sendEvent(BoyisoEvent.walkiePress(sourceId, sourceName, role, batteryPercent(),
+                displayMode, sessionActive));
+        Log.i(TAG, "무전기 호출 보냄");
     }
 
     private void sendMovement() {
@@ -393,9 +414,12 @@ public final class MonitoringService extends Service implements LanTransport.Lis
                 role, sessionActive, displayMode, event);
         boolean movementAlert = BoyisoBackgroundAlertPolicy.shouldShowMovementAlert(
                 sessionActive, displayMode, event);
+        boolean walkieAlert = BoyisoBackgroundAlertPolicy.shouldShowWalkieAlert(event);
         debugDeliveryDecision(event, path, appVisible, soundAlert, movementAlert);
         if (BoyisoEvent.TOKTOK.equals(event.kind)) {
             if (!appVisible) showTokTokNotification(event.sourceName);
+        } else if (walkieAlert) {
+            if (!appVisible) showWalkieNotification(event);
         } else if (soundAlert) {
             showBackgroundDetectionNotification(event, path, true,
                     BoyisoBackgroundAlertPolicy.shouldPlaySoundChime(appVisible));
@@ -406,6 +430,7 @@ public final class MonitoringService extends Service implements LanTransport.Lis
 
     private void putEventExtras(Intent intent, BoyisoEvent event, String path) {
         intent.putExtra(EXTRA_EVENT_SOURCE_NAME, event.sourceName);
+        intent.putExtra(EXTRA_EVENT_ROLE, event.role);
         intent.putExtra(EXTRA_EVENT_KIND, event.kind);
         intent.putExtra(EXTRA_EVENT_DETAIL, event.detail);
         intent.putExtra(EXTRA_EVENT_PATH, path);
@@ -523,6 +548,13 @@ public final class MonitoringService extends Service implements LanTransport.Lis
         detection.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
         detection.setSound(null, null);
         getSystemService(NotificationManager.class).createNotificationChannel(detection);
+        NotificationChannel walkie = new NotificationChannel(WALKIE_CHANNEL_ID,
+                "보이소 무전기 호출", NotificationManager.IMPORTANCE_HIGH);
+        walkie.setDescription("연결된 무전기에서 화면 호출 버튼을 누르면 알립니다.");
+        walkie.enableVibration(true);
+        walkie.setVibrationPattern(new long[]{0, 160, 100, 220});
+        walkie.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
+        getSystemService(NotificationManager.class).createNotificationChannel(walkie);
     }
 
     private Notification buildNotification() {
@@ -536,6 +568,7 @@ public final class MonitoringService extends Service implements LanTransport.Lis
         String text = override;
         if (text == null) {
             if (ROLE_GUEST.equals(role)) text = "말할 사람 기기에서 소리를 살피는 중";
+            else if (ROLE_WALKIE.equals(role)) text = "무전기 호출 대기 중";
             else {
                 long speakerCount = participants.latestEvents().stream()
                         .filter(event -> ROLE_GUEST.equals(event.role)).count();
@@ -577,6 +610,31 @@ public final class MonitoringService extends Service implements LanTransport.Lis
                 .setContentIntent(pendingIntent)
                 .build();
         getSystemService(NotificationManager.class).notify(TOKTOK_NOTIFICATION_ID, notification);
+    }
+
+    private void showWalkieNotification(BoyisoEvent event) {
+        Intent open = new Intent(this, com.armsone.stand.MainActivity.class)
+                .setAction("com.armsone.stand.boyiso.OPEN_WALKIE")
+                .setData(android.net.Uri.parse("stand://open"));
+        putEventExtras(open, event, "알림");
+        PendingIntent pendingIntent = PendingIntent.getActivity(this, WALKIE_NOTIFICATION_ID, open,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+        String sender = event.sourceName == null || event.sourceName.trim().isEmpty()
+                ? "무전기" : event.sourceName;
+        String body = "무전기 호출이 왔어요.";
+        Notification notification = new Notification.Builder(this, WALKIE_CHANNEL_ID)
+                .setSmallIcon(android.R.drawable.ic_dialog_alert)
+                .setContentTitle("보이소")
+                .setSubText(sender)
+                .setContentText(body)
+                .setStyle(new Notification.BigTextStyle().bigText(body))
+                .setAutoCancel(true)
+                .setCategory(Notification.CATEGORY_EVENT)
+                .setPriority(Notification.PRIORITY_HIGH)
+                .setVisibility(Notification.VISIBILITY_PUBLIC)
+                .setContentIntent(pendingIntent)
+                .build();
+        getSystemService(NotificationManager.class).notify(WALKIE_NOTIFICATION_ID, notification);
     }
 
     private void showBackgroundDetectionNotification(BoyisoEvent event, String path, boolean sound,

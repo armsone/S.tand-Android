@@ -37,4 +37,16 @@ public class BoyisoProtocolTest {
         assertNotEquals(first, otherRoom);
         assertEquals(43, first.length());
     }
+
+    @Test public void walkiePressCarriesRoleAndPressDetail() {
+        BoyisoEvent original = BoyisoEvent.walkiePress(
+                "walkie-1", "현관 무전기", MonitoringService.ROLE_WALKIE, 77,
+                BoyisoEvent.MODE_OBJECT, false);
+
+        assertEquals(BoyisoEvent.WALKIE, original.kind);
+        assertEquals(MonitoringService.ROLE_WALKIE, original.role);
+        assertEquals(BoyisoEvent.DETAIL_WALKIE_PRESS, original.detail);
+        assertEquals(Double.valueOf(1.0), original.intensity);
+        assertEquals(false, original.monitoring);
+    }
 }

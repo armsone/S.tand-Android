@@ -19,6 +19,11 @@ final class BoyisoBackgroundAlertPolicy {
                 && BoyisoEvent.MOVEMENT.equals(event.kind);
     }
 
+    static boolean shouldShowWalkieAlert(BoyisoEvent event) {
+        return MonitoringService.ROLE_WALKIE.equals(event.role)
+                && BoyisoEvent.WALKIE.equals(event.kind);
+    }
+
     static boolean shouldPlaySoundChime(boolean appVisible) {
         return !appVisible;
     }

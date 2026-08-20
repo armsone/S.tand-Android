@@ -36,4 +36,12 @@ public class BoyisoBackgroundAlertPolicyTest {
         assertFalse(BoyisoBackgroundAlertPolicy.shouldPlaySoundChime(true));
         assertTrue(BoyisoBackgroundAlertPolicy.shouldPlaySoundChime(false));
     }
+
+    @Test public void walkieCallIsRecognizedWithoutMateSessionGating() {
+        BoyisoEvent walkie = new BoyisoEvent("event", "walkie", "현관", MonitoringService.ROLE_WALKIE,
+                BoyisoEvent.WALKIE, 1L, 1.0, BoyisoEvent.DETAIL_WALKIE_PRESS, false, 80,
+                BoyisoEvent.MODE_OBJECT, false);
+        assertTrue(BoyisoBackgroundAlertPolicy.shouldShowWalkieAlert(walkie));
+        assertFalse(BoyisoBackgroundAlertPolicy.shouldShowWalkieAlert(event(BoyisoEvent.SOUND)));
+    }
 }

@@ -11,9 +11,11 @@ final class BoyisoEvent {
     static final String SOUND = "sound";
     static final String MOVEMENT = "movement";
     static final String TOKTOK = "toktok";
+    static final String WALKIE = "walkie";
     static final String DETAIL_BIG_SOUND = "big_sound";
     static final String DETAIL_CONTINUOUS_SOUND = "continuous_sound";
     static final String DETAIL_FINGER_SNAP = "finger_snap";
+    static final String DETAIL_WALKIE_PRESS = "press";
     static final String MODE_MATE = "mate";
     static final String MODE_OBJECT = "object";
 
@@ -85,6 +87,13 @@ final class BoyisoEvent {
                               String displayMode, boolean sessionActive) {
         return create(sourceId, sourceName, role, TOKTOK, null, "greeting", true, batteryPercent,
                 displayMode, sessionActive);
+    }
+
+    static BoyisoEvent walkiePress(String sourceId, String sourceName, String role,
+                                   Integer batteryPercent, String displayMode,
+                                   boolean sessionActive) {
+        return create(sourceId, sourceName, role, WALKIE, 1.0, DETAIL_WALKIE_PRESS, false,
+                batteryPercent, displayMode, sessionActive);
     }
 
     private static BoyisoEvent create(String sourceId, String sourceName, String role, String kind,

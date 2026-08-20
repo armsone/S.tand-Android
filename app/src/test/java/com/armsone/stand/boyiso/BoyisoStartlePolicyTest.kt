@@ -78,4 +78,36 @@ class BoyisoStartlePolicyTest {
         assertTrue(BoyisoStartlePolicy.shouldShowCryingChild(event("finger_snap")))
         assertFalse(BoyisoStartlePolicy.shouldShowCryingChild(event("quiet")))
     }
+
+    @Test
+    fun `walkie call wakes only an enabled active mate session`() {
+        val event = BoyisoEventSummary(
+            sourceName = "현관",
+            kind = "walkie",
+            detail = "press",
+            path = "LAN",
+            timestampMillis = 1L,
+            role = BoyisoRole.WALKIE,
+        )
+        assertTrue(
+            BoyisoStartlePolicy.shouldActivateForWalkie(
+                event, true, EnvironmentDisplayMode.MATE, true,
+            ),
+        )
+        assertFalse(
+            BoyisoStartlePolicy.shouldActivateForWalkie(
+                event, true, EnvironmentDisplayMode.OBJECT, true,
+            ),
+        )
+        assertFalse(
+            BoyisoStartlePolicy.shouldActivateForWalkie(
+                event.copy(role = BoyisoRole.VIEWER), true, EnvironmentDisplayMode.MATE, true,
+            ),
+        )
+        assertFalse(
+            BoyisoStartlePolicy.shouldActivateForWalkie(
+                event, true, EnvironmentDisplayMode.MATE, false,
+            ),
+        )
+    }
 }

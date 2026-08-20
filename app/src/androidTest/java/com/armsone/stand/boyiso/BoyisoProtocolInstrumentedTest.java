@@ -29,4 +29,18 @@ public class BoyisoProtocolInstrumentedTest {
         assertEquals("39611124-8d6a-4e0b-8572-8f472015249b", lanDecoded.id);
         assertEquals("39611124-8d6a-4e0b-8572-8f472015249b", binaryDecoded.id);
     }
+
+    @Test public void walkiePressRoundTripsWithRoleAndPressDetail() throws Exception {
+        BoyisoEvent original = BoyisoEvent.walkiePress(
+                "walkie-1", "현관 무전기", MonitoringService.ROLE_WALKIE, 77,
+                BoyisoEvent.MODE_OBJECT, false);
+
+        BoyisoEvent decoded = BoyisoEvent.decode(original.encodeBytes());
+
+        assertEquals(BoyisoEvent.WALKIE, decoded.kind);
+        assertEquals(MonitoringService.ROLE_WALKIE, decoded.role);
+        assertEquals(BoyisoEvent.DETAIL_WALKIE_PRESS, decoded.detail);
+        assertEquals(Double.valueOf(1.0), decoded.intensity);
+        assertEquals(false, decoded.monitoring);
+    }
 }

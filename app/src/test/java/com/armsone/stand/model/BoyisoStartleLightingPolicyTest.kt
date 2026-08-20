@@ -30,6 +30,14 @@ class BoyisoStartleLightingPolicyTest {
     }
 
     @Test
+    fun `walkie call uses urgent lighting`() {
+        assertEquals(
+            BoyisoStartleLightingProfile.STRONG,
+            BoyisoStartleLightingPolicy.profile("walkie", "press"),
+        )
+    }
+
+    @Test
     fun `gentle torch needs strength support while strong torch stays available`() {
         assertEquals(0.0, BoyisoStartleLightingPolicy.torchLevel(
             BoyisoStartleLightingProfile.GENTLE, true, true, false), 0.0)

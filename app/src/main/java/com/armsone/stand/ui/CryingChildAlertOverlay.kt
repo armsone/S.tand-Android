@@ -74,3 +74,50 @@ fun CryingChildAlertOverlay(
         }
     }
 }
+
+@Composable
+fun WalkieCallAlertOverlay(
+    senderName: String,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(Color(0xFFFFEEC2))
+            .padding(24.dp)
+            .semantics { contentDescription = "$senderName 님의 무전기 호출" },
+        contentAlignment = Alignment.Center,
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(24.dp),
+            color = Color.White.copy(alpha = 0.92f),
+            shadowElevation = 8.dp,
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Image(
+                    painter = painterResource(R.drawable.boyiso_toktok_greeting),
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text(
+                    text = senderName,
+                    color = Color(0xFF80520B),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                )
+                Text(
+                    text = "무전기 호출이 왔어요",
+                    color = Color(0xFF2E2415),
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                )
+            }
+        }
+    }
+}

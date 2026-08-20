@@ -31,6 +31,18 @@ object BoyisoStartlePolicy {
         localMode: EnvironmentDisplayMode,
     ): Boolean = localSessionActive && localMode == EnvironmentDisplayMode.MATE
 
+    fun shouldActivateForWalkie(
+        event: BoyisoEventSummary,
+        localSessionActive: Boolean,
+        localMode: EnvironmentDisplayMode,
+        multiStimulusWakeEnabled: Boolean,
+    ): Boolean =
+        event.role == BoyisoRole.WALKIE &&
+            event.kind == "walkie" &&
+            localSessionActive &&
+            localMode == EnvironmentDisplayMode.MATE &&
+            multiStimulusWakeEnabled
+
     fun shouldShowCryingChild(event: BoyisoEventSummary): Boolean =
         event.kind == "sound" &&
             event.detail in setOf("big_sound", "continuous_sound", "finger_snap")

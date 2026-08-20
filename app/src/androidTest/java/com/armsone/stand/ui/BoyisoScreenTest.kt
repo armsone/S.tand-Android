@@ -56,6 +56,7 @@ class BoyisoScreenTest {
 
         composeRule.onNodeWithText("볼 사람").assertIsDisplayed()
         composeRule.onNodeWithText("말할 사람").assertIsDisplayed()
+        composeRule.onNodeWithText("무전기").assertIsDisplayed()
         composeRule.onNodeWithText("2. 내 이름").assertIsDisplayed()
         composeRule.onAllNodesWithText("연결 시작").assertCountEquals(0)
         composeRule.onNode(hasClickAction() and hasText("공간 만들기", substring = true)).performClick()
@@ -63,6 +64,42 @@ class BoyisoScreenTest {
 
         assertEquals(1, createCount)
         assertEquals(1, scanCount)
+    }
+
+    @Test
+    fun connectedWalkieShowsCallButtonAndWalkieParticipantSection() {
+        var walkieCount = 0
+        composeRule.setContent {
+            STandTheme {
+                BoyisoScreen(
+                    state = BoyisoState(
+                        localDeviceId = "walkie",
+                        configuration = BoyisoConfiguration(
+                            role = BoyisoRole.WALKIE,
+                            roomId = "room",
+                            roomKey = "12345678901234567890123456789012",
+                            deviceName = "현관",
+                        ),
+                        running = true,
+                    ),
+                    invitationUri = null,
+                    onUpdateConfiguration = {},
+                    onCreateRoom = {},
+                    onScanInvitation = {},
+                    onShareInvitation = {},
+                    onStart = {},
+                    onLeaveRoom = {},
+                    onTokTok = {},
+                    onWalkie = { walkieCount += 1 },
+                    onBack = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("무전기 호출", substring = true).performClick()
+        composeRule.onNodeWithText("누르면 연결된 화면이 크게 반응합니다.").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("무전기 1명").performScrollTo().assertIsDisplayed()
+        assertEquals(1, walkieCount)
     }
 
     @Test
@@ -102,13 +139,19 @@ class BoyisoScreenTest {
         composeRule.onAllNodesWithText("연결 자세히 닫기").assertCountEquals(0)
         composeRule.onNodeWithText("톡톡 보내기", substring = true).assertIsDisplayed()
         composeRule.onNodeWithText("우리 공간 QR코드").assertIsDisplayed()
-        composeRule.onNodeWithText("QR 사진 보내기", substring = true).performScrollTo().performClick()
+        composeRule.onNode(hasClickAction() and hasText("QR 사진 보내기", substring = true))
+            .performScrollTo()
+            .performClick()
+        composeRule.waitForIdle()
         composeRule.onNodeWithText("공간에 있는 사람").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("나를 포함해 총 1명").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithContentDescription("볼 사람 1명").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithContentDescription("말할 사람 0명").performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithText("아직 없음").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("무전기 0명").performScrollTo().assertIsDisplayed()
+        composeRule.onAllNodesWithText("아직 없음").assertCountEquals(2)
         composeRule.onNodeWithText("공간에서 나오기").performScrollTo().performClick()
+        composeRule.onNodeWithText("나오기").performClick()
+        composeRule.waitForIdle()
 
         assertEquals(1, shareCount)
         assertEquals(1, leaveCount)
@@ -214,12 +257,13 @@ class BoyisoScreenTest {
         composeRule.onNodeWithText("나를 포함해 총 4명").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithContentDescription("볼 사람 2명").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithContentDescription("말할 사람 2명").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("무전기 0명").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("엄마").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("이 기기").performScrollTo().assertIsDisplayed()
         composeRule.onAllNodesWithText("침실폰").assertCountEquals(2)
         composeRule.onNodeWithText("감지 중").performScrollTo().assertIsDisplayed()
-        composeRule.onAllNodesWithText("Wi‑Fi").assertCountEquals(1)
-        composeRule.onAllNodesWithText("Bluetooth").assertCountEquals(1)
+        composeRule.onAllNodesWithText("Wi‑Fi").assertCountEquals(2)
+        composeRule.onAllNodesWithText("Bluetooth").assertCountEquals(2)
         composeRule.onAllNodesWithText("인터넷").assertCountEquals(2)
         composeRule.onNodeWithContentDescription(
             "침실폰, 말할 사람, 감지 중, 배터리 71퍼센트, Wi‑Fi 및 Bluetooth 및 인터넷",
@@ -266,7 +310,10 @@ class BoyisoScreenTest {
         composeRule.onNodeWithText("저장").performClick()
         composeRule.onNodeWithText("공간에 있는 사람").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("우리 공간 QR코드").performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithText("QR 사진 보내기", substring = true).performClick()
+        composeRule.onNode(hasClickAction() and hasText("QR 사진 보내기", substring = true))
+            .performScrollTo()
+            .performClick()
+        composeRule.waitForIdle()
 
         assertEquals("아기방 폰", updatedName)
         assertEquals(1, shareCount)

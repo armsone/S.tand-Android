@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.WifiTethering
 import androidx.compose.material3.Button
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -79,6 +80,7 @@ fun BoyisoScreen(
     onStart: () -> Unit,
     onLeaveRoom: () -> Unit,
     onTokTok: () -> Unit,
+    onWalkie: () -> Unit = {},
     onBack: () -> Unit,
 ) {
     var validationMessage by remember { mutableStateOf<String?>(null) }
@@ -122,7 +124,7 @@ fun BoyisoScreen(
         ) {
             if (!state.configuration.hasRoom) {
                 BoyisoCard {
-                    Text("1. 나는 누구인가요?", style = MaterialTheme.typography.headlineSmall)
+                    Text("1. 나의 역할", style = MaterialTheme.typography.headlineSmall)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -150,6 +152,11 @@ fun BoyisoScreen(
                             }
                         }
                     }
+                    Text(
+                        state.configuration.role.description,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                     OutlinedTextField(
                         value = state.configuration.deviceName,
                         onValueChange = {
@@ -222,12 +229,36 @@ fun BoyisoScreen(
                 }
             } else {
                 if (state.running) {
-                    Button(
-                        onClick = onTokTok,
-                        modifier = Modifier.fillMaxWidth().height(72.dp),
-                    ) {
-                        Icon(Icons.Default.ChildCare, contentDescription = null)
-                        Text(" 톡톡 보내기", style = MaterialTheme.typography.titleLarge)
+                    if (state.configuration.role == BoyisoRole.WALKIE) {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Button(
+                                onClick = onWalkie,
+                                modifier = Modifier.fillMaxWidth().height(72.dp),
+                            ) {
+                                Icon(Icons.Default.WifiTethering, contentDescription = null)
+                                Text(" 무전기 호출", style = MaterialTheme.typography.titleLarge)
+                            }
+                            Text(
+                                "누르면 연결된 화면이 크게 반응합니다.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            OutlinedButton(
+                                onClick = onTokTok,
+                                modifier = Modifier.fillMaxWidth().height(56.dp),
+                            ) {
+                                Icon(Icons.Default.ChildCare, contentDescription = null)
+                                Text(" 톡톡 보내기", style = MaterialTheme.typography.titleMedium)
+                            }
+                        }
+                    } else {
+                        Button(
+                            onClick = onTokTok,
+                            modifier = Modifier.fillMaxWidth().height(72.dp),
+                        ) {
+                            Icon(Icons.Default.ChildCare, contentDescription = null)
+                            Text(" 톡톡 보내기", style = MaterialTheme.typography.titleLarge)
+                        }
                     }
                 }
 
@@ -438,6 +469,7 @@ private fun BoyisoPeopleSection(state: BoyisoState) {
                 status = when (state.configuration.role) {
                     BoyisoRole.VIEWER -> "연결됨"
                     BoyisoRole.SPEAKER -> if (state.microphoneMonitoring) "감지 중" else "대기 중"
+                    BoyisoRole.WALKIE -> "연결됨"
                 },
                 transportPaths = setOf("이 기기"),
             ),
@@ -453,6 +485,7 @@ private fun BoyisoPeopleSection(state: BoyisoState) {
                     status = when (device.role) {
                         BoyisoRole.VIEWER -> "연결됨"
                         BoyisoRole.SPEAKER -> if (device.monitoring) "감지 중" else "대기 중"
+                        BoyisoRole.WALKIE -> "연결됨"
                     },
                     transportPaths = device.transportPaths,
                 ),
@@ -461,6 +494,7 @@ private fun BoyisoPeopleSection(state: BoyisoState) {
     })
     val viewers = participants.filter { it.role == BoyisoRole.VIEWER }
     val speakers = participants.filter { it.role == BoyisoRole.SPEAKER }
+    val walkies = participants.filter { it.role == BoyisoRole.WALKIE }
     val hasDuplicateNames = participants
         .groupBy { it.role to it.name.trim().lowercase() }
         .any { (_, matching) -> matching.size > 1 }
@@ -515,6 +549,11 @@ private fun BoyisoPeopleSection(state: BoyisoState) {
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.68f),
                     )
                     BoyisoParticipantRoleSection(BoyisoRole.SPEAKER, speakers)
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.68f),
+                    )
+                    BoyisoParticipantRoleSection(BoyisoRole.WALKIE, walkies)
                 }
             }
         }
@@ -535,8 +574,11 @@ private fun BoyisoParticipantRoleSection(
     role: BoyisoRole,
     participants: List<BoyisoParticipant>,
 ) {
-    val viewer = role == BoyisoRole.VIEWER
-    val accent = if (viewer) Color(0xFF176B9B) else Color(0xFFAA5314)
+    val accent = when (role) {
+        BoyisoRole.VIEWER -> Color(0xFF176B9B)
+        BoyisoRole.SPEAKER -> Color(0xFFAA5314)
+        BoyisoRole.WALKIE -> Color(0xFF4F7A28)
+    }
     Column {
         Row(
             modifier = Modifier
@@ -550,7 +592,11 @@ private fun BoyisoParticipantRoleSection(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Icon(
-                if (viewer) Icons.Default.Visibility else Icons.Default.GraphicEq,
+                when (role) {
+                    BoyisoRole.VIEWER -> Icons.Default.Visibility
+                    BoyisoRole.SPEAKER -> Icons.Default.GraphicEq
+                    BoyisoRole.WALKIE -> Icons.Default.WifiTethering
+                },
                 contentDescription = null,
                 tint = accent,
                 modifier = Modifier.size(20.dp),

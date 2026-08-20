@@ -13,7 +13,8 @@ enum class BoyisoStartleLightingProfile(
 
 object BoyisoStartleLightingPolicy {
     fun profile(kind: String, detail: String?): BoyisoStartleLightingProfile =
-        if (kind == "sound" && detail in setOf("big_sound", "continuous_sound")) {
+        if (kind == "walkie" ||
+            kind == "sound" && detail in setOf("big_sound", "continuous_sound")) {
             BoyisoStartleLightingProfile.STRONG
         } else {
             BoyisoStartleLightingProfile.GENTLE

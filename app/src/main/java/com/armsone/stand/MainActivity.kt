@@ -70,6 +70,7 @@ import com.armsone.stand.ui.InternetRadioManagementScreen
 import com.armsone.stand.ui.StandHomeScreen
 import com.armsone.stand.ui.TokTokGreetingOverlay
 import com.armsone.stand.ui.CryingChildAlertOverlay
+import com.armsone.stand.ui.WalkieCallAlertOverlay
 import com.armsone.stand.ui.ClockFontOptionsScreen
 import com.armsone.stand.ui.FontLicenseDetailScreen
 import com.armsone.stand.ui.FontLicensesScreen
@@ -277,9 +278,10 @@ class MainActivity : ComponentActivity() {
         var lastShownTokTokTimestamp by rememberSaveable { mutableStateOf(0L) }
         var lastHandledBoyisoStartleTimestamp by rememberSaveable { mutableStateOf(0L) }
         var lastCryingEventTimestamp by rememberSaveable { mutableStateOf(0L) }
-        var cryingChimeSequence by rememberSaveable { mutableStateOf(0L) }
+        var urgentChimeSequence by rememberSaveable { mutableStateOf(0L) }
         var activeTokTokSender by remember { mutableStateOf<String?>(null) }
         var activeCryingChildSender by remember { mutableStateOf<String?>(null) }
+        var activeWalkieSender by remember { mutableStateOf<String?>(null) }
         var destination by rememberSaveable { mutableStateOf(AppDestination.HOME) }
         var secondaryReturnDestination by rememberSaveable {
             mutableStateOf(AppDestination.HOME)
@@ -379,6 +381,13 @@ class MainActivity : ComponentActivity() {
                     localSessionActive = state.isSessionActive,
                     localMode = state.environmentMode,
                 )
+            val isWalkieEvent = event.kind == "walkie" && event.role == BoyisoRole.WALKIE
+            val shouldWakeForWalkie = BoyisoStartlePolicy.shouldActivateForWalkie(
+                event = event,
+                localSessionActive = state.isSessionActive,
+                localMode = state.environmentMode,
+                multiStimulusWakeEnabled = state.settings.multiStimulusWakeEnabled,
+            )
             if (BuildConfig.DEBUG) {
                 Log.d(
                     "BoyisoActivity",
@@ -389,16 +398,25 @@ class MainActivity : ComponentActivity() {
                         "alreadyHandled=${event.timestampMillis <= lastHandledBoyisoStartleTimestamp}",
                 )
             }
-            if (isSpeakerSoundForViewer || isSharedMovement) {
+            if (isSpeakerSoundForViewer || isSharedMovement || shouldWakeForWalkie) {
                 lastHandledBoyisoStartleTimestamp = event.timestampMillis
                 standViewModel.activateBoyisoStartle(kind = event.kind, detail = event.detail)
+            }
+            if (isWalkieEvent) {
+                urgentChimeSequence = event.timestampMillis
+                activeWalkieSender = event.sourceName.ifBlank { "무전기" }
+                try {
+                    delay(WALKIE_ALERT_VISIBLE_MILLIS)
+                } finally {
+                    activeWalkieSender = null
+                }
             }
             if (isLargeSpeakerSound) {
                 if (
                     lastCryingEventTimestamp == 0L ||
                     event.timestampMillis - lastCryingEventTimestamp > CRYING_ALERT_GAP_MILLIS
                 ) {
-                    cryingChimeSequence = event.timestampMillis
+                    urgentChimeSequence = event.timestampMillis
                 }
                 lastCryingEventTimestamp = event.timestampMillis
                 activeCryingChildSender = event.sourceName.ifBlank { "말할 사람" }
@@ -409,8 +427,8 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
-        LaunchedEffect(cryingChimeSequence) {
-            if (cryingChimeSequence > 0L) playBoyisoChimeTwice()
+        LaunchedEffect(urgentChimeSequence) {
+            if (urgentChimeSequence > 0L) playBoyisoChimeTwice()
         }
 
         fun openScreenEditor() {
@@ -502,8 +520,12 @@ class MainActivity : ComponentActivity() {
                         destination = AppDestination.BOYISO
                     },
                     boyisoStatus = boyisoState.homeStatusText,
-                    boyisoCanSendTokTok = boyisoState.devices.isNotEmpty(),
-                    onSendBoyisoTokTok = boyisoManager::sendTokTok,
+                    boyisoCanSendTokTok = boyisoState.running,
+                    onSendBoyisoTokTok = if (boyisoState.configuration.role == BoyisoRole.WALKIE) {
+                        boyisoManager::sendWalkiePress
+                    } else {
+                        boyisoManager::sendTokTok
+                    },
                     onToggleRadio = standViewModel::toggleInternetRadio,
                     onOpenExternalMusic = ::openExternalMusic,
                     onEndExternalMusic = standViewModel::endExternalMusicMode,
@@ -601,6 +623,7 @@ class MainActivity : ComponentActivity() {
                     onStart = ::requestBoyisoStart,
                     onLeaveRoom = ::leaveBoyisoRoom,
                     onTokTok = boyisoManager::sendTokTok,
+                    onWalkie = boyisoManager::sendWalkiePress,
                     onBack = { destination = boyisoReturnDestination },
                 )
 
@@ -770,6 +793,9 @@ class MainActivity : ComponentActivity() {
             }
             activeTokTokSender?.let { sender ->
                 TokTokGreetingOverlay(senderName = sender)
+            }
+            activeWalkieSender?.let { sender ->
+                WalkieCallAlertOverlay(senderName = sender)
             }
             activeCryingChildSender?.let { sender ->
                 CryingChildAlertOverlay(senderName = sender)
@@ -1133,8 +1159,13 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun acceptBoyisoNotificationEvent(intent: Intent?) {
-        if (intent?.action != "com.armsone.stand.boyiso.OPEN_DETECTION") return
-        boyisoManager.receiveNotificationEvent(intent)
+        val eventIntent = intent ?: return
+        if (eventIntent.action !in setOf(
+                "com.armsone.stand.boyiso.OPEN_DETECTION",
+                "com.armsone.stand.boyiso.OPEN_WALKIE",
+            )
+        ) return
+        boyisoManager.receiveNotificationEvent(eventIntent)
     }
 
     private fun scanBoyisoInvitation() {
@@ -1294,6 +1325,7 @@ class MainActivity : ComponentActivity() {
         private const val DEFAULT_AUDIO_MIME_TYPE = "audio/*"
         private const val BOYISO_CHIME_INTERVAL_MILLIS = 1_250L
         private const val CRYING_ALERT_VISIBLE_MILLIS = 3_000L
+        private const val WALKIE_ALERT_VISIBLE_MILLIS = 3_000L
         private const val CRYING_ALERT_GAP_MILLIS = 2_500L
         private const val APK_MIME_TYPE = "application/vnd.android.package-archive"
         private const val STATE_PENDING_PERMISSION = "pending_permission"
