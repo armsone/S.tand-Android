@@ -172,6 +172,9 @@ fun SettingsScreen(
     onRequestCameraPermission: () -> Unit,
     onCameraAmbientSensingChanged: (Boolean) -> Unit,
     onOpenAppSettings: () -> Unit,
+    automaticUpdateDownloadEnabled: Boolean,
+    onAutomaticUpdateDownloadChanged: (Boolean) -> Unit,
+    onCheckForUpdates: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -793,6 +796,15 @@ fun SettingsScreen(
                             "빌드 ${BuildConfig.BUILD_NUMBER} · versionCode ${BuildConfig.VERSION_CODE}",
                             style = MaterialTheme.typography.bodySmall,
                         )
+                        HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text("업데이트 자동 다운로드")
+                                Text("데이터 요금이 없는 네트워크에서 받습니다.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Switch(checked = automaticUpdateDownloadEnabled, onCheckedChange = onAutomaticUpdateDownloadChanged)
+                        }
+                        TextButton(onClick = onCheckForUpdates, modifier = Modifier.fillMaxWidth()) { Text("업데이트 확인") }
                         TextButton(
                             onClick = { uriHandler.openUri("https://github.com/armsone") },
                             modifier = Modifier.fillMaxWidth(),

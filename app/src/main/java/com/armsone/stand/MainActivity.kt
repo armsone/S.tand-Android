@@ -284,6 +284,7 @@ class MainActivity : ComponentActivity() {
         val latestBoyisoState by rememberUpdatedState(boyisoState)
         val appUpdateState by appUpdateService.state.collectAsStateWithLifecycle()
         var ignoredUpdateVersion by rememberSaveable { mutableStateOf<Int?>(null) }
+        var automaticUpdateDownloadEnabled by rememberSaveable { mutableStateOf(appUpdateService.automaticDownloadEnabled) }
         var lastShownTokTokTimestamp by rememberSaveable { mutableStateOf(0L) }
         var lastHandledBoyisoStartleTimestamp by rememberSaveable { mutableStateOf(0L) }
         var lastCryingEventTimestamp by rememberSaveable { mutableStateOf(0L) }
@@ -480,13 +481,6 @@ class MainActivity : ComponentActivity() {
         LaunchedEffect(state.settings.orientationPreference) {
             applyOrientationPreference(state.settings.orientationPreference)
         }
-        LaunchedEffect(appUpdateState) {
-            val ready = appUpdateState as? AppUpdateState.Ready ?: return@LaunchedEffect
-            if (ignoredUpdateVersion != ready.release.versionCode) {
-                requestUpdateInstall(ready.apkFile)
-            }
-        }
-
         STandTheme(displayTheme = state.settings.displayTheme) {
             when (destination) {
                 AppDestination.HOME -> StandHomeScreen(
@@ -600,6 +594,15 @@ class MainActivity : ComponentActivity() {
                         }
                     },
                     onOpenAppSettings = ::openAppSettings,
+                    automaticUpdateDownloadEnabled = automaticUpdateDownloadEnabled,
+                    onAutomaticUpdateDownloadChanged = {
+                        automaticUpdateDownloadEnabled = it
+                        appUpdateService.automaticDownloadEnabled = it
+                    },
+                    onCheckForUpdates = {
+                        ignoredUpdateVersion = null
+                        appUpdateService.checkForUpdate(isManual = true)
+                    },
                     onBack = { destination = AppDestination.HOME },
                 )
 
@@ -802,6 +805,7 @@ class MainActivity : ComponentActivity() {
                             requestUpdateInstall(ready.apkFile)
                         }
                     },
+                    onCancel = appUpdateService::cancelDownload,
                     onRetry = {
                         ignoredUpdateVersion = null
                         appUpdateService.checkForUpdate(isManual = true)

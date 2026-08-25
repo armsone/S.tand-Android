@@ -1,7 +1,9 @@
 package com.armsone.stand.update
 
+import android.app.DownloadManager
 import android.content.Context
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.util.Log
 import java.io.Closeable
@@ -9,12 +11,15 @@ import java.io.File
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
+import java.security.MessageDigest
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -28,6 +33,8 @@ data class GitHubAppRelease(
     val assetName: String,
     val apkUrl: URL,
     val assetSizeBytes: Long,
+    val sha256: String = "",
+    val releaseNotes: String = "",
 )
 
 sealed interface AppUpdateState {
@@ -47,7 +54,7 @@ sealed interface AppUpdateState {
         val release: GitHubAppRelease,
         val message: String? = null,
     ) : AppUpdateState
-    data class Downloading(val release: GitHubAppRelease) : AppUpdateState
+    data class Downloading(val release: GitHubAppRelease, val progressPercent: Int? = null, val isAutomatic: Boolean = false) : AppUpdateState
     data class Ready(val release: GitHubAppRelease, val apkFile: File) : AppUpdateState
     data class Failed(
         val message: String,
@@ -60,13 +67,20 @@ class GitHubAppUpdateService(
     private val currentVersionCode: Int,
 ) : Closeable {
     private val applicationContext = context.applicationContext
+    private val downloadManager = applicationContext.getSystemService(DownloadManager::class.java)
+    private val preferences = applicationContext.getSharedPreferences("app_update", Context.MODE_PRIVATE)
     private val scope = CoroutineScope(
         SupervisorJob() + Dispatchers.IO + CoroutineName("GitHubAppUpdateService"),
     )
     private val mutableState = MutableStateFlow<AppUpdateState>(AppUpdateState.Idle)
     private val isChecking = AtomicBoolean(false)
+    private var downloadJob: Job? = null
+    private var activeDownloadId: Long? = null
 
     val state: StateFlow<AppUpdateState> = mutableState.asStateFlow()
+    var automaticDownloadEnabled: Boolean
+        get() = preferences.getBoolean("automatic_download_enabled", true)
+        set(value) { preferences.edit().putBoolean("automatic_download_enabled", value).apply() }
 
     fun checkForUpdate(isManual: Boolean = false) {
         val currentState = mutableState.value
@@ -82,11 +96,13 @@ class GitHubAppUpdateService(
         scope.launch {
             try {
                 val result = runCatching { fetchLatestRelease() }
-                mutableState.value = GitHubUpdatePolicy.resolveCheckState(
+                val resolved = GitHubUpdatePolicy.resolveCheckState(
                     currentVersionCode = currentVersionCode,
                     releaseResult = result,
                     isManual = isManual,
                 )
+                mutableState.value = resolved
+                if (!isManual && automaticDownloadEnabled && resolved is AppUpdateState.Available) startDownload(resolved.release, true)
             } finally {
                 isChecking.set(false)
             }
@@ -99,31 +115,58 @@ class GitHubAppUpdateService(
         mutableState.value = AppUpdateState.Idle
     }
 
-    fun download(release: GitHubAppRelease) {
+    fun download(release: GitHubAppRelease) = startDownload(release, false)
+
+    fun cancelDownload() {
+        activeDownloadId?.let { downloadManager.remove(it) }; activeDownloadId = null; downloadJob?.cancel(); downloadJob = null
+        val release = (mutableState.value as? AppUpdateState.Downloading)?.release
+        mutableState.value = release?.let { AppUpdateState.Available(it, "다운로드를 취소했습니다. 다시 받을 수 있습니다.") } ?: AppUpdateState.Idle
+    }
+
+    private fun startDownload(release: GitHubAppRelease, automatic: Boolean) {
+        if (downloadJob?.isActive == true) return
         val current = mutableState.value
         if (current !is AppUpdateState.Available || current.release != release) return
-        mutableState.value = AppUpdateState.Downloading(release)
-        scope.launch {
-            val result = runCatching { downloadAndVerify(release) }
-            mutableState.value = result.fold(
-                onSuccess = { AppUpdateState.Ready(release, it) },
-                onFailure = {
-                    Log.w(
-                        LOG_TAG,
-                        "GitHub update download or verification failed: ${it.message}",
-                        it,
-                    )
-                    AppUpdateState.Available(
-                        release = release,
-                        message = "업데이트를 받지 못했습니다. 인터넷 연결을 확인해 주세요.",
-                    )
-                },
-            )
+        val request = DownloadManager.Request(Uri.parse(release.apkUrl.toExternalForm())).setTitle("S.tand ${release.productVersion}").setDescription("업데이트 다운로드 중").setMimeType(APK_MIME).setAllowedOverMetered(!automatic).setAllowedOverRoaming(false).setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE)
+        val id = runCatching { downloadManager.enqueue(request) }.getOrElse { mutableState.value = AppUpdateState.Failed("다운로드를 시작하지 못했습니다. 다시 시도해 주세요."); return }
+        activeDownloadId = id; mutableState.value = AppUpdateState.Downloading(release, 0, automatic)
+        downloadJob = scope.launch {
+            try { monitorDownload(id, release, automatic) }
+            catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+            catch (error: Exception) { Log.w(LOG_TAG, "Update failed", error); downloadManager.remove(id); mutableState.value = AppUpdateState.Failed("업데이트를 받거나 검증하지 못했습니다. 다시 시도해 주세요.") }
+            finally { activeDownloadId = null }
         }
     }
 
     override fun close() {
+        downloadJob?.cancel()
         scope.cancel()
+    }
+
+    private suspend fun monitorDownload(id: Long, release: GitHubAppRelease, automatic: Boolean) {
+        while (true) {
+            val snapshot = queryDownload(id)
+            when (snapshot.first) {
+                DownloadManager.STATUS_SUCCESSFUL -> { val uri = downloadManager.getUriForDownloadedFile(id) ?: throw IOException("Downloaded file unavailable"); val verified = copyAndVerify(uri, release); downloadManager.remove(id); mutableState.value = AppUpdateState.Ready(release, verified); return }
+                DownloadManager.STATUS_FAILED -> throw IOException("DownloadManager failed")
+                else -> mutableState.value = AppUpdateState.Downloading(release, snapshot.second, automatic)
+            }
+            delay(300)
+        }
+    }
+
+    private fun queryDownload(id: Long): Pair<Int, Int?> = downloadManager.query(DownloadManager.Query().setFilterById(id))?.use { cursor ->
+        if (!cursor.moveToFirst()) throw IOException("Download disappeared")
+        val status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS)); val done = cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR)); val total = cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES))
+        status to if (total > 0) ((done * 100L) / total).toInt().coerceIn(0, 100) else null
+    } ?: throw IOException("Download query failed")
+
+    private fun copyAndVerify(uri: Uri, release: GitHubAppRelease): File {
+        val directory = File(applicationContext.cacheDir, UPDATE_DIRECTORY).apply { mkdirs() }; val partial = File(directory, "${release.assetName.removeSuffix(".apk")}.partial.apk"); val destination = File(directory, release.assetName)
+        partial.delete(); val digest = MessageDigest.getInstance("SHA-256"); var total = 0L
+        applicationContext.contentResolver.openInputStream(uri)?.use { input -> partial.outputStream().buffered().use { output -> val buffer = ByteArray(DEFAULT_BUFFER_SIZE); while (true) { val count = input.read(buffer); if (count < 0) break; total += count; if (total > MAX_APK_BYTES) throw IOException("APK too large"); digest.update(buffer, 0, count); output.write(buffer, 0, count) } } } ?: throw IOException("Downloaded file cannot be opened")
+        if (total != release.assetSizeBytes || digest.digest().joinToString("") { "%02x".format(it) } != release.sha256) { partial.delete(); throw IOException("APK digest mismatch") }
+        verifyDownloadedApk(partial, release.versionCode); destination.delete(); if (!partial.renameTo(destination)) throw IOException("Cannot finalize APK"); return destination
     }
 
     private fun fetchLatestRelease(): GitHubAppRelease? {
@@ -255,6 +298,7 @@ class GitHubAppUpdateService(
         const val NETWORK_TIMEOUT_MILLIS = 15_000
         const val MAX_RELEASE_JSON_CHARS = 1_000_000
         const val MAX_APK_BYTES = 200L * 1_024L * 1_024L
+        const val APK_MIME = "application/vnd.android.package-archive"
         const val LOG_TAG = "S.tandUpdate"
     }
 }
@@ -265,13 +309,15 @@ internal object GitHubReleaseDecoder {
         if (root.optBoolean("draft", true) || root.optBoolean("prerelease", true)) return null
         val tag = root.optString("tag_name")
         val productVersion = GitHubUpdatePolicy.productVersion(tag) ?: return null
-        val versionCode = GitHubUpdatePolicy.versionCode(root.optString("body")) ?: return null
+        val releaseNotes = root.optString("body")
+        val versionCode = GitHubUpdatePolicy.versionCode(releaseNotes) ?: return null
         val assets = root.optJSONArray("assets") ?: return null
         for (index in 0 until assets.length()) {
             val asset = assets.optJSONObject(index) ?: continue
             val name = asset.optString("name")
             val url = asset.optString("browser_download_url")
             val size = asset.optLong("size", -1L)
+            val digest = GitHubUpdatePolicy.sha256(asset.optString("digest")) ?: continue
             if (GitHubUpdatePolicy.isApprovedApkAsset(name, url, productVersion, size)) {
                 return GitHubAppRelease(
                     productVersion = productVersion,
@@ -280,6 +326,8 @@ internal object GitHubReleaseDecoder {
                     assetName = name,
                     apkUrl = URL(url),
                     assetSizeBytes = size,
+                    sha256 = digest,
+                    releaseNotes = releaseNotes,
                 )
             }
         }
@@ -290,6 +338,7 @@ internal object GitHubReleaseDecoder {
 internal object GitHubUpdatePolicy {
     private val TAG_PATTERN = Regex("^android-v((?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*))$")
     private val VERSION_CODE_PATTERN = Regex("(?m)^Android-Version-Code: ([1-9]\\d*)$")
+    private val DIGEST_PATTERN = Regex("^sha256:([0-9a-f]{64})$")
 
     fun productVersion(tagName: String): String? = TAG_PATTERN.matchEntire(tagName)
         ?.groupValues
@@ -298,6 +347,7 @@ internal object GitHubUpdatePolicy {
         ?.groupValues
         ?.get(1)
         ?.toIntOrNull()
+    fun sha256(value: String): String? = DIGEST_PATTERN.matchEntire(value)?.groupValues?.get(1)
 
     fun isApprovedApkAsset(
         assetName: String,
@@ -310,10 +360,7 @@ internal object GitHubUpdatePolicy {
         val url = runCatching { URL(urlText) }.getOrNull() ?: return false
         return url.protocol == "https" &&
             url.host == "github.com" &&
-            url.userInfo == null &&
-            (url.port == -1 || url.port == 443) &&
-            url.query == null &&
-            url.ref == null &&
+            url.userInfo == null && (url.port == -1 || url.port == 443) && url.query == null && url.ref == null &&
             url.path == "/armsone/S.tand-Android/releases/download/android-v$productVersion/$assetName"
     }
 

@@ -21,6 +21,7 @@ fun AppUpdateDialog(
     onInstall: () -> Unit,
     onLater: () -> Unit,
     onRetry: () -> Unit = {},
+    onCancel: () -> Unit = {},
 ) {
     when (state) {
         AppUpdateState.Idle -> Unit
@@ -90,17 +91,17 @@ fun AppUpdateDialog(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
-                    CircularProgressIndicator()
-                    Text("안전한 APK인지 확인한 뒤 설치 화면을 엽니다.")
+                    if (state.progressPercent == null) CircularProgressIndicator() else CircularProgressIndicator(progress = { state.progressPercent / 100f })
+                    Text(state.progressPercent?.let { "$it% 다운로드 중" } ?: "업데이트를 받는 중입니다.")
                 }
             },
-            confirmButton = {},
+            confirmButton = { TextButton(onClick = onCancel) { Text("취소") } },
         )
 
         is AppUpdateState.Ready -> AlertDialog(
             onDismissRequest = onLater,
             title = { Text("업데이트 준비 완료") },
-            text = { Text("Android 설치 화면에서 설치를 눌러 주세요.") },
+            text = { Text("서명과 SHA-256 확인을 마쳤습니다. Android 설치 화면에서 설치를 눌러 주세요.") },
             confirmButton = {
                 TextButton(onClick = onInstall) { Text("설치 화면 열기") }
             },

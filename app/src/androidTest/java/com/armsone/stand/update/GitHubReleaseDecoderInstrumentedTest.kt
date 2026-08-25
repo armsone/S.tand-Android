@@ -18,6 +18,7 @@ class GitHubReleaseDecoderInstrumentedTest {
                 {
                   "name": "S.tand-Android-2.1.1.apk",
                   "size": 12345,
+                  "digest": "sha256:${"ab".repeat(32)}",
                   "browser_download_url": "https://github.com/armsone/S.tand-Android/releases/download/android-v2.1.1/S.tand-Android-2.1.1.apk"
                 }
               ]

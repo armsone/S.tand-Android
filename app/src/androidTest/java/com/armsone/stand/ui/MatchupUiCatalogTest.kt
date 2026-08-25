@@ -365,6 +365,9 @@ class MatchupUiCatalogTest {
             onRequestCameraPermission = {},
             onCameraAmbientSensingChanged = {},
             onOpenAppSettings = {},
+            automaticUpdateDownloadEnabled = true,
+            onAutomaticUpdateDownloadChanged = {},
+            onCheckForUpdates = {},
             onBack = {},
         )
     }

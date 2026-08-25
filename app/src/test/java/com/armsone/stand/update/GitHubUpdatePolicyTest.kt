@@ -10,6 +10,12 @@ import org.junit.Test
 
 class GitHubUpdatePolicyTest {
     @Test
+    fun releaseDigestMustUseLowercaseSha256Metadata() {
+        assertEquals("ab".repeat(32), GitHubUpdatePolicy.sha256("sha256:${"ab".repeat(32)}"))
+        assertNull(GitHubUpdatePolicy.sha256("${"ab".repeat(32)}"))
+        assertNull(GitHubUpdatePolicy.sha256("sha256:${"AB".repeat(32)}"))
+    }
+    @Test
     fun releaseIdentitySeparatesProductVersionFromInternalVersionCode() {
         assertEquals("2.1.1", GitHubUpdatePolicy.productVersion("android-v2.1.1"))
         assertNull(GitHubUpdatePolicy.productVersion("android-v340540"))
