@@ -35,7 +35,7 @@ Compose root로 캡처하며 저장 경로·SHA·app bounds를 저장소 manifes
 | `home_portrait` | 오브제 홈 | 일반 실행 | 일반 실행 | 2 radios, fixed clock/weather/phone portrait | 확인 필요 |
 | `home_landscape` | 오브제 홈 가로 | 기기 회전 | 기기 회전 | iOS 0.32.5 대표 iPhone 기본 좌표·배율 이식, fresh paired capture 필요 | 확인 필요 |
 | `home_landscape` | 상단 음악 채널 | horizontal drag/clipping/edge fade | iPhone 원본 1280×588 / Android phone landscape | 오른쪽 제어 버튼 전까지의 음악 영역만 좌우 드래그, 24/28pt edge fade | 부모 음악 viewport가 드래그를 선점하고 영역 밖을 자르며 같은 edge fade 적용 | 화면 꺼짐으로 fresh runtime capture 실패 | Android 실기기 swipe + before/after capture | source High | 구현·단위 테스트, 실화면 확인 필요 |
-| `home_landscape` | 잠소리·보이소·설정 | fixed placement/order | same | 음악 영역 오른쪽 상단에 3개 고정, 설정이 맨 오른쪽 | 같은 순서와 57.12dp 폭, 음악 영역과 별도 고정 Row | 화면 꺼짐으로 fresh screenshot 없음 | 실기기 landscape capture | source/image High | 구현·설치, 실화면 확인 필요 |
+| `home_landscape` | 잠소리·보이소·설정 | fixed placement/order | same | 음악 영역 오른쪽 상단에 3개 고정, 설정이 맨 오른쪽 | 같은 순서와 사용자 조정 68dp 폭, 음악 영역과 별도 고정 Row | 1.3배 글꼴 에뮬레이터 세로·가로 캡처 완료, 실기기 fresh screenshot 없음 | 실기기 landscape capture | source/image High | 구현·단위·에뮬레이터 확인, 실기기 확인 필요 |
 | `home_mate` | 매이트 홈/잠금 | 자동 또는 유지 선택 | 동일 | mate locked | 확인 필요 |
 | `home_startle` | 화들짝 일시 상태 | 60초 뒤 유효 이벤트 | 동일 | dark recent camera + event | 확인 필요 |
 | `home_inactive` | 세션 중지 시작 화면 | 보호 중지 | 동일 | session inactive | 확인 필요 |

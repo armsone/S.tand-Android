@@ -3,7 +3,10 @@ package com.armsone.stand.ui
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
@@ -27,6 +30,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.armsone.stand.model.OrientationPreference
@@ -127,36 +131,46 @@ internal fun StandControlTileContent(
             modifier = Modifier
                 .align(Alignment.Center)
                 .padding(
-                    horizontal = if (isTelevision) 10.dp else 7.dp,
-                    vertical = if (compactTelevision) 5.dp else if (isTelevision) 10.dp else 7.dp,
+                    horizontal = if (isTelevision) 10.dp else 5.dp,
+                    vertical = if (compactTelevision) 5.dp else if (isTelevision) 10.dp else 5.dp,
                 ),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
-            Icon(
-                imageVector = presentation.icon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary.copy(alpha = if (dimmed) 0.52f else 1f),
-                modifier = Modifier.size(
-                    if (compactTelevision) 20.dp else if (isTelevision) 26.dp else 17.dp,
-                ),
-            )
-            Text(
-                text = presentation.title,
-                color = Color.White.copy(alpha = if (dimmed) 0.46f else 0.86f),
-                fontSize = if (dimmed) 11.sp else if (compactTelevision) 13.sp else if (isTelevision) 16.sp else 10.5.sp,
-                fontWeight = FontWeight.SemiBold,
-                textAlign = TextAlign.Center,
-                maxLines = 1,
-            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(if (isTelevision) 8.dp else 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = presentation.icon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary.copy(alpha = if (dimmed) 0.52f else 1f),
+                    modifier = Modifier.size(
+                        if (compactTelevision) 20.dp else if (isTelevision) 26.dp else 17.dp,
+                    ),
+                )
+                Text(
+                    text = presentation.title,
+                    color = Color.White.copy(alpha = if (dimmed) 0.46f else 0.86f),
+                    fontSize = if (dimmed) 9.5.sp else if (compactTelevision) 11.sp else if (isTelevision) 14.sp else 9.sp,
+                    lineHeight = if (dimmed) 10.5.sp else if (compactTelevision) 12.sp else if (isTelevision) 16.sp else 10.5.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = TextAlign.Start,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             if (!hideStatus) {
+                Spacer(modifier = Modifier.height(12.dp))
                 Text(
                     text = presentation.status,
                     color = Color.White.copy(alpha = 0.42f),
-                    fontSize = if (compactTelevision) 10.sp else if (isTelevision) 13.sp else 8.5.sp,
+                    fontSize = if (compactTelevision) 9.sp else if (isTelevision) 12.sp else 7.5.sp,
+                    lineHeight = if (compactTelevision) 10.sp else if (isTelevision) 14.sp else 9.sp,
                     fontWeight = FontWeight.Medium,
                     textAlign = TextAlign.Center,
                     maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }

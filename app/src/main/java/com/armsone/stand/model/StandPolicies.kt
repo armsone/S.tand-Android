@@ -213,9 +213,30 @@ object MusicChannelStripLayoutPolicy {
         clampedOffset(-max(0, cardIndex) * (cardWidth + SPACING), maximumScroll)
 }
 
+object InternetRadioTitleTapPolicy {
+    fun targetChannelID(
+        tappedChannelID: String,
+        activeChannelID: String?,
+        isPlaying: Boolean,
+        orderedChannelIDs: List<String>,
+    ): String? {
+        if (orderedChannelIDs.isEmpty()) return null
+        if (!isPlaying) return tappedChannelID.takeIf(orderedChannelIDs::contains)
+        if (orderedChannelIDs.size == 1) return null
+
+        val currentChannelID = activeChannelID ?: tappedChannelID
+        val currentIndex = orderedChannelIDs.indexOf(currentChannelID)
+        return if (currentIndex >= 0) {
+            orderedChannelIDs[(currentIndex + 1) % orderedChannelIDs.size]
+        } else {
+            orderedChannelIDs.first()
+        }
+    }
+}
+
 /** Fixed control column beside the music strip on phone-shaped landscape canvases. */
 object PhoneLandscapeSideControlsPolicy {
-    const val CONTROL_WIDTH = 57.12f
+    const val CONTROL_WIDTH = 68f
     const val TABLET_MINIMUM_SHORT_EDGE = 600f
 
     fun isEnabled(

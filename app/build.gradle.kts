@@ -11,10 +11,10 @@ android {
         applicationId = "com.armsone.stand"
         minSdk = 26
         targetSdk = 37
-        versionCode = 340680
-        versionName = "2.1.1"
+        versionCode = 341812
+        versionName = "2.1.2"
 
-        buildConfigField("String", "BUILD_NUMBER", "\"202608251400\"")
+        buildConfigField("String", "BUILD_NUMBER", "\"202608260851\"")
         buildConfigField(
             "String",
             "BOYISO_RELAY_URL",

@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.offset
@@ -99,6 +100,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.semantics.contentDescription
@@ -119,6 +121,7 @@ import com.armsone.stand.model.InternetRadioConfiguration
 import com.armsone.stand.model.ExternalMusicService
 import com.armsone.stand.model.HomeMusicChannelKind
 import com.armsone.stand.model.HomeMusicChannelSelection
+import com.armsone.stand.model.InternetRadioTitleTapPolicy
 import com.armsone.stand.model.LampPhase
 import com.armsone.stand.model.MusicChannelStripLayoutPolicy
 import com.armsone.stand.model.PhoneLandscapeSideControlsPolicy
@@ -1552,13 +1555,27 @@ internal fun MusicPanel(
 ) {
     if (selection.kind == HomeMusicChannelKind.INTERNET_RADIO) {
         val radio = state.settings.internetRadioChannels.firstOrNull { it.id == selection.radioID }
+        val orderedChannelIDs = state.settings.internetRadioChannels.map { it.id }
+        val activeChannelID = activeRadioChannelID(state.internetRadioState)
         RadioPanel(
             state = state,
             configuration = radio,
             contentAlpha = contentAlpha,
             isTelevision = isTelevision,
             width = width,
-            onClick = { radio?.id?.let(onToggleRadio) ?: onRegisterRadio() },
+            onPrimaryClick = { radio?.id?.let(onToggleRadio) ?: onRegisterRadio() },
+            onSecondaryClick = {
+                if (radio == null) {
+                    onRegisterRadio()
+                } else {
+                    InternetRadioTitleTapPolicy.targetChannelID(
+                        tappedChannelID = radio.id,
+                        activeChannelID = activeChannelID,
+                        isPlaying = state.internetRadioState is InternetRadioState.Playing,
+                        orderedChannelIDs = orderedChannelIDs,
+                    )?.let(onToggleRadio)
+                }
+            },
             onLongClick = { radio?.id?.let(onEditRadio) },
             drawsSurface = drawsSurface,
             modifier = modifier,
@@ -1599,39 +1616,18 @@ internal fun MusicPanel(
         shape = RoundedCornerShape(13.dp),
         shadowElevation = 0.dp,
     ) {
-        Row(
-            modifier = Modifier.padding(
-                horizontal = if (isTelevision) 8.dp else 11.dp,
-                vertical = if (isTelevision) 5.dp else 9.dp,
-            ),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Icon(
-                imageVector = if (service == ExternalMusicService.SPOTIFY) {
-                    Icons.Default.GraphicEq
-                } else {
-                    Icons.Default.PlayArrow
-                },
-                contentDescription = null,
-                tint = Color.White.copy(alpha = visibleAlpha),
-                modifier = Modifier.size(if (isTelevision) 18.dp else 24.dp),
-            )
-            Column(Modifier.weight(1f)) {
-                Text(
-                    service.displayName,
-                    color = Color.White.copy(alpha = visibleAlpha),
-                    style = if (isTelevision) MaterialTheme.typography.labelMedium else MaterialTheme.typography.labelLarge,
-                    maxLines = 1,
-                )
-                Text(
-                    detail,
-                    color = Color.White.copy(alpha = visibleAlpha * 0.52f),
-                    style = MaterialTheme.typography.labelSmall,
-                    maxLines = 1,
-                )
-            }
-        }
+        MusicPanelTileContent(
+            icon = if (service == ExternalMusicService.SPOTIFY) {
+                Icons.Default.GraphicEq
+            } else {
+                Icons.Default.PlayArrow
+            },
+            title = service.displayName,
+            detail = detail,
+            visibleAlpha = visibleAlpha,
+            detailAlpha = 0.52f,
+            isTelevision = isTelevision,
+        )
     }
 }
 
@@ -1641,7 +1637,8 @@ internal fun RadioPanel(
     configuration: InternetRadioConfiguration?,
     contentAlpha: Float,
     isTelevision: Boolean = false,
-    onClick: () -> Unit,
+    onPrimaryClick: () -> Unit,
+    onSecondaryClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
     width: androidx.compose.ui.unit.Dp = 144.dp,
     drawsSurface: Boolean = true,
@@ -1688,16 +1685,20 @@ internal fun RadioPanel(
         modifier = modifier
             .width(width)
             .height(if (isTelevision) 44.dp else 60.dp)
-            .standFocusable(shape = RoundedCornerShape(13.dp))
-            .combinedClickable(
-                onClick = onClick,
-                onLongClick = onLongClick,
+            .then(
+                if (configuration == null) {
+                    Modifier
+                        .standFocusable(shape = RoundedCornerShape(13.dp))
+                        .combinedClickable(onClick = onPrimaryClick)
+                        .semantics(mergeDescendants = true) {
+                            contentDescription = "$title, $detail. $accessibilityHint"
+                            stateDescription = detail
+                            role = Role.Button
+                        }
+                } else {
+                    Modifier
+                },
             )
-            .semantics(mergeDescendants = true) {
-                contentDescription = "$title, $detail. $accessibilityHint"
-                stateDescription = detail
-                role = Role.Button
-            }
             .then(
                 if (drawsSurface) {
                     Modifier.standPanelSurface(
@@ -1713,39 +1714,108 @@ internal fun RadioPanel(
         shape = RoundedCornerShape(13.dp),
         shadowElevation = 0.dp,
     ) {
-        Row(
-            modifier = Modifier.padding(
-                horizontal = if (isTelevision) 8.dp else 13.dp,
-                vertical = if (isTelevision) 5.dp else 9.dp,
-            ),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Icon(
-                imageVector = if (isActive && state.internetRadioState is InternetRadioState.Playing) {
+        Box {
+            MusicPanelTileContent(
+                icon = if (isActive && state.internetRadioState is InternetRadioState.Playing) {
                     Icons.Default.StopCircle
                 } else {
                     Icons.Default.GraphicEq
                 },
-                contentDescription = null,
-                tint = Color.White.copy(alpha = visibleAlpha),
-                modifier = Modifier.size(if (isTelevision) 18.dp else 24.dp),
+                title = title,
+                detail = detail,
+                visibleAlpha = visibleAlpha,
+                detailAlpha = 0.58f,
+                isTelevision = isTelevision,
             )
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    color = Color.White.copy(alpha = visibleAlpha),
-                    style = if (isTelevision) MaterialTheme.typography.labelMedium else MaterialTheme.typography.labelLarge,
-                    maxLines = 1,
-                )
-                Text(
-                    text = detail,
-                    color = Color.White.copy(alpha = visibleAlpha * 0.58f),
-                    style = MaterialTheme.typography.labelSmall,
-                    maxLines = 1,
-                )
+            if (configuration != null) {
+                Row(modifier = Modifier.fillMaxSize()) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .combinedClickable(
+                                onClick = onPrimaryClick,
+                                onLongClick = onLongClick,
+                            )
+                            .semantics {
+                                contentDescription = "$title, 재생 또는 일시 정지"
+                                stateDescription = detail
+                                role = Role.Button
+                            },
+                    )
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .combinedClickable(
+                                onClick = onSecondaryClick,
+                                onLongClick = onLongClick,
+                            )
+                            .semantics {
+                                contentDescription = "$title, 다음 라디오"
+                                stateDescription = detail
+                                role = Role.Button
+                            },
+                    )
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun MusicPanelTileContent(
+    icon: ImageVector,
+    title: String,
+    detail: String,
+    visibleAlpha: Float,
+    detailAlpha: Float,
+    isTelevision: Boolean,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .offset(y = if (isTelevision) 0.dp else (-2).dp)
+            .padding(
+                horizontal = if (isTelevision) 8.dp else 11.dp,
+                vertical = if (isTelevision) 4.dp else 5.dp,
+            ),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(if (isTelevision) 6.dp else 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = Color.White.copy(alpha = visibleAlpha),
+                modifier = Modifier.size(if (isTelevision) 14.dp else 24.dp),
+            )
+            Text(
+                text = title,
+                color = Color.White.copy(alpha = visibleAlpha),
+                fontSize = if (isTelevision) 9.sp else 11.sp,
+                lineHeight = if (isTelevision) 10.sp else 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Spacer(modifier = Modifier.height(if (isTelevision) 3.dp else 11.dp))
+        Text(
+            text = detail,
+            modifier = Modifier.offset(y = if (isTelevision) 0.dp else (-1).dp),
+            color = Color.White.copy(alpha = visibleAlpha * detailAlpha),
+            fontSize = if (isTelevision) 7.sp else 8.sp,
+            lineHeight = if (isTelevision) 8.sp else 10.sp,
+            fontWeight = FontWeight.Medium,
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 

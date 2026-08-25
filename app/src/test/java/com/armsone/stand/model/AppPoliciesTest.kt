@@ -232,7 +232,7 @@ class AppPoliciesTest {
 
     @Test
     fun phoneLandscapeSideControlsUseShortEdgeToKeepWideFoldablesInPhoneLayout() {
-        assertEquals(57.12f, PhoneLandscapeSideControlsPolicy.CONTROL_WIDTH, 0.001f)
+        assertEquals(68f, PhoneLandscapeSideControlsPolicy.CONTROL_WIDTH, 0.001f)
         assertTrue(
             PhoneLandscapeSideControlsPolicy.isEnabled(
                 isPortrait = false,
@@ -272,6 +272,48 @@ class AppPoliciesTest {
             0f,
             MusicChannelStripLayoutPolicy.draggedOffset(-120f, 500f, 420f),
             0f,
+        )
+    }
+
+    @Test
+    fun internetRadioTitleTapPlaysTappedChannelOrAdvancesWhilePlaying() {
+        val ordered = listOf("first", "second", "third")
+
+        assertEquals(
+            "second",
+            InternetRadioTitleTapPolicy.targetChannelID(
+                tappedChannelID = "second",
+                activeChannelID = null,
+                isPlaying = false,
+                orderedChannelIDs = ordered,
+            ),
+        )
+        assertEquals(
+            "third",
+            InternetRadioTitleTapPolicy.targetChannelID(
+                tappedChannelID = "first",
+                activeChannelID = "second",
+                isPlaying = true,
+                orderedChannelIDs = ordered,
+            ),
+        )
+        assertEquals(
+            "first",
+            InternetRadioTitleTapPolicy.targetChannelID(
+                tappedChannelID = "second",
+                activeChannelID = "third",
+                isPlaying = true,
+                orderedChannelIDs = ordered,
+            ),
+        )
+        assertEquals(
+            null,
+            InternetRadioTitleTapPolicy.targetChannelID(
+                tappedChannelID = "first",
+                activeChannelID = "first",
+                isPlaying = true,
+                orderedChannelIDs = listOf("first"),
+            ),
         )
     }
 

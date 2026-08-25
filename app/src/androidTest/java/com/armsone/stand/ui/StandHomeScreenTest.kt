@@ -11,6 +11,8 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.performClick
+import com.armsone.stand.model.InternetRadioConfiguration
 import com.armsone.stand.model.LampPhase
 import com.armsone.stand.model.StandModePreference
 import com.armsone.stand.model.AppSettings
@@ -24,6 +26,46 @@ import org.junit.Test
 class StandHomeScreenTest {
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()
+
+    @Test
+    fun radioPanelSplitsPrimaryAndNextActionsIntoEqualHalves() {
+        var primaryCount = 0
+        var nextCount = 0
+        val configuration = InternetRadioConfiguration(
+            displayName = "테스트 라디오",
+            streamUrl = "https://example.com/live",
+            id = "test",
+        )
+
+        composeRule.setContent {
+            STandTheme {
+                RadioPanel(
+                    state = StandUiState(),
+                    configuration = configuration,
+                    contentAlpha = 1f,
+                    onPrimaryClick = { primaryCount += 1 },
+                    onSecondaryClick = { nextCount += 1 },
+                )
+            }
+        }
+
+        val primary = composeRule.onNodeWithContentDescription(
+            "테스트 라디오, 재생 또는 일시 정지",
+        )
+        val next = composeRule.onNodeWithContentDescription("테스트 라디오, 다음 라디오")
+        assertEquals(
+            primary.fetchSemanticsNode().boundsInRoot.width,
+            next.fetchSemanticsNode().boundsInRoot.width,
+            0.5f,
+        )
+
+        primary.performClick()
+        next.performClick()
+        composeRule.waitForIdle()
+
+        assertEquals(1, primaryCount)
+        assertEquals(1, nextCount)
+    }
 
     @Test
     fun startScreenExplainsAllFourPermissionUsesBeforeStarting() {
