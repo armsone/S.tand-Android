@@ -95,7 +95,10 @@ data class AppSettings(
         return copy(
             lampIntensity = lampIntensity.coerceIn(0f, 1f),
             silhouetteIntensity = silhouetteIntensity.coerceIn(0.005f, 0.2f),
-            clockScale = clockScale.coerceIn(0.7f, 1.35f),
+            clockScale = clockScale.coerceIn(
+                HomeClockScalePolicy.MINIMUM_SCALE,
+                HomeClockScalePolicy.MAXIMUM_SCALE,
+            ),
             portraitLayout = portraitLayout.copy(),
             landscapeLayout = landscapeLayout.copy(),
             brightnessModeThreshold = brightnessModeThreshold.coerceIn(0f, 1f),
@@ -200,6 +203,13 @@ object AmbientLightPolicy {
 }
 
 object BatteryProtectionPolicy {
+    fun normalizedLevel(level: Int, scale: Int, isPresent: Boolean): Float? =
+        if (isPresent && level >= 0 && scale > 0) {
+            (level.toFloat() / scale.toFloat()).coerceIn(0f, 1f)
+        } else {
+            null
+        }
+
     fun shouldProtect(levelFraction: Float?, isCharging: Boolean): Boolean =
         levelFraction != null && levelFraction <= 0.2f && !isCharging
 

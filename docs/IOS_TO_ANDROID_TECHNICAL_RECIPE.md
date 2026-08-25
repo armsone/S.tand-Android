@@ -106,7 +106,7 @@ Compose가 저장소·센서를 직접 호출하지 않는다. 화면 이벤트�
 - history가 있으면 뒤로, 없으면 닫기; 길게 누르면 즉시 닫기.
 - 팝업은 같은 WebView에서 열고 닫을 때 원래 페이지 복귀.
 - 1dp 구분선, 2dp 진행선, 큰 글자에서도 최소 터치 영역 유지.
-- 기본 즐겨찾기: Google, 한국 라디오, FMSTREAM, Radio Browser.
+- 기본 즐겨찾기: Google, 한국 라디오, 내가 사랑하는 인터넷 라디오, FMSTREAM, Radio Browser.
 - HTTPS/host만 허용. credential, HTTP, `file:`, `blob:`, custom scheme를 거부.
 - 다운로드·attachment·표시 불가 MIME, 파일 선택/업로드/드롭/클립보드 파일을 거부.
 - 웹 카메라·마이크·모션·위치와 HTTP 인증을 거부하고 SSL 검증을 우회하지 않는다.
@@ -181,7 +181,7 @@ Compose가 저장소·센서를 직접 호출하지 않는다. 화면 이벤트�
 
 ## 15. 필수 자동 검증
 
-- 주소/공유 HTTPS·credential·길이, 4개 즐겨찾기.
+- 주소/공유 HTTPS·credential·길이, 5개 즐겨찾기.
 - 재연결 5회와 정확한 지연, 정지/전환/삭제 retry 취소, AudioFocus 복구 조건.
 - pending segment 4개 상한과 중지/오류 정리.
 - 손상 설정 원본 보존과 사용자 변경 후 교체.

@@ -116,38 +116,49 @@ internal fun StandControlKind.presentation(
 internal fun StandControlTileContent(
     presentation: StandControlPresentation,
     showReorderHandle: Boolean,
+    isTelevision: Boolean = false,
+    compactTelevision: Boolean = false,
+    hideStatus: Boolean = false,
+    dimmed: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     Box(modifier = modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .align(Alignment.Center)
-                .padding(horizontal = 7.dp, vertical = 7.dp),
+                .padding(
+                    horizontal = if (isTelevision) 10.dp else 7.dp,
+                    vertical = if (compactTelevision) 5.dp else if (isTelevision) 10.dp else 7.dp,
+                ),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
             Icon(
                 imageVector = presentation.icon,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(17.dp),
+                tint = MaterialTheme.colorScheme.primary.copy(alpha = if (dimmed) 0.52f else 1f),
+                modifier = Modifier.size(
+                    if (compactTelevision) 20.dp else if (isTelevision) 26.dp else 17.dp,
+                ),
             )
             Text(
                 text = presentation.title,
-                color = Color.White.copy(alpha = 0.86f),
-                fontSize = 10.5.sp,
+                color = Color.White.copy(alpha = if (dimmed) 0.46f else 0.86f),
+                fontSize = if (dimmed) 11.sp else if (compactTelevision) 13.sp else if (isTelevision) 16.sp else 10.5.sp,
                 fontWeight = FontWeight.SemiBold,
                 textAlign = TextAlign.Center,
                 maxLines = 1,
             )
-            Text(
-                text = presentation.status,
-                color = Color.White.copy(alpha = 0.42f),
-                fontSize = 8.5.sp,
-                fontWeight = FontWeight.Medium,
-                textAlign = TextAlign.Center,
-                maxLines = 1,
-            )
+            if (!hideStatus) {
+                Text(
+                    text = presentation.status,
+                    color = Color.White.copy(alpha = 0.42f),
+                    fontSize = if (compactTelevision) 10.sp else if (isTelevision) 13.sp else 8.5.sp,
+                    fontWeight = FontWeight.Medium,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                )
+            }
         }
 
         if (showReorderHandle) {

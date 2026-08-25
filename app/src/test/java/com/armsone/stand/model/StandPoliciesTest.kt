@@ -49,6 +49,7 @@ class StandPoliciesTest {
         assertEquals(0.7f, HomeClockScalePolicy.scaled(1f, 0.1f), 0f)
         assertEquals(1.35f, HomeClockScalePolicy.scaled(1f, 3f), 0f)
         assertEquals(1.2f, HomeClockScalePolicy.scaled(0.8f, 1.5f), 0.0001f)
+        assertEquals(1.7f, HomeClockScalePolicy.clamped(3f), 0f)
     }
 
     @Test

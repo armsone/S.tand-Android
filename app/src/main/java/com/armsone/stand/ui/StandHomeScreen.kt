@@ -51,6 +51,7 @@ import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
@@ -58,6 +59,7 @@ import androidx.compose.material.icons.filled.StopCircle
 import androidx.compose.material.icons.filled.Thunderstorm
 import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material.icons.filled.WbSunny
+import androidx.compose.material.icons.filled.ZoomIn
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -83,10 +85,13 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
@@ -125,12 +130,14 @@ import com.armsone.stand.model.StandScreenLayout
 import com.armsone.stand.model.StandModePreference
 import com.armsone.stand.model.StandExperienceMode
 import com.armsone.stand.model.SimplifiedBrightnessModePolicy
+import com.armsone.stand.model.TvUiModePolicy
 import com.armsone.stand.model.WeatherPiece
 import com.armsone.stand.platform.InternetRadioState
 import com.armsone.stand.platform.VolumeAdjustmentPolicy
 import com.armsone.stand.ui.components.ClockDateAndSeconds
 import com.armsone.stand.ui.components.ClockSeconds
 import com.armsone.stand.ui.components.FlipClock
+import com.armsone.stand.ui.components.standFocusable
 import com.armsone.stand.ui.components.standPanelSurface
 import com.armsone.stand.ui.components.rememberBurnInOffset
 import com.armsone.stand.ui.theme.lampGradientColors
@@ -172,6 +179,7 @@ fun StandHomeScreen(
     onRegisterRadio: () -> Unit = {},
     onOpenExternalMusic: (ExternalMusicService) -> Unit = {},
     onEndExternalMusic: () -> Unit = {},
+    onCheckUpdate: () -> Unit = {},
     modifier: Modifier = Modifier,
     catalogNow: LocalDateTime? = null,
 ) {
@@ -190,8 +198,12 @@ fun StandHomeScreen(
             .fillMaxSize()
             .background(Color.Black),
     ) {
-        val isPortrait = maxHeight > maxWidth
-        val isExpanded = maxWidth >= 600.dp
+        val configuration = LocalConfiguration.current
+        val isTelevision = TvUiModePolicy.isTelevision(configuration)
+        val isPortrait = if (isTelevision) false else maxHeight > maxWidth
+        val isExpanded = isTelevision || maxWidth >= 600.dp
+        val tvSafePaddingHorizontal = if (isTelevision) TvUiModePolicy.SAFE_MARGIN_HORIZONTAL_DP.dp else 0.dp
+        val tvSafePaddingVertical = if (isTelevision) TvUiModePolicy.SAFE_MARGIN_VERTICAL_DP.dp else 0.dp
         val viewportWidthDp = maxWidth.value
         val viewportHeightDp = maxHeight.value
         val visibleIntensity = if (state.isFaceDown || state.lampPhase == LampPhase.OFF) {
@@ -211,6 +223,32 @@ fun StandHomeScreen(
             (0.28f + visibleIntensity * 0.72f).coerceIn(0.28f, 1f)
         }
         val gradientColors = lampGradientColors(state.settings.displayTheme, visibleIntensity)
+        val handleBrightnessLevelChanged: (Float) -> Unit = { value ->
+            onBrightnessLevelChanged(value)
+            adjustmentFeedback = HomeAdjustmentFeedback(
+                title = "앱 밝기",
+                value = if (isTelevision) {
+                    "${TvUiModePolicy.brightnessStep(value)}/${TvUiModePolicy.BRIGHTNESS_STEP_COUNT} 단계 · ${(value * 100f).roundToInt()}%"
+                } else {
+                    "${(value * 100f).roundToInt()}%"
+                },
+            )
+        }
+        val handleBrightnessAdjustmentFinished: () -> Unit = {
+            onBrightnessAdjustmentFinished()
+            if (!isTelevision) adjustmentFeedback = null
+        }
+        val handleClockScaleChanged: (Float) -> Unit = { value ->
+            onClockScaleChanged(value)
+            adjustmentFeedback = HomeAdjustmentFeedback(
+                title = "시계 크기",
+                value = if (isTelevision) {
+                    "${TvUiModePolicy.clockScaleStep(value)}/${TvUiModePolicy.CLOCK_SCALE_STEP_COUNT} 단계 · ${(value * 100f).roundToInt()}%"
+                } else {
+                    "${(value * 100f).roundToInt()}%"
+                },
+            )
+        }
 
         if (showPermissionReview && !state.isSessionActive && !state.isFaceDown) {
             Box(
@@ -227,6 +265,7 @@ fun StandHomeScreen(
                 state = state,
                 showPermissionReview = true,
                 onStart = onToggleSession,
+                isTelevision = isTelevision,
                 modifier = Modifier.fillMaxSize(),
             )
         } else {
@@ -236,17 +275,8 @@ fun StandHomeScreen(
             onOpenEditor = onOpenEditor,
             onToggleTheme = onToggleTheme,
             onBrightnessAdjustmentStarted = onBrightnessAdjustmentStarted,
-            onBrightnessLevelChanged = { value ->
-                onBrightnessLevelChanged(value)
-                adjustmentFeedback = HomeAdjustmentFeedback(
-                    title = "앱 밝기",
-                    value = "${(value * 100f).roundToInt()}%",
-                )
-            },
-            onBrightnessAdjustmentFinished = {
-                onBrightnessAdjustmentFinished()
-                adjustmentFeedback = null
-            },
+            onBrightnessLevelChanged = handleBrightnessLevelChanged,
+            onBrightnessAdjustmentFinished = handleBrightnessAdjustmentFinished,
             readSystemVolume = readSystemVolume,
             onSystemVolumeChanged = { value ->
                 onSystemVolumeChanged(value)
@@ -256,13 +286,7 @@ fun StandHomeScreen(
                 )
             },
             onSystemVolumeAdjustmentFinished = { adjustmentFeedback = null },
-            onClockScaleChanged = { value ->
-                onClockScaleChanged(value)
-                adjustmentFeedback = HomeAdjustmentFeedback(
-                    title = "시계 크기",
-                    value = "${(value * 100f).roundToInt()}%",
-                )
-            },
+            onClockScaleChanged = handleClockScaleChanged,
             modifier = Modifier.fillMaxSize(),
         ) {
             Box(
@@ -287,39 +311,67 @@ fun StandHomeScreen(
                     onClockTap = onScreenTap,
                     onClockDoubleTap = {},
                     catalogNow = catalogNow,
+                    isTelevision = isTelevision,
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(WindowInsets.safeDrawing.asPaddingValues())
-                        .padding(horizontal = if (isPortrait) 16.dp else 28.dp),
+                        .padding(
+                            horizontal = (if (isPortrait) 16.dp else 28.dp) + tvSafePaddingHorizontal,
+                            vertical = tvSafePaddingVertical,
+                        )
+                        .then(
+                            if (isTelevision) {
+                                Modifier
+                                    .offset(y = (-90).dp)
+                                    .graphicsLayer {
+                                        scaleX = 0.55f
+                                        scaleY = 0.55f
+                                    }
+                            } else {
+                                Modifier
+                            },
+                        ),
                 )
             } else {
                 StandStartContent(
                     state = state,
                     showPermissionReview = showPermissionReview,
                     onStart = onToggleSession,
+                    isTelevision = isTelevision,
                     modifier = Modifier.align(Alignment.Center),
                 )
             }
 
-            val usesPhoneLandscapeSideControls = PhoneLandscapeSideControlsPolicy.isEnabled(
+            val usesPhoneLandscapeSideControls = !isTelevision && PhoneLandscapeSideControlsPolicy.isEnabled(
                 isPortrait = isPortrait,
                 viewportWidth = viewportWidthDp,
                 viewportHeight = viewportHeightDp,
             )
+
+            val homeTopPadding = if (isTelevision) {
+                TvUiModePolicy.TV_HOME_TOP_PADDING_DP.dp
+            } else {
+                14.dp
+            }
 
             Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(WindowInsets.safeDrawing.asPaddingValues())
                     .padding(
-                        start = if (isPortrait) 16.dp else 28.dp,
-                        top = 14.dp,
-                        end = if (isPortrait) 16.dp else 28.dp,
-                        bottom = if (isPortrait) 28.dp else 18.dp,
+                        start = (if (isPortrait) 16.dp else 28.dp) + tvSafePaddingHorizontal,
+                        top = homeTopPadding,
+                        end = (if (isPortrait) 16.dp else 28.dp) + tvSafePaddingHorizontal,
+                        bottom = (if (isPortrait) 28.dp else 18.dp) + tvSafePaddingVertical,
                     ),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Header(state = state, contentAlpha = contentAlpha)
+                Header(
+                    state = state,
+                    contentAlpha = contentAlpha,
+                    isTelevision = isTelevision,
+                    onCheckUpdate = onCheckUpdate,
+                )
 
                 if (usesPhoneLandscapeSideControls) {
                     Row(
@@ -331,6 +383,7 @@ fun StandHomeScreen(
                             state = state,
                             contentAlpha = contentAlpha,
                             isPhoneLandscape = true,
+                            isTelevision = false,
                             onToggleRadio = onToggleRadio,
                             onEditRadio = onEditRadio,
                             onRegisterRadio = onRegisterRadio,
@@ -353,6 +406,7 @@ fun StandHomeScreen(
                         state = state,
                         contentAlpha = contentAlpha,
                         isPhoneLandscape = false,
+                        isTelevision = isTelevision,
                         onToggleRadio = onToggleRadio,
                         onEditRadio = onEditRadio,
                         onRegisterRadio = onRegisterRadio,
@@ -369,6 +423,7 @@ fun StandHomeScreen(
                         state = state,
                         isPortrait = isPortrait,
                         isExpanded = isExpanded,
+                        isTelevision = isTelevision,
                         onToggleTorch = onToggleTorch,
                         onCycleMode = onCycleMode,
                         onToggleSession = onToggleSession,
@@ -377,6 +432,11 @@ fun StandHomeScreen(
                         onOpenAiShot = onOpenAiShot,
                         onOpenSettings = onOpenSettings,
                         onOpenBoyiso = onOpenBoyiso,
+                        onToggleTheme = onToggleTheme,
+                        onBrightnessAdjustmentStarted = onBrightnessAdjustmentStarted,
+                        onBrightnessLevelChanged = handleBrightnessLevelChanged,
+                        onBrightnessAdjustmentFinished = handleBrightnessAdjustmentFinished,
+                        onClockScaleChanged = handleClockScaleChanged,
                         boyisoStatus = boyisoStatus,
                         boyisoCanSendTokTok = boyisoCanSendTokTok,
                         onSendBoyisoTokTok = onSendBoyisoTokTok,
@@ -413,7 +473,7 @@ fun StandHomeScreen(
                     .align(Alignment.TopCenter)
                     .padding(top = WindowInsets.safeDrawing.asPaddingValues().calculateTopPadding() + 62.dp),
             )
-        } else if (state.isWritingClip) {
+        } else if (!isTelevision && state.isWritingClip) {
             StatusBanner(
                 text = "수면 소리 후보 저장 중 · 기기 안에만 보관해요",
                 modifier = Modifier
@@ -439,15 +499,28 @@ private fun StandStartContent(
     showPermissionReview: Boolean,
     onStart: () -> Unit,
     modifier: Modifier = Modifier,
+    isTelevision: Boolean = false,
 ) {
     if (!showPermissionReview) {
-        RegularStartContent(onStart = onStart, modifier = modifier)
+        RegularStartContent(
+            onStart = onStart,
+            modifier = modifier,
+            isTelevision = isTelevision,
+        )
         return
     }
 
-    val allPermissionsGranted = state.hasCameraPermission &&
-        state.hasMicrophonePermission &&
+    val initialFocusRequester = remember { FocusRequester() }
+    LaunchedEffect(isTelevision) {
+        if (isTelevision) initialFocusRequester.requestFocus()
+    }
+    val allPermissionsGranted = if (isTelevision) {
         state.hasApproximateLocationPermission
+    } else {
+        state.hasCameraPermission &&
+            state.hasMicrophonePermission &&
+            state.hasApproximateLocationPermission
+    }
 
     Column(
         modifier = modifier
@@ -489,16 +562,20 @@ private fun StandStartContent(
                 modifier = Modifier.padding(vertical = 4.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                PermissionReasonRow(
-                    icon = Icons.Default.CameraAlt,
-                    title = "카메라와 플래시",
-                    reason = "방 밝기를 확인하고, 어두울 때 화들짝 모드에서만 잠깐 밝힙니다. 사진·영상은 저장하거나 전송하지 않습니다.",
-                )
-                PermissionReasonRow(
-                    icon = Icons.Default.Mic,
-                    title = "마이크",
-                    reason = "잠꼬대·코골이를 감지하고 필요한 소리만 이 기기에 저장합니다.",
-                )
+                if (!isTelevision) {
+                    PermissionReasonRow(
+                        icon = Icons.Default.CameraAlt,
+                        title = "카메라와 플래시",
+                        reason = "방 밝기를 확인하고, 어두울 때 화들짝 모드에서만 잠깐 밝힙니다. 사진·영상은 저장하거나 전송하지 않습니다.",
+                    )
+                }
+                if (!isTelevision) {
+                    PermissionReasonRow(
+                        icon = Icons.Default.Mic,
+                        title = "마이크",
+                        reason = "잠꼬대·코골이를 감지하고 필요한 소리만 이 기기에 저장합니다.",
+                    )
+                }
                 PermissionReasonRow(
                     icon = Icons.Default.LocationOn,
                     title = "위치 정보",
@@ -521,6 +598,8 @@ private fun StandStartContent(
             modifier = Modifier
                 .height(52.dp)
                 .widthIn(min = 220.dp)
+                .focusRequester(initialFocusRequester)
+                .standFocusable(shape = RoundedCornerShape(16.dp))
                 .semantics {
                     contentDescription = if (allPermissionsGranted) {
                         "S.tand 시작"
@@ -552,7 +631,65 @@ private fun StandStartContent(
 private fun RegularStartContent(
     onStart: () -> Unit,
     modifier: Modifier = Modifier,
+    isTelevision: Boolean = false,
 ) {
+    val initialFocusRequester = remember { FocusRequester() }
+    LaunchedEffect(isTelevision) {
+        if (isTelevision) initialFocusRequester.requestFocus()
+    }
+    if (isTelevision) {
+        Row(
+            modifier = modifier
+                .offset(y = (-52).dp)
+                .widthIn(max = 760.dp)
+                .padding(horizontal = 28.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(18.dp),
+        ) {
+            Image(
+                painter = painterResource(R.drawable.stand_brand_icon),
+                contentDescription = null,
+                modifier = Modifier.size(56.dp),
+            )
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = "S.tand가 곁에 있을게요",
+                    color = Color.White.copy(alpha = 0.92f),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = "시간·날씨와 잠자리를 돌봅니다.",
+                    color = Color.White.copy(alpha = 0.62f),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+            Surface(
+                onClick = onStart,
+                color = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier
+                    .height(56.dp)
+                    .focusRequester(initialFocusRequester)
+                    .standFocusable(shape = RoundedCornerShape(16.dp))
+                    .semantics { contentDescription = "S.tand 시작" },
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 22.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Icon(Icons.Default.LightMode, contentDescription = null)
+                    Text("S.tand 시작", fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+        return
+    }
     Column(
         modifier = modifier.padding(horizontal = 28.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -583,6 +720,8 @@ private fun RegularStartContent(
             shape = RoundedCornerShape(16.dp),
             modifier = Modifier
                 .height(52.dp)
+                .focusRequester(initialFocusRequester)
+                .standFocusable(shape = RoundedCornerShape(16.dp))
                 .semantics { contentDescription = "S.tand 시작" },
         ) {
             Row(
@@ -670,10 +809,10 @@ private fun HomeAdjustmentFeedbackPanel(
             horizontalArrangement = Arrangement.spacedBy(9.dp),
         ) {
             Icon(
-                imageVector = if (feedback.title == "시스템 볼륨") {
-                    Icons.AutoMirrored.Filled.VolumeUp
-                } else {
-                    Icons.Default.LightMode
+                imageVector = when (feedback.title) {
+                    "시스템 볼륨" -> Icons.AutoMirrored.Filled.VolumeUp
+                    "시계 크기" -> Icons.Default.ZoomIn
+                    else -> Icons.Default.LightMode
                 },
                 contentDescription = null,
                 tint = Color.White.copy(alpha = 0.92f),
@@ -773,7 +912,10 @@ private fun HomeGestureLayer(
                         true
                     },
                     CustomAccessibilityAction("시계 크게") {
-                        onClockScaleChanged((state.settings.clockScale + 0.1f).coerceAtMost(1.35f))
+                        onClockScaleChanged(
+                            (state.settings.clockScale + 0.1f)
+                                .coerceAtMost(HomeClockScalePolicy.MAXIMUM_TOUCH_SCALE),
+                        )
                         true
                     },
                     CustomAccessibilityAction("시계 작게") {
@@ -983,47 +1125,74 @@ private enum class HomeAdjustmentAxis {
 }
 
 @Composable
-private fun Header(state: StandUiState, contentAlpha: Float) {
+private fun Header(
+    state: StandUiState,
+    contentAlpha: Float,
+    isTelevision: Boolean = false,
+    onCheckUpdate: () -> Unit = {},
+) {
     Box(
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Row(
-            modifier = Modifier.align(Alignment.CenterStart),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(5.dp),
-        ) {
-            Icon(
-                imageVector = if (!state.isSessionActive) {
-                    Icons.Default.StopCircle
-                } else if (state.experienceMode == StandExperienceMode.STARTLED) {
-                    Icons.Default.Thunderstorm
-                } else if (state.settings.modePreference != StandModePreference.AUTOMATIC) {
-                    Icons.Default.Lock
-                } else {
-                    Icons.Default.Bedtime
-                },
-                contentDescription = null,
-                tint = Color.White.copy(alpha = contentAlpha * 0.62f),
-                modifier = Modifier.size(14.dp),
-            )
-            Text(
-                text = when {
-                    !state.isSessionActive -> "자동 기능 꺼짐"
-                    state.experienceMode == StandExperienceMode.STARTLED ->
-                        StandExperienceMode.STARTLED.title
-                    state.settings.modePreference == com.armsone.stand.model.StandModePreference.OBJECT ->
-                        "오브제 모드 잠금"
-                    state.settings.modePreference == StandModePreference.MATE ->
-                        "매이트 모드 잠금"
-                    else -> state.experienceMode.title
-                },
-                color = Color.White.copy(alpha = contentAlpha * 0.62f),
-                style = MaterialTheme.typography.labelSmall,
-                maxLines = 1,
-            )
+        if (!isTelevision) {
+            Row(
+                modifier = Modifier.align(Alignment.CenterStart),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+            ) {
+                Icon(
+                    imageVector = if (!state.isSessionActive) {
+                        Icons.Default.StopCircle
+                    } else if (state.experienceMode == StandExperienceMode.STARTLED) {
+                        Icons.Default.Thunderstorm
+                    } else if (state.settings.modePreference != StandModePreference.AUTOMATIC) {
+                        Icons.Default.Lock
+                    } else {
+                        Icons.Default.Bedtime
+                    },
+                    contentDescription = null,
+                    tint = Color.White.copy(alpha = contentAlpha * 0.62f),
+                    modifier = Modifier.size(14.dp),
+                )
+                Text(
+                    text = when {
+                        !state.isSessionActive -> "자동 기능 꺼짐"
+                        state.experienceMode == StandExperienceMode.STARTLED ->
+                            StandExperienceMode.STARTLED.title
+                        state.settings.modePreference == com.armsone.stand.model.StandModePreference.OBJECT ->
+                            "오브제 모드 잠금"
+                        state.settings.modePreference == StandModePreference.MATE ->
+                            "매이트 모드 잠금"
+                        else -> state.experienceMode.title
+                    },
+                    color = Color.White.copy(alpha = contentAlpha * 0.62f),
+                    style = MaterialTheme.typography.labelSmall,
+                    maxLines = 1,
+                )
+            }
         }
         Row(
-            modifier = Modifier.align(Alignment.Center),
+            modifier = Modifier
+                .align(Alignment.Center)
+                .clip(RoundedCornerShape(8.dp))
+                .standFocusable(
+                    shape = RoundedCornerShape(8.dp),
+                    scaleOnFocus = false,
+                )
+                .clickable(
+                    onClick = onCheckUpdate,
+                    onClickLabel = "최신 버전 확인",
+                )
+                .semantics(mergeDescendants = true) {
+                    contentDescription = "최신 버전 확인"
+                    role = Role.Button
+                    customActions = listOf(
+                        CustomAccessibilityAction("최신 버전 확인") {
+                            onCheckUpdate()
+                            true
+                        },
+                    )
+                },
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
@@ -1042,22 +1211,24 @@ private fun Header(state: StandUiState, contentAlpha: Float) {
                 fontWeight = FontWeight.SemiBold,
             )
         }
-        Row(
-            modifier = Modifier.align(Alignment.CenterEnd),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            Icon(
-                imageVector = batteryIcon(state.batteryLevel, state.isCharging),
-                contentDescription = null,
-                tint = Color.White.copy(alpha = contentAlpha * 0.62f),
-                modifier = Modifier.size(16.dp),
-            )
-            Text(
-                text = state.batteryText,
-                color = Color.White.copy(alpha = contentAlpha * 0.62f),
-                style = MaterialTheme.typography.labelMedium,
-            )
+        if (state.batteryLevel != null || state.isCharging) {
+            Row(
+                modifier = Modifier.align(Alignment.CenterEnd),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Icon(
+                    imageVector = batteryIcon(state.batteryLevel, state.isCharging),
+                    contentDescription = null,
+                    tint = Color.White.copy(alpha = contentAlpha * 0.62f),
+                    modifier = Modifier.size(16.dp),
+                )
+                Text(
+                    text = state.batteryText,
+                    color = Color.White.copy(alpha = contentAlpha * 0.62f),
+                    style = MaterialTheme.typography.labelMedium,
+                )
+            }
         }
     }
 }
@@ -1073,6 +1244,7 @@ private fun DashboardCanvas(
     onClockDoubleTap: () -> Unit,
     catalogNow: LocalDateTime?,
     modifier: Modifier = Modifier,
+    isTelevision: Boolean = false,
 ) {
     val layout = if (isPortrait) {
         state.settings.portraitLayout
@@ -1109,6 +1281,7 @@ private fun DashboardCanvas(
             )
 
             if (
+                !isTelevision &&
                 state.settings.modePreference == StandModePreference.MATE &&
                 state.experienceMode != StandExperienceMode.STARTLED
             ) {
@@ -1212,6 +1385,7 @@ internal fun MusicChannelStrip(
     state: StandUiState,
     contentAlpha: Float,
     isPhoneLandscape: Boolean,
+    isTelevision: Boolean = false,
     onToggleRadio: (String) -> Unit,
     onEditRadio: (String) -> Unit,
     onRegisterRadio: () -> Unit,
@@ -1223,10 +1397,17 @@ internal fun MusicChannelStrip(
     val scrollState = rememberScrollState()
 
     BoxWithConstraints(
-        modifier = modifier.height(MusicChannelStripLayoutPolicy.CARD_HEIGHT.dp),
+        modifier = modifier.height(
+            if (isTelevision) 44.dp else MusicChannelStripLayoutPolicy.CARD_HEIGHT.dp,
+        ),
     ) {
+        val viewportWidth = maxWidth
         val viewportWidthDp = maxWidth.value
-        val cardWidthDp = MusicChannelStripLayoutPolicy.cardWidth(viewportWidthDp, isPhoneLandscape)
+        val cardWidthDp = if (isTelevision) {
+            112f
+        } else {
+            MusicChannelStripLayoutPolicy.cardWidth(viewportWidthDp, isPhoneLandscape)
+        }
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -1239,11 +1420,14 @@ internal fun MusicChannelStrip(
                 .horizontalScroll(scrollState),
         ) {
             Row(
-                modifier = Modifier.padding(
-                    horizontal = MusicChannelStripLayoutPolicy.SIDE_INSET.dp,
-                ),
+                modifier = if (isTelevision) {
+                    Modifier.width(viewportWidth)
+                } else {
+                    Modifier.padding(horizontal = MusicChannelStripLayoutPolicy.SIDE_INSET.dp)
+                },
                 horizontalArrangement = Arrangement.spacedBy(
                     MusicChannelStripLayoutPolicy.SPACING.dp,
+                    if (isTelevision) Alignment.CenterHorizontally else Alignment.Start,
                 ),
             ) {
                 channels.forEach { selection ->
@@ -1251,6 +1435,7 @@ internal fun MusicChannelStrip(
                         state = state,
                         selection = selection,
                         contentAlpha = contentAlpha,
+                        isTelevision = isTelevision,
                         width = cardWidthDp.dp,
                         onToggleRadio = onToggleRadio,
                         onEditRadio = onEditRadio,
@@ -1330,6 +1515,7 @@ internal fun PhoneLandscapeSideControls(
                         width = PhoneLandscapeSideControlsPolicy.CONTROL_WIDTH.dp,
                         height = MusicChannelStripLayoutPolicy.CARD_HEIGHT.dp,
                     )
+                    .standFocusable(shape = RoundedCornerShape(14.dp))
                     .standPanelSurface(isDimmed = false, cornerRadius = 14.dp, splitGap = 2.dp)
                     .combinedClickable(
                         onClick = if (kind == StandControlKind.BOYISO && boyisoCanSendTokTok) {
@@ -1354,6 +1540,7 @@ internal fun MusicPanel(
     state: StandUiState,
     selection: HomeMusicChannelSelection,
     contentAlpha: Float,
+    isTelevision: Boolean = false,
     onToggleRadio: (String) -> Unit,
     onEditRadio: (String) -> Unit,
     onOpenExternalMusic: (ExternalMusicService) -> Unit,
@@ -1369,6 +1556,7 @@ internal fun MusicPanel(
             state = state,
             configuration = radio,
             contentAlpha = contentAlpha,
+            isTelevision = isTelevision,
             width = width,
             onClick = { radio?.id?.let(onToggleRadio) ?: onRegisterRadio() },
             onLongClick = { radio?.id?.let(onEditRadio) },
@@ -1385,10 +1573,12 @@ internal fun MusicPanel(
     }
     val active = state.externalMusicService == service
     val detail = if (active) "음악 듣기 모드" else "대기 중"
+    val visibleAlpha = contentAlpha * if (isTelevision) 0.48f else 1f
     Surface(
         modifier = modifier
             .width(width)
-            .height(60.dp)
+            .height(if (isTelevision) 44.dp else 60.dp)
+            .standFocusable(shape = RoundedCornerShape(13.dp))
             .combinedClickable(
                 onClick = { onOpenExternalMusic(service) },
                 onLongClick = if (active) onEndExternalMusic else null,
@@ -1400,7 +1590,7 @@ internal fun MusicPanel(
             }
             .then(
                 if (drawsSurface) Modifier.standPanelSurface(
-                    isDimmed = contentAlpha <= 0.2f,
+                    isDimmed = isTelevision || contentAlpha <= 0.2f,
                     cornerRadius = 13.dp,
                     splitGap = 2.dp,
                 ) else Modifier,
@@ -1410,7 +1600,10 @@ internal fun MusicPanel(
         shadowElevation = 0.dp,
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 11.dp, vertical = 9.dp),
+            modifier = Modifier.padding(
+                horizontal = if (isTelevision) 8.dp else 11.dp,
+                vertical = if (isTelevision) 5.dp else 9.dp,
+            ),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
@@ -1421,19 +1614,19 @@ internal fun MusicPanel(
                     Icons.Default.PlayArrow
                 },
                 contentDescription = null,
-                tint = Color.White.copy(alpha = contentAlpha),
-                modifier = Modifier.size(24.dp),
+                tint = Color.White.copy(alpha = visibleAlpha),
+                modifier = Modifier.size(if (isTelevision) 18.dp else 24.dp),
             )
             Column(Modifier.weight(1f)) {
                 Text(
                     service.displayName,
-                    color = Color.White.copy(alpha = contentAlpha),
-                    style = MaterialTheme.typography.labelLarge,
+                    color = Color.White.copy(alpha = visibleAlpha),
+                    style = if (isTelevision) MaterialTheme.typography.labelMedium else MaterialTheme.typography.labelLarge,
                     maxLines = 1,
                 )
                 Text(
                     detail,
-                    color = Color.White.copy(alpha = contentAlpha * 0.52f),
+                    color = Color.White.copy(alpha = visibleAlpha * 0.52f),
                     style = MaterialTheme.typography.labelSmall,
                     maxLines = 1,
                 )
@@ -1447,6 +1640,7 @@ internal fun RadioPanel(
     state: StandUiState,
     configuration: InternetRadioConfiguration?,
     contentAlpha: Float,
+    isTelevision: Boolean = false,
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
     width: androidx.compose.ui.unit.Dp = 144.dp,
@@ -1489,10 +1683,12 @@ internal fun RadioPanel(
             "인터넷 라디오를 끄고 소리 감지와 녹음을 다시 시작합니다."
         else -> "등록한 인터넷 라디오를 재생합니다."
     }
+    val visibleAlpha = contentAlpha * if (isTelevision) 0.48f else 1f
     Surface(
         modifier = modifier
             .width(width)
-            .height(60.dp)
+            .height(if (isTelevision) 44.dp else 60.dp)
+            .standFocusable(shape = RoundedCornerShape(13.dp))
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick,
@@ -1505,7 +1701,7 @@ internal fun RadioPanel(
             .then(
                 if (drawsSurface) {
                     Modifier.standPanelSurface(
-                        isDimmed = contentAlpha <= 0.2f,
+                        isDimmed = isTelevision || contentAlpha <= 0.2f,
                         cornerRadius = 13.dp,
                         splitGap = 2.dp,
                     )
@@ -1518,7 +1714,10 @@ internal fun RadioPanel(
         shadowElevation = 0.dp,
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 13.dp, vertical = 9.dp),
+            modifier = Modifier.padding(
+                horizontal = if (isTelevision) 8.dp else 13.dp,
+                vertical = if (isTelevision) 5.dp else 9.dp,
+            ),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
@@ -1529,19 +1728,19 @@ internal fun RadioPanel(
                     Icons.Default.GraphicEq
                 },
                 contentDescription = null,
-                tint = Color.White.copy(alpha = contentAlpha),
-                modifier = Modifier.size(24.dp),
+                tint = Color.White.copy(alpha = visibleAlpha),
+                modifier = Modifier.size(if (isTelevision) 18.dp else 24.dp),
             )
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
-                    color = Color.White.copy(alpha = contentAlpha),
-                    style = MaterialTheme.typography.labelLarge,
+                    color = Color.White.copy(alpha = visibleAlpha),
+                    style = if (isTelevision) MaterialTheme.typography.labelMedium else MaterialTheme.typography.labelLarge,
                     maxLines = 1,
                 )
                 Text(
                     text = detail,
-                    color = Color.White.copy(alpha = contentAlpha * 0.58f),
+                    color = Color.White.copy(alpha = visibleAlpha * 0.58f),
                     style = MaterialTheme.typography.labelSmall,
                     maxLines = 1,
                 )
@@ -1729,6 +1928,7 @@ private fun HomeControls(
     state: StandUiState,
     isPortrait: Boolean,
     isExpanded: Boolean,
+    isTelevision: Boolean = false,
     onToggleTorch: () -> Unit,
     onCycleMode: () -> Unit,
     onToggleSession: () -> Unit,
@@ -1737,28 +1937,52 @@ private fun HomeControls(
     onOpenAiShot: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenBoyiso: () -> Unit,
+    onToggleTheme: () -> Unit = {},
+    onBrightnessAdjustmentStarted: () -> Unit = {},
+    onBrightnessLevelChanged: (Float) -> Unit = {},
+    onBrightnessAdjustmentFinished: () -> Unit = {},
+    onClockScaleChanged: (Float) -> Unit = {},
     boyisoStatus: String,
     boyisoCanSendTokTok: Boolean,
     onSendBoyisoTokTok: () -> Unit,
 ) {
-    val controlOrder = if (isPortrait) {
+    val initialFocusRequester = remember { FocusRequester() }
+    val rawControlOrder = if (isPortrait) {
         state.settings.portraitLayout.controlOrder
     } else {
         state.settings.landscapeLayout.controlOrder
     }
+    val controlOrder = TvUiModePolicy.allowedControls(isTelevision, rawControlOrder)
+    LaunchedEffect(isTelevision, state.isSessionActive) {
+        if (isTelevision && state.isSessionActive) {
+            initialFocusRequester.requestFocus()
+        }
+    }
     FlowRow(
         modifier = Modifier.fillMaxWidth(),
-        maxItemsInEachRow = if (isExpanded || !isPortrait) 7 else 4,
-        horizontalArrangement = Arrangement.spacedBy(7.dp, Alignment.CenterHorizontally),
+        maxItemsInEachRow = if (isTelevision) 8 else if (isExpanded || !isPortrait) 7 else 4,
+        horizontalArrangement = Arrangement.spacedBy(
+            if (isTelevision) 5.dp else 7.dp,
+            Alignment.CenterHorizontally,
+        ),
         verticalArrangement = Arrangement.spacedBy(7.dp),
     ) {
-        controlOrder.forEach { kind ->
+        controlOrder.forEachIndexed { index, kind ->
+            val initialFocusModifier = if (isTelevision && index == 0) {
+                Modifier.focusRequester(initialFocusRequester)
+            } else {
+                Modifier
+            }
             if (kind == StandControlKind.STOP_DETECTION) {
-                AutomaticRecordingControl(
-                    state = state,
-                    onToggleSession = onToggleSession,
-                )
-                return@forEach
+                if (!isTelevision) {
+                    AutomaticRecordingControl(
+                        state = state,
+                        onToggleSession = onToggleSession,
+                        modifier = initialFocusModifier,
+                        isTelevision = false,
+                    )
+                }
+                return@forEachIndexed
             }
             val defaultAction = when (kind) {
                 StandControlKind.FLASHLIGHT -> onToggleTorch
@@ -1779,6 +2003,56 @@ private fun HomeControls(
                 },
                 onLongClick = onOpenBoyiso.takeIf { kind == StandControlKind.BOYISO },
                 onLongClickLabel = if (kind == StandControlKind.BOYISO) "보이소 설정 열기" else null,
+                modifier = initialFocusModifier,
+                isTelevision = isTelevision,
+                isCompactTelevision = isTelevision,
+                isSettingsControl = kind == StandControlKind.SETTINGS,
+            )
+        }
+        if (isTelevision) {
+            val themeFocusModifier = if (controlOrder.isEmpty()) {
+                Modifier.focusRequester(initialFocusRequester)
+            } else {
+                Modifier
+            }
+            HomeControl(
+                presentation = StandControlPresentation(
+                    icon = Icons.Default.Palette,
+                    title = "테마 전환",
+                    status = state.settings.displayTheme.title,
+                ),
+                onClick = onToggleTheme,
+                modifier = themeFocusModifier,
+                isTelevision = true,
+                isCompactTelevision = true,
+            )
+            HomeControl(
+                presentation = StandControlPresentation(
+                    icon = Icons.Default.LightMode,
+                    title = "앱 밝기",
+                    status = "${TvUiModePolicy.brightnessStep(state.displayBrightness)}/${TvUiModePolicy.BRIGHTNESS_STEP_COUNT} 단계",
+                ),
+                onClick = {
+                    val next = TvUiModePolicy.stepBrightness(state.displayBrightness)
+                    onBrightnessAdjustmentStarted()
+                    onBrightnessLevelChanged(next)
+                    onBrightnessAdjustmentFinished()
+                },
+                isTelevision = true,
+                isCompactTelevision = true,
+            )
+            HomeControl(
+                presentation = StandControlPresentation(
+                    icon = Icons.Default.ZoomIn,
+                    title = "시계 크기",
+                    status = "${TvUiModePolicy.clockScaleStep(state.settings.clockScale)}/${TvUiModePolicy.CLOCK_SCALE_STEP_COUNT} 단계",
+                ),
+                onClick = {
+                    val next = TvUiModePolicy.stepClockScale(state.settings.clockScale)
+                    onClockScaleChanged(next)
+                },
+                isTelevision = true,
+                isCompactTelevision = true,
             )
         }
     }
@@ -1791,14 +2065,20 @@ private const val MaximumSoundThresholdDb = -18f
 private fun AutomaticRecordingControl(
     state: StandUiState,
     onToggleSession: () -> Unit,
+    modifier: Modifier = Modifier,
+    isTelevision: Boolean = false,
 ) {
     val thresholdFraction = soundThresholdFraction(state.effectiveSoundThresholdDB)
     val currentLevel = state.audioLevel.coerceIn(0f, 1f)
     val currentToggleSession by rememberUpdatedState(onToggleSession)
 
     Box(
-        modifier = Modifier
-            .size(width = 203.dp, height = 66.dp)
+        modifier = modifier
+            .size(
+                width = if (isTelevision) 138.dp else 203.dp,
+                height = if (isTelevision) 52.dp else 66.dp,
+            )
+            .standFocusable(shape = RoundedCornerShape(14.dp))
             .standPanelSurface(
                 isDimmed = false,
                 cornerRadius = 14.dp,
@@ -1811,7 +2091,44 @@ private fun AutomaticRecordingControl(
                     "자동 기준 ${(thresholdFraction * 100).roundToInt()}퍼센트"
             },
     ) {
-        AutomaticRecordingControlContent(state = state, showReorderHandle = false)
+        if (isTelevision) {
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { alpha = 0.52f }
+                    .padding(horizontal = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(7.dp),
+            ) {
+                Icon(
+                    imageVector = if (state.isSessionActive) Icons.Default.StopCircle else Icons.Default.PlayArrow,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(20.dp),
+                )
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = "자동 녹음",
+                        color = Color.White,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                    )
+                    Text(
+                        text = if (state.audioRunning) "감지 중" else "대기",
+                        color = Color.White.copy(alpha = 0.64f),
+                        style = MaterialTheme.typography.labelSmall,
+                        maxLines = 1,
+                    )
+                }
+            }
+        } else {
+            AutomaticRecordingControlContent(
+                state = state,
+                showReorderHandle = false,
+                isTelevision = false,
+            )
+        }
     }
 }
 
@@ -1819,6 +2136,7 @@ private fun AutomaticRecordingControl(
 internal fun AutomaticRecordingControlContent(
     state: StandUiState,
     showReorderHandle: Boolean,
+    isTelevision: Boolean = false,
 ) {
     val thresholdFraction = soundThresholdFraction(state.effectiveSoundThresholdDB)
     val currentLevel = state.audioLevel.coerceIn(0f, 1f)
@@ -1833,20 +2151,20 @@ internal fun AutomaticRecordingControlContent(
                 imageVector = if (state.isSessionActive) Icons.Default.StopCircle else Icons.Default.PlayArrow,
                 contentDescription = null,
                 tint = Color.White.copy(alpha = 0.78f),
-                modifier = Modifier.size(22.dp),
+                modifier = Modifier.size(if (isTelevision) 30.dp else 22.dp),
             )
             Spacer(Modifier.width(7.dp))
             Text(
                 text = if (state.isSessionActive) "자동 녹음" else "자동 녹음 시작",
                 color = Color.White.copy(alpha = 0.82f),
-                style = MaterialTheme.typography.labelMedium,
+                style = if (isTelevision) MaterialTheme.typography.titleMedium else MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.SemiBold,
             )
             Spacer(Modifier.weight(1f))
             Text(
                 text = if (state.audioRunning) "감지 중" else "대기",
                 color = Color.White.copy(alpha = 0.48f),
-                style = MaterialTheme.typography.labelSmall,
+                style = if (isTelevision) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.labelSmall,
             )
         }
 
@@ -1922,15 +2240,33 @@ private fun HomeControl(
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
     onLongClickLabel: String? = null,
+    modifier: Modifier = Modifier,
+    isTelevision: Boolean = false,
+    isCompactTelevision: Boolean = false,
+    isSettingsControl: Boolean = false,
 ) {
     Surface(
         color = Color.Transparent,
         shape = RoundedCornerShape(14.dp),
         shadowElevation = 0.dp,
-        modifier = Modifier
-            .size(width = 98.dp, height = 66.dp)
+        modifier = modifier
+            .size(
+                width = when {
+                    isSettingsControl && isCompactTelevision -> 52.dp
+                    isCompactTelevision -> 84.dp
+                    isTelevision -> 160.dp
+                    else -> 98.dp
+                },
+                height = when {
+                    isSettingsControl && isCompactTelevision -> 52.dp
+                    isCompactTelevision -> 52.dp
+                    isTelevision -> 100.dp
+                    else -> 66.dp
+                },
+            )
+            .standFocusable(shape = RoundedCornerShape(14.dp))
             .standPanelSurface(
-                isDimmed = false,
+                isDimmed = isCompactTelevision,
                 cornerRadius = 14.dp,
                 splitGap = 2.dp,
             )
@@ -1943,6 +2279,10 @@ private fun HomeControl(
         StandControlTileContent(
             presentation = presentation,
             showReorderHandle = false,
+            isTelevision = isTelevision,
+            compactTelevision = isCompactTelevision,
+            hideStatus = isSettingsControl && isCompactTelevision,
+            dimmed = isCompactTelevision,
         )
     }
 }

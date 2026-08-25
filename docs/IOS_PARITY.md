@@ -218,13 +218,14 @@ UI 검증은 보류했다.
 | 위치 | iOS approximate location | coarse location | cache 종료 의미 대응, 실기기 검증 대기 |
 | 백업 | iOS 앱 로컬 정책 | Android cloud backup/device transfer 전체 제외 | 사용자 데이터 보호 방향으로 허용 |
 | 파일 시각 | URL resource values | 앱 파일명 우선, 앱 전용 파일의 `File.lastModified()` fallback | 플랫폼 차이. 코드·JVM·Data Safety 근거 기록 완료, Play Console 확인 대기 |
+| TV 플랫폼 | tvOS 별도 타깃 없음 | Android TV / Google TV 지원 (Leanback Launcher, D-pad 초점, 10-foot UI) | Android 확장. TvUiModePolicy, standFocusable, 리모컨 대체 제어 적용 |
 
 ## 앱 내부 브라우저 상세 감사
 
 | 항목 | Android 소스 | 자동 검증 | 남은 검증 |
 |---|---|---|---|
 | Google 홈·주소·검색 | 구현 | JVM 통과 | 실제 검색 |
-| 기본 즐겨찾기 4개 | iOS와 같은 순서/URL | JVM 통과 | 패널 표시·탭 |
+| 기본 즐겨찾기 5개 | iOS와 같은 순서/URL | JVM 통과 | 패널 표시·탭 |
 | 이동/중지·새로고침·뒤로/닫기 | 구현 | 없음 | history·길게 누르기·회전 |
 | HTTPS/host/credential | 구현 | JVM 통과 | redirect·popup |
 | cleartext/mixed/file/content | Manifest/WebSettings 차단 | lint 통과 | 실제 차단 |
@@ -318,3 +319,17 @@ iOS 작업 트리의 `BoyisoModels.swift`, `BoyisoConnectivityService.swift`, `B
 | 보이소 화면·홈 타일 | 호출 버튼·안내·보조 톡톡 버튼, 무전기 참가자 그룹, 무전기 역할 홈 타일 탭 호출을 추가 | Compose 계측·폰/태블릿 캡처 예정 |
 
 배포 후보는 versionName `0.0.1`, versionCode `58`, 빌드 표기 `0.0.58`이다.
+
+## 2026-08-25 Android TV / Google TV 확장
+
+| 항목 | Android 대응 | 근거/검증 |
+|---|---|---|
+| TV 런처 선언 & 배너 | `LEANBACK_LAUNCHER` 카테고리 선언, `android.software.leanback` 및 `android.hardware.touchscreen` `required="false"`, `tv_banner.png` (320×180 xhdpi) 지정 | Manifest 선언, `TvUiModePolicyTest` |
+| TV 플랫폼 감지 & 안전 영역 | `TvUiModePolicy.isTelevision()` (`UI_MODE_TYPE_TELEVISION`) 및 10-foot UI 오버스캔 마진 (가로 48dp, 세로 24dp) 적용 | `TvUiModePolicy`, `TvUiModePolicyTest` |
+| D-pad 초점 가시성 | `Modifier.standFocusable()`을 통한 D-pad 초점 시 고대비 테두리 & 미세 확대 효과 | `TvFocusable.kt` |
+| 터치 제스처의 리모컨 대체 | D-pad 선택으로 순환 조절 가능한 앱 밝기·시계 크기·테마 전환을 홈 제어부에 제공. 드래그 전용 화면 편집은 완결된 D-pad 편집 흐름이 없어 TV에서 숨김 | `TvUiModePolicy`, `StandHomeScreen.kt`, API 36 TV AVD |
+| TV 미지원 하드웨어 제외 | 플래시·카메라 조도 측정·화면 회전 고정·AiShot 제어를 TV에서 숨김 처리하고, 카메라 권한 요청 흐름을 우회 | `TvUiModePolicy`, `MainActivity.kt`, `SettingsScreen.kt`, `BoyisoScreen.kt` |
+| TV 홈 상단 여백 최적화 | Google TV 홈 상단 여백을 기존의 약 30%(11.4dp)로 줄여 헤더 브랜드와 음악 채널 스트립을 함께 상단으로 이동(폰/태블릿 간격 불변) | `TvUiModePolicy.TV_HOME_TOP_PADDING_DP`, `StandHomeScreen.kt`, `TvUiModePolicyTest` |
+| TV 모드 명칭 및 불필요 제어 은닉 | TV 홈/설정에서 "오브제 모드", "매이트 모드" 등 모드 라벨 및 모드 전환 컨트롤을 제거하고, 보이소(Boyiso) 및 잠꼬대·코골이 수면 소리/녹음 제어와 설정 카드를 제외(폰/태블릿 및 내부 데이터 호환성 보존) | `TvUiModePolicy.allowedControls`, `allowedSettingsSections`, `SettingsScreen.kt`, `StandHomeScreen.kt`, `TvUiModePolicyTest` |
+| TV 음악·시계·날씨 우선 & D-pad 탐색 | 6채널 음악 스트립, 시계, 날씨를 우선하고 잔여 제어부(설정, 테마 전환, 앱 밝기, 시계 크기)의 D-pad 포커스 및 리모컨 탐색을 보존 | `StandHomeScreen.kt`, `TvUiModePolicy` |
+| TV 실행 검증 | Google TV API 36에서 첫 포커스, 권한, 시작·중지, D-pad 제어와 Back을 확인하고 Android TV API 36 런처에서 홈 배너 노출을 확인 | `.parity/evidence/2026-08-25/`, 실기기 촉감·제조사 런처 차이는 대기 |

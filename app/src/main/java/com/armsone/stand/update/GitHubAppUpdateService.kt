@@ -31,13 +31,27 @@ data class GitHubAppRelease(
 
 sealed interface AppUpdateState {
     data object Idle : AppUpdateState
-    data object Checking : AppUpdateState
+    data class Checking(val isManual: Boolean = false) : AppUpdateState {
+        companion object {
+            val Automatic = Checking(isManual = false)
+            val Manual = Checking(isManual = true)
+        }
+    }
+    data class Latest(
+        val currentVersionCode: Int,
+        val release: GitHubAppRelease? = null,
+        val message: String? = null,
+    ) : AppUpdateState
     data class Available(
         val release: GitHubAppRelease,
         val message: String? = null,
     ) : AppUpdateState
     data class Downloading(val release: GitHubAppRelease) : AppUpdateState
     data class Ready(val release: GitHubAppRelease, val apkFile: File) : AppUpdateState
+    data class Failed(
+        val message: String,
+        val canRetry: Boolean = true,
+    ) : AppUpdateState
 }
 
 class GitHubAppUpdateService(
@@ -49,20 +63,39 @@ class GitHubAppUpdateService(
         SupervisorJob() + Dispatchers.IO + CoroutineName("GitHubAppUpdateService"),
     )
     private val mutableState = MutableStateFlow<AppUpdateState>(AppUpdateState.Idle)
-    private val checkStarted = AtomicBoolean(false)
+    private val isChecking = AtomicBoolean(false)
 
     val state: StateFlow<AppUpdateState> = mutableState.asStateFlow()
 
-    fun checkForUpdate() {
-        if (!checkStarted.compareAndSet(false, true)) return
-        mutableState.value = AppUpdateState.Checking
-        scope.launch {
-            mutableState.value = runCatching { fetchLatestRelease() }
-                .getOrNull()
-                ?.takeIf { it.versionCode > currentVersionCode }
-                ?.let(AppUpdateState::Available)
-                ?: AppUpdateState.Idle
+    fun checkForUpdate(isManual: Boolean = false) {
+        val currentState = mutableState.value
+        if (currentState is AppUpdateState.Downloading || currentState is AppUpdateState.Ready) {
+            return
         }
+        if (!isChecking.compareAndSet(false, true)) return
+        mutableState.value = if (isManual) {
+            AppUpdateState.Checking.Manual
+        } else {
+            AppUpdateState.Checking.Automatic
+        }
+        scope.launch {
+            try {
+                val result = runCatching { fetchLatestRelease() }
+                mutableState.value = GitHubUpdatePolicy.resolveCheckState(
+                    currentVersionCode = currentVersionCode,
+                    releaseResult = result,
+                    isManual = isManual,
+                )
+            } finally {
+                isChecking.set(false)
+            }
+        }
+    }
+
+    fun dismiss() {
+        val current = mutableState.value
+        if (current is AppUpdateState.Checking || current is AppUpdateState.Downloading) return
+        mutableState.value = AppUpdateState.Idle
     }
 
     fun download(release: GitHubAppRelease) {
@@ -274,5 +307,51 @@ internal object GitHubUpdatePolicy {
                 "/armsone/S.tand-Android/releases/download/android-v$versionCode/",
             ) &&
             url.path.endsWith("/$assetName")
+    }
+
+    fun resolveCheckState(
+        currentVersionCode: Int,
+        releaseResult: Result<GitHubAppRelease?>,
+        isManual: Boolean,
+    ): AppUpdateState {
+        return releaseResult.fold(
+            onSuccess = { release ->
+                when {
+                    release == null -> {
+                        if (isManual) {
+                            AppUpdateState.Failed(
+                                message = "게시된 릴리스 정보를 찾을 수 없어 최신 버전을 확인할 수 없습니다. 나중에 다시 시도해 주세요.",
+                                canRetry = true,
+                            )
+                        } else {
+                            AppUpdateState.Idle
+                        }
+                    }
+                    release.versionCode > currentVersionCode -> {
+                        AppUpdateState.Available(release)
+                    }
+                    else -> {
+                        if (isManual) {
+                            AppUpdateState.Latest(
+                                currentVersionCode = currentVersionCode,
+                                release = release,
+                            )
+                        } else {
+                            AppUpdateState.Idle
+                        }
+                    }
+                }
+            },
+            onFailure = {
+                if (isManual) {
+                    AppUpdateState.Failed(
+                        message = "최신 버전을 확인하지 못했습니다. 인터넷 연결을 확인한 뒤 다시 시도해 주세요.",
+                        canRetry = true,
+                    )
+                } else {
+                    AppUpdateState.Idle
+                }
+            },
+        )
     }
 }

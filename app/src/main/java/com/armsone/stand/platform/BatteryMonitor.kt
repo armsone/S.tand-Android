@@ -101,11 +101,8 @@ class BatteryMonitor(
     private fun stateFromIntent(intent: Intent): DeviceBatteryState {
         val level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
         val scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
-        val levelFraction = if (level >= 0 && scale > 0) {
-            (level.toFloat() / scale.toFloat()).coerceIn(0f, 1f)
-        } else {
-            null
-        }
+        val isPresent = intent.getBooleanExtra(BatteryManager.EXTRA_PRESENT, true)
+        val levelFraction = BatteryProtectionPolicy.normalizedLevel(level, scale, isPresent)
 
         val status = intent.getIntExtra(
             BatteryManager.EXTRA_STATUS,

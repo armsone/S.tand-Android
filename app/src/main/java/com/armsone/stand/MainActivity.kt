@@ -54,6 +54,8 @@ import com.armsone.stand.model.ScreenLayoutCodec
 import com.armsone.stand.model.ClockFontChoice
 import com.armsone.stand.model.ClockHourMode
 import com.armsone.stand.model.ExternalMusicService
+import com.armsone.stand.model.StandModePreference
+import com.armsone.stand.model.TvUiModePolicy
 import com.armsone.stand.boyiso.BoyisoManager
 import com.armsone.stand.boyiso.BoyisoQrCode
 import com.armsone.stand.boyiso.BoyisoRole
@@ -197,12 +199,15 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
+        val isTelevision = TvUiModePolicy.isTelevision(resources.configuration)
         BoyisoManager.isAppVisible = true
         startObservingSystemBrightness()
-        val hasMicrophonePermission = hasPermission(Manifest.permission.RECORD_AUDIO)
+        val hasMicrophonePermission = !isTelevision && hasPermission(Manifest.permission.RECORD_AUDIO)
         val hasLocationPermission = hasPermission(Manifest.permission.ACCESS_COARSE_LOCATION)
-        val hasCameraPermission = hasPermission(Manifest.permission.CAMERA)
-        if (hasMicrophonePermission && hasLocationPermission && hasCameraPermission) {
+        val hasCameraPermission = if (isTelevision) false else hasPermission(Manifest.permission.CAMERA)
+        if ((isTelevision && hasLocationPermission) ||
+            (!isTelevision && hasMicrophonePermission && hasLocationPermission && hasCameraPermission)
+        ) {
             showPermissionReviewOnThisLaunch = false
             processPermissionReviewDecision = false
             clearPermissionReminderSchedule()
@@ -212,10 +217,14 @@ class MainActivity : ComponentActivity() {
             hasLocationPermission = hasLocationPermission,
             hasCameraPermission = hasCameraPermission,
             mayAutomaticallyStart = !showPermissionReviewOnThisLaunch ||
-                (hasMicrophonePermission && hasLocationPermission && hasCameraPermission),
+                (isTelevision && hasLocationPermission) ||
+                (!isTelevision && hasMicrophonePermission && hasLocationPermission && hasCameraPermission),
         )
-
         val state = standViewModel.uiState.value
+        if (isTelevision && state.settings.modePreference != StandModePreference.OBJECT) {
+            standViewModel.setModePreference(StandModePreference.OBJECT)
+        }
+
         applySessionWindowState(state.isSessionActive || state.isExternalMusicModeActive)
         applyOrientationPreference(state.settings.orientationPreference)
     }
@@ -539,6 +548,10 @@ class MainActivity : ComponentActivity() {
                         secondaryReturnDestination = AppDestination.HOME
                         destination = AppDestination.RADIO
                     },
+                    onCheckUpdate = {
+                        ignoredUpdateVersion = null
+                        appUpdateService.checkForUpdate(isManual = true)
+                    },
                 )
 
                 AppDestination.SETTINGS -> SettingsScreen(
@@ -767,15 +780,16 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            val updateVersion = when (val update = appUpdateState) {
-                is AppUpdateState.Available -> update.release.versionCode
-                is AppUpdateState.Downloading -> update.release.versionCode
-                is AppUpdateState.Ready -> update.release.versionCode
-                AppUpdateState.Checking,
-                AppUpdateState.Idle,
-                -> null
+            val shouldShowUpdateDialog = when (val update = appUpdateState) {
+                is AppUpdateState.Idle -> false
+                is AppUpdateState.Checking -> update.isManual
+                is AppUpdateState.Available -> ignoredUpdateVersion != update.release.versionCode
+                is AppUpdateState.Downloading -> true
+                is AppUpdateState.Ready -> ignoredUpdateVersion != update.release.versionCode
+                is AppUpdateState.Latest -> true
+                is AppUpdateState.Failed -> true
             }
-            if (updateVersion != null && ignoredUpdateVersion != updateVersion) {
+            if (shouldShowUpdateDialog) {
                 AppUpdateDialog(
                     state = appUpdateState,
                     onDownload = {
@@ -788,7 +802,18 @@ class MainActivity : ComponentActivity() {
                             requestUpdateInstall(ready.apkFile)
                         }
                     },
-                    onLater = { ignoredUpdateVersion = updateVersion },
+                    onRetry = {
+                        ignoredUpdateVersion = null
+                        appUpdateService.checkForUpdate(isManual = true)
+                    },
+                    onLater = {
+                        when (val update = appUpdateState) {
+                            is AppUpdateState.Available -> ignoredUpdateVersion = update.release.versionCode
+                            is AppUpdateState.Ready -> ignoredUpdateVersion = update.release.versionCode
+                            else -> Unit
+                        }
+                        appUpdateService.dismiss()
+                    },
                 )
             }
             activeTokTokSender?.let { sender ->
@@ -809,12 +834,18 @@ class MainActivity : ComponentActivity() {
             return
         }
 
+        val isTelevision = TvUiModePolicy.isTelevision(resources.configuration)
         permissionSequenceRemaining.clear()
-        listOf(
-            PermissionRequest.CAMERA,
-            PermissionRequest.MICROPHONE,
-            PermissionRequest.LOCATION,
-        ).filterNot { request -> hasPermission(permissionFor(request)) }
+        val requiredRequests = if (isTelevision) {
+            listOf(PermissionRequest.LOCATION)
+        } else {
+            listOf(
+                PermissionRequest.CAMERA,
+                PermissionRequest.MICROPHONE,
+                PermissionRequest.LOCATION,
+            )
+        }
+        requiredRequests.filterNot { request -> hasPermission(permissionFor(request)) }
             .forEach(permissionSequenceRemaining::addLast)
 
         if (permissionSequenceRemaining.isEmpty()) {
@@ -892,11 +923,16 @@ class MainActivity : ComponentActivity() {
             PERMISSION_REMINDER_PREFERENCES,
             MODE_PRIVATE,
         )
-        val hasMissingPermission = listOf(
-            Manifest.permission.CAMERA,
-            Manifest.permission.RECORD_AUDIO,
-            Manifest.permission.ACCESS_COARSE_LOCATION,
-        ).any { permission -> !hasPermission(permission) }
+        val isTelevision = TvUiModePolicy.isTelevision(resources.configuration)
+        val requiredPermissions = TvUiModePolicy.filterLaunchPermissions(
+            isTelevision = isTelevision,
+            permissions = listOf(
+                Manifest.permission.CAMERA,
+                Manifest.permission.RECORD_AUDIO,
+                Manifest.permission.ACCESS_COARSE_LOCATION,
+            ),
+        )
+        val hasMissingPermission = requiredPermissions.any { permission -> !hasPermission(permission) }
         val remaining = if (preferences.contains(KEY_LAUNCHES_UNTIL_PERMISSION_REMINDER)) {
             preferences.getInt(KEY_LAUNCHES_UNTIL_PERMISSION_REMINDER, 1)
         } else {
@@ -935,10 +971,11 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun syncViewModelPermissions() {
+        val isTelevision = TvUiModePolicy.isTelevision(resources.configuration)
         standViewModel.setPermissions(
-            hasMicrophonePermission = hasPermission(Manifest.permission.RECORD_AUDIO),
+            hasMicrophonePermission = !isTelevision && hasPermission(Manifest.permission.RECORD_AUDIO),
             hasLocationPermission = hasPermission(Manifest.permission.ACCESS_COARSE_LOCATION),
-            hasCameraPermission = hasPermission(Manifest.permission.CAMERA),
+            hasCameraPermission = !isTelevision && hasPermission(Manifest.permission.CAMERA),
         )
     }
 
@@ -1003,10 +1040,13 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun applyOrientationPreference(preference: OrientationPreference) {
-        val orientation = when (preference) {
-            OrientationPreference.AUTOMATIC -> ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-            OrientationPreference.PORTRAIT -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
-            OrientationPreference.LANDSCAPE -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        val isTelevision = TvUiModePolicy.isTelevision(resources.configuration)
+        val orientation = when {
+            isTelevision -> ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+            preference == OrientationPreference.AUTOMATIC -> ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            preference == OrientationPreference.PORTRAIT -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+            preference == OrientationPreference.LANDSCAPE -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            else -> ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         }
         if (requestedOrientation != orientation) requestedOrientation = orientation
     }
@@ -1169,6 +1209,11 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun scanBoyisoInvitation() {
+        val isTelevision = TvUiModePolicy.isTelevision(resources.configuration)
+        if (isTelevision) {
+            showToast("TV에서는 카메라 촬영을 지원하지 않습니다. 스마트폰으로 TV의 QR코드를 스캔해 주세요.")
+            return
+        }
         val options = GmsBarcodeScannerOptions.Builder()
             .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
             .enableAutoZoom()

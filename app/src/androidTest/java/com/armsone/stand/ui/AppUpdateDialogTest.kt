@@ -49,4 +49,71 @@ class AppUpdateDialogTest {
 
         assertEquals(1, downloadCount)
     }
+
+    @Test
+    fun latestReleaseShowsUpToDateDialogAndDismisses() {
+        var laterCount = 0
+        composeRule.setContent {
+            STandTheme {
+                AppUpdateDialog(
+                    state = AppUpdateState.Latest(currentVersionCode = 29),
+                    onDownload = {},
+                    onInstall = {},
+                    onLater = { laterCount += 1 },
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("최신 버전입니다").assertIsDisplayed()
+        composeRule.onNodeWithText("확인").performClick()
+        composeRule.waitForIdle()
+
+        assertEquals(1, laterCount)
+    }
+
+    @Test
+    fun failedCheckShowsNextActionAndAllowsRetry() {
+        var retryCount = 0
+        var dismissCount = 0
+        composeRule.setContent {
+            STandTheme {
+                AppUpdateDialog(
+                    state = AppUpdateState.Failed(
+                        message = "최신 버전을 확인하지 못했습니다. 인터넷 연결을 확인한 뒤 다시 시도해 주세요.",
+                        canRetry = true,
+                    ),
+                    onDownload = {},
+                    onInstall = {},
+                    onRetry = { retryCount += 1 },
+                    onLater = { dismissCount += 1 },
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("최신 버전을 확인할 수 없습니다").assertIsDisplayed()
+        composeRule.onNodeWithText("인터넷 연결을 확인한 뒤 다시 시도해 주세요.", substring = true)
+            .assertIsDisplayed()
+        composeRule.onNodeWithText("다시 시도").performClick()
+        composeRule.waitForIdle()
+
+        assertEquals(1, retryCount)
+        assertEquals(0, dismissCount)
+    }
+
+    @Test
+    fun manualCheckingStateDisplaysProgress() {
+        composeRule.setContent {
+            STandTheme {
+                AppUpdateDialog(
+                    state = AppUpdateState.Checking(isManual = true),
+                    onDownload = {},
+                    onInstall = {},
+                    onLater = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("최신 버전 확인 중").assertIsDisplayed()
+        composeRule.onNodeWithText("취소").assertDoesNotExist()
+    }
 }

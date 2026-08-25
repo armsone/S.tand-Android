@@ -20,6 +20,10 @@ object InternetRadioBrowserPolicy {
     val favorites = listOf(
         InternetRadioBrowserFavorite("Google", "https://www.google.com/", isHomepage = true),
         InternetRadioBrowserFavorite("한국 라디오", "https://radio.bsod.kr/"),
+        InternetRadioBrowserFavorite(
+            "내가 사랑하는 인터넷 라디오",
+            "https://blog.naver.com/armsone/224388181252",
+        ),
         InternetRadioBrowserFavorite("FMSTREAM", "https://fmstream.org/"),
         InternetRadioBrowserFavorite("Radio Browser", "https://www.radio-browser.info/"),
     )

@@ -95,7 +95,8 @@ object HoldDurationAdjustment {
 
 object HomeClockScalePolicy {
     const val MINIMUM_SCALE = 0.7f
-    const val MAXIMUM_SCALE = 1.35f
+    const val MAXIMUM_TOUCH_SCALE = 1.35f
+    const val MAXIMUM_SCALE = 1.7f
 
     fun clamped(scale: Float): Float = when {
         !scale.isFinite() -> 1f
@@ -104,7 +105,9 @@ object HomeClockScalePolicy {
 
     fun scaled(startingAt: Float, magnification: Float): Float {
         val safeMagnification = magnification.takeIf { it.isFinite() && it > 0f } ?: 1f
-        return clamped(clamped(startingAt) * safeMagnification)
+        val safeStartingScale = startingAt.coerceIn(MINIMUM_SCALE, MAXIMUM_TOUCH_SCALE)
+        return (safeStartingScale * safeMagnification)
+            .coerceIn(MINIMUM_SCALE, MAXIMUM_TOUCH_SCALE)
     }
 }
 

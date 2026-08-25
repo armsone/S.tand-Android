@@ -1,0 +1,670 @@
+{
+  "ledger_version": 1,
+  "rows": [
+    {
+      "id": "tv_launcher.installed_app.discovery",
+      "route_state": "tv_launcher",
+      "element": "installed_app",
+      "dimension": "launcher discovery and banner",
+      "classification": "functional",
+      "source_ref": {
+        "kind": "spec",
+        "value": "Installed app appears in the TV launcher with its 16:9 named banner",
+        "location": "https://developer.android.com/docs/quality-guidelines/tv-app-quality"
+      },
+      "target_observation": "Android TV API 36 listed the named 16:9 S.tand banner and displayed it in the first Favorite Apps slot; Google TV resolved the same Leanback activity",
+      "implementation_ref": "app/src/main/AndroidManifest.xml",
+      "fixture": "google_tv_landscape_default",
+      "fallback_capable": false,
+      "evidence": [
+        {
+          "id": "tv-launcher-runtime-20260825",
+          "type": "behavior_trace",
+          "path": ".parity/evidence/2026-08-25/tv-behavior-trace.md",
+          "sha256": "c7ad0c589f325cb2a1fa87bb105a5af1435da2946f49e54981457a9fae016743"
+        },
+        {
+          "id": "tv-launcher-home-capture-20260825",
+          "type": "other",
+          "path": ".parity/evidence/2026-08-25/tv-launcher-home.png",
+          "sha256": "8e46e309e17802f8912ae8d72fcd4153f5703ead3b4a3a4f1bf098a9b5c64d44"
+        }
+      ],
+      "status": "matched",
+      "attempts": [
+        {
+          "attempt": 1,
+          "date": "2026-08-25",
+          "action": "Added TV launcher declarations and verified packaged APK badging",
+          "result": "Source and APK verified; device launcher capture pending"
+        },
+        {
+          "attempt": 2,
+          "date": "2026-08-25",
+          "action": "Installed the APK on API 36 TV AVDs and added S.tand to the Android TV home row",
+          "result": "Leanback resolution, banner listing and home-row rendering verified"
+        }
+      ]
+    },
+    {
+      "id": "tv_start.start_button.initial_focus",
+      "route_state": "tv_start",
+      "element": "start_button",
+      "dimension": "initial visible focus",
+      "classification": "functional",
+      "source_ref": {
+        "kind": "spec",
+        "value": "The first actionable control has an obvious focus state when TV UI opens",
+        "location": "https://developer.android.com/training/tv/get-started/navigation"
+      },
+      "target_observation": "The first-launch permission review and inactive start action showed visible focus without prior D-pad movement",
+      "implementation_ref": "app/src/main/java/com/armsone/stand/ui/StandHomeScreen.kt",
+      "fixture": "google_tv_first_launch",
+      "fallback_capable": false,
+      "evidence": [
+        {
+          "id": "tv-start-focus-runtime-20260825",
+          "type": "behavior_trace",
+          "path": ".parity/evidence/2026-08-25/tv-behavior-trace.md",
+          "sha256": "c7ad0c589f325cb2a1fa87bb105a5af1435da2946f49e54981457a9fae016743"
+        },
+        {
+          "id": "tv-start-focus-capture-20260825",
+          "type": "other",
+          "path": ".parity/evidence/2026-08-25/tv-first-launch-focus.png",
+          "sha256": "d692cf67b60c58d3ac5b38f9722508c8ec4b585e10320a01c8412abaa951e057"
+        }
+      ],
+      "status": "matched",
+      "attempts": [
+        {
+          "attempt": 1,
+          "date": "2026-08-25",
+          "action": "Requested initial focus for both permission-review and regular start buttons",
+          "result": "Compiled; real remote confirmation pending"
+        },
+        {
+          "attempt": 2,
+          "date": "2026-08-25",
+          "action": "Cold-launched on Google TV and Android TV API 36 AVDs",
+          "result": "Initial focus was visible and D-pad Select opened the permission sequence"
+        }
+      ]
+    },
+    {
+      "id": "tv_home.core_controls.dpad_navigation",
+      "route_state": "tv_home",
+      "element": "core_controls",
+      "dimension": "five-way D-pad navigation and selection",
+      "classification": "functional",
+      "source_ref": {
+        "kind": "spec",
+        "value": "All offered core controls are reachable and selectable using five-way D-pad input",
+        "location": "https://developer.android.com/docs/quality-guidelines/tv-app-quality"
+      },
+      "target_observation": "The simplified TV home exposes only Settings, theme, app brightness, and clock size; D-pad navigation reached the brightness control and three Select presses changed 40% to 70%.",
+      "implementation_ref": "app/src/main/java/com/armsone/stand/ui/StandHomeScreen.kt",
+      "fixture": "google_tv_home_active",
+      "fallback_capable": false,
+      "evidence": [
+        {
+          "id": "tv-dpad-runtime-20260825",
+          "type": "behavior_trace",
+          "path": ".parity/evidence/2026-08-25/tv-behavior-trace.md",
+          "sha256": "c7ad0c589f325cb2a1fa87bb105a5af1435da2946f49e54981457a9fae016743"
+        }
+      ],
+      "status": "matched",
+      "attempts": [
+        {
+          "attempt": 1,
+          "date": "2026-08-25",
+          "action": "Filtered unavailable hardware controls and added remote theme, brightness and clock-size actions",
+          "result": "Compiled and policy-tested; D-pad path pending on device"
+        },
+        {
+          "attempt": 2,
+          "date": "2026-08-25",
+          "action": "Exercised D-pad focus and Select across primary and TV-only controls",
+          "result": "Session start/stop and 40→50% brightness, 101→111% clock size and Orange→Gray theme changes verified"
+        },
+        {
+          "attempt": 3,
+          "date": "2026-08-25",
+          "action": "Removed recording, Boyiso and mode-cycling actions from the TV-only control policy, then exercised the remaining row",
+          "result": "Settings, theme, brightness and clock size remained reachable; brightness changed from 40% to 70% with D-pad Select"
+        }
+      ],
+      "reopen_history": [
+        {
+          "date": "2026-08-25",
+          "observed_by": "user",
+          "description": "Changed the Google TV product contract to remove Boyiso, sleep-sound recording and Mate/Object mode controls",
+          "resolved_by_evidence": "tv-dpad-runtime-20260825"
+        }
+      ]
+    },
+    {
+      "id": "tv_home.controls.10foot_layout",
+      "route_state": "tv_home",
+      "element": "controls",
+      "dimension": "10-foot size, spacing and safe margins",
+      "classification": "visual",
+      "source_ref": {
+        "kind": "spec",
+        "value": "Landscape TV layout remains legible at viewing distance and avoids clipped edge content",
+        "location": "https://developer.android.com/docs/quality-guidelines/tv-app-quality"
+      },
+      "target_observation": "The 1080p captures show the six dim 112x44dp music controls centered as a group, every bottom control reduced to a dim 52dp-high row, brightness feedback as current/10 plus percent, clock-size feedback as current/6 plus percent, and the enlarged 170% clock clear of adjacent content.",
+      "implementation_ref": "app/src/main/java/com/armsone/stand/ui/StandHomeScreen.kt",
+      "fixture": "google_tv_1080p_landscape",
+      "fallback_capable": false,
+      "evidence": [
+        {
+          "id": "tv-layout-post-change-20260825",
+          "type": "capture_pair",
+          "path": ".parity/evidence/2026-08-25/google-tv-active-home.png",
+          "sha256": "0fe633d5b6b88fbe186508ae74a80c430bef27f04ed5185a5336f5c2e8beba62",
+          "post_change": true
+        },
+        {
+          "id": "tv-layout-compact-dock-20260825",
+          "type": "capture_pair",
+          "path": ".parity/evidence/2026-08-25/google-tv-compact-controls.png",
+          "sha256": "257d51f8231be07569f35c860515bacbb808508157237f243ee9243a35f26cc6",
+          "post_change": true
+        },
+        {
+          "id": "tv-clock-scale-steps-20260825",
+          "type": "capture_pair",
+          "path": ".parity/evidence/2026-08-25/google-tv-clock-scale-steps.png",
+          "sha256": "17f0cb83411255c34949c4335da03e086c446139ca28a07f4b2e1154e4aeae6f",
+          "post_change": true
+        },
+        {
+          "id": "tv-clock-scale-max-20260825",
+          "type": "capture_pair",
+          "path": ".parity/evidence/2026-08-25/google-tv-clock-scale-max.png",
+          "sha256": "20afa8e16f6580cb1358dd4e79f419c1fd00bdfc1730a3c492ed6ad87adb5969",
+          "post_change": true
+        }
+      ],
+      "status": "matched",
+      "attempts": [
+        {
+          "attempt": 1,
+          "date": "2026-08-25",
+          "action": "Added TV-specific larger controls, icon and typography sizing",
+          "result": "Source and build verified; screenshot pending"
+        },
+        {
+          "attempt": 2,
+          "date": "2026-08-25",
+          "action": "Captured the initial overlapping layout, corrected it, and captured active and inactive 1080p layouts",
+          "result": "No overlap or edge clipping remained in the post-change captures"
+        },
+        {
+          "attempt": 3,
+          "date": "2026-08-25",
+          "action": "Reopened after user review, reduced the TV dock to one 60dp row, made Settings a dim 52x52dp control, and reduced the top music row to dim 112x44dp controls",
+          "result": "Google TV API 36 capture shows the full clock and every D-pad control without wrapping or covering the main content; secondary top and Settings controls stay visually behind the clock"
+        },
+        {
+          "attempt": 4,
+          "date": "2026-08-25",
+          "action": "Centered the complete Internet Radio row and applied the compact dim treatment to every bottom panel, including automatic recording and ordinary controls",
+          "result": "Google TV API 36 capture verifies equal outer spacing for the music group, a compact 52dp bottom row, clear focused-control feedback, and no main-content obstruction"
+        },
+        {
+          "attempt": 5,
+          "date": "2026-08-25",
+          "action": "Added persistent six-level TV clock sizing up to 170%, ten-level brightness feedback, and a shared TV adjustment HUD path used by both gesture and D-pad controls",
+          "result": "Google TV API 36 captures verify temporary 5/10 brightness and 6/6 clock-size feedback; the 170% clock remains clear of the location, date, music, and bottom-control regions"
+        }
+      ]
+    },
+    {
+      "id": "tv_settings.unavailable_hardware.capability_gating",
+      "route_state": "tv_settings",
+      "element": "unavailable_hardware",
+      "dimension": "capability gating and explanation",
+      "classification": "functional",
+      "source_ref": {
+        "kind": "spec",
+        "value": "TV-absent hardware does not block installation or lead users into impossible permission flows",
+        "location": "https://developer.android.com/training/tv/get-started/create"
+      },
+      "target_observation": "The 2.1.0 release APK was launched with clean app data in a separate ephemeral Android user. The first screen listed only location, and D-pad Select opened exactly one approximate-location dialog; no microphone or camera request appeared. User 0 data remained intact.",
+      "implementation_ref": "app/src/main/java/com/armsone/stand/ui/SettingsScreen.kt",
+      "fixture": "google_tv_no_camera_no_touch",
+      "fallback_capable": false,
+      "evidence": [
+        {
+          "id": "tv-capability-runtime-20260825",
+          "type": "behavior_trace",
+          "path": ".parity/evidence/2026-08-25/tv-behavior-trace.md",
+          "sha256": "1bcec16811b4487a802c677424a10e676970516ccbea1b0a9e099fa49b44bdc5"
+        },
+        {
+          "id": "tv-capability-capture-20260825",
+          "type": "other",
+          "path": ".parity/evidence/2026-08-25/tv-settings-capability.png",
+          "sha256": "1ca4d81cc1bf1c8d74fd69e7b44aff5126e4adc50c9b4e35521f8fced5a130ad"
+        },
+        {
+          "id": "tv-clean-first-launch-20260825",
+          "type": "other",
+          "path": ".parity/evidence/2026-08-25/google-tv-clean-first-launch.png",
+          "sha256": "d1291aa03f56e4a8918cf0b77bc198e870ecfc5138a74630d81df66002ea970d"
+        },
+        {
+          "id": "tv-location-only-permission-20260825",
+          "type": "other",
+          "path": ".parity/evidence/2026-08-25/google-tv-location-only-permission.png",
+          "sha256": "73ce9431475f2e9a94bb38ea89b1de61ee4bb90a5689dfbaaaec6100dea79a1a"
+        }
+      ],
+      "status": "matched",
+      "attempts": [
+        {
+          "attempt": 1,
+          "date": "2026-08-25",
+          "action": "Added manifest and runtime capability gating",
+          "result": "Policy tests and build passed; permission UI trace pending"
+        },
+        {
+          "attempt": 2,
+          "date": "2026-08-25",
+          "action": "Completed first-launch permissions and opened Settings on a no-touch/no-camera TV AVD",
+          "result": "No camera permission dialog appeared and the flash option was disabled with an explanation"
+        },
+        {
+          "attempt": 3,
+          "date": "2026-08-25",
+          "action": "Removed sleep-sound microphone permission from the TV launch policy and ViewModel permission bridge",
+          "result": "Unit tests and build passed; existing emulator data was preserved, so a clean first-launch dialog trace remains pending"
+        },
+        {
+          "attempt": 4,
+          "date": "2026-08-25",
+          "action": "Installed the 2.1.0 release APK and ran a clean first launch in a separate ephemeral Android user",
+          "result": "The app described only location and D-pad Select opened only the approximate-location permission dialog; user 0 app data was not reset"
+        }
+      ]
+    },
+    {
+      "id": "tv_subroutes.remote_back.navigation",
+      "route_state": "tv_subroutes",
+      "element": "remote_back",
+      "dimension": "Back returns through app levels and exits",
+      "classification": "functional",
+      "source_ref": {
+        "kind": "spec",
+        "value": "Back returns from subroutes and ultimately to the TV home screen",
+        "location": "https://developer.android.com/docs/quality-guidelines/tv-app-quality"
+      },
+      "target_observation": "Back returned from Settings to the app home, then from the app home to the TV launcher",
+      "implementation_ref": "app/src/main/java/com/armsone/stand/MainActivity.kt",
+      "fixture": "google_tv_subroutes_default",
+      "fallback_capable": false,
+      "evidence": [
+        {
+          "id": "tv-back-runtime-20260825",
+          "type": "behavior_trace",
+          "path": ".parity/evidence/2026-08-25/tv-behavior-trace.md",
+          "sha256": "c7ad0c589f325cb2a1fa87bb105a5af1435da2946f49e54981457a9fae016743"
+        }
+      ],
+      "status": "matched",
+      "attempts": [
+        {
+          "attempt": 1,
+          "date": "2026-08-25",
+          "action": "Reviewed existing app-level BackHandler while adding TV routes",
+          "result": "Source preserved; real remote behavior trace pending"
+        },
+        {
+          "attempt": 2,
+          "date": "2026-08-25",
+          "action": "Sent two TV remote Back key events from Settings",
+          "result": "The first returned to S.tand home and the second returned to the TV launcher"
+        }
+      ]
+    },
+    {
+      "id": "mobile_tablet.existing_ui.regression",
+      "route_state": "mobile_tablet",
+      "element": "existing_ui",
+      "dimension": "phone and tablet behavior preserved",
+      "classification": "functional",
+      "source_ref": {
+        "kind": "source",
+        "value": "Existing non-TV branches and touch gestures remain unchanged"
+      },
+      "target_observation": "Phone API 37 rendered the existing home and the synchronized Settings screen in portrait and landscape; the 720dp breakpoint changed to independent wide lanes without losing state.",
+      "implementation_ref": "app/src/main/java/com/armsone/stand/model/TvUiModePolicy.kt",
+      "fixture": "phone_tablet_existing_profiles",
+      "fallback_capable": false,
+      "evidence": [
+        {
+          "id": "phone-settings-portrait-20260825",
+          "type": "other",
+          "path": ".parity/evidence/2026-08-25/android-phone-settings-portrait.png",
+          "sha256": "bc15e9cc5d98e413ab6f744c206070ed3a3991db8ee51c892792c95a9f69de1e"
+        },
+        {
+          "id": "phone-settings-landscape-20260825",
+          "type": "capture_pair",
+          "path": ".parity/evidence/2026-08-25/android-landscape-settings-music.png",
+          "sha256": "282776e3991bae8c9f6e6f32bb0a3ff9314f5f6c203296cd94e01c97b341b6e2",
+          "post_change": true
+        },
+        {
+          "id": "phone-settings-runtime-20260825",
+          "type": "behavior_trace",
+          "path": ".parity/evidence/2026-08-25/tv-behavior-trace.md",
+          "sha256": "c7ad0c589f325cb2a1fa87bb105a5af1435da2946f49e54981457a9fae016743"
+        }
+      ],
+      "status": "matched",
+      "attempts": [
+        {
+          "attempt": 1,
+          "date": "2026-08-25",
+          "action": "Kept TV adaptations behind platform detection and rebuilt shared APK",
+          "result": "Compilation passed; phone and tablet runtime pass pending"
+        },
+        {
+          "attempt": 2,
+          "date": "2026-08-25",
+          "action": "Installed the shared APK on a phone API 37 AVD and rotated Settings from portrait to landscape",
+          "result": "Narrow and wide layouts rendered, retained settings, and the radio shortcut opened the six-slot music card"
+        }
+      ]
+    },
+    {
+      "id": "settings.music.six_slot_management",
+      "route_state": "settings_music",
+      "element": "home_music_channels",
+      "dimension": "six unified rows, inline actions, persistence and D-pad reorder",
+      "classification": "functional",
+      "source_ref": {
+        "kind": "capture",
+        "value": "Apple Settings music panel uses one six-row list with service/radio state, radio pencils and order handles",
+        "location": "/Users/armsone/Library/Containers/cc.ffitch.shottr/Data/tmp/cc.ffitch.shottr/SCR-20260825-iqvy.png"
+      },
+      "target_observation": "Android Settings now renders one six-row list, keeps Spotify and YouTube Music as native service adaptations, edits radios inline, and exposes a focusable order handle with up/down/complete controls.",
+      "implementation_ref": "app/src/main/java/com/armsone/stand/ui/SettingsScreen.kt",
+      "fixture": "google_tv_settings_music",
+      "fallback_capable": false,
+      "evidence": [
+        {
+          "id": "settings-music-runtime-20260825",
+          "type": "behavior_trace",
+          "path": ".parity/evidence/2026-08-25/tv-behavior-trace.md",
+          "sha256": "c7ad0c589f325cb2a1fa87bb105a5af1435da2946f49e54981457a9fae016743"
+        },
+        {
+          "id": "settings-music-capture-20260825",
+          "type": "capture_pair",
+          "path": ".parity/evidence/2026-08-25/google-tv-settings-music.png",
+          "sha256": "093e64ee43d826e890b842750090d8554e3936b325e9e0f24892f76cd8f61479",
+          "post_change": true
+        },
+        {
+          "id": "settings-music-landscape-phone-20260825",
+          "type": "capture_pair",
+          "path": ".parity/evidence/2026-08-25/android-landscape-settings-music.png",
+          "sha256": "282776e3991bae8c9f6e6f32bb0a3ff9314f5f6c203296cd94e01c97b341b6e2",
+          "post_change": true
+        }
+      ],
+      "status": "matched",
+      "attempts": [
+        {
+          "attempt": 1,
+          "date": "2026-08-25",
+          "action": "Replaced the legacy picker plus duplicate service/radio panels with the Apple-derived unified six-row structure",
+          "result": "Unit tests and assembleDebug passed; Google TV rendered all six rows"
+        },
+        {
+          "attempt": 2,
+          "date": "2026-08-25",
+          "action": "Used only D-pad and Select to open a row order handle and activate its move control",
+          "result": "The selected channel moved from 2/6 to 1/6 and the persisted settings list updated"
+        }
+      ]
+    },
+    {
+      "id": "settings.responsive_panel_layout.parity",
+      "route_state": "settings",
+      "element": "responsive_panels",
+      "dimension": "portrait, landscape, tablet and TV panel placement",
+      "classification": "visual",
+      "source_ref": {
+        "kind": "source",
+        "value": "Apple SettingsView uses explicit independent wide-screen columns while Android SettingsScreen uses a row-locked LazyVerticalGrid"
+      },
+      "target_observation": "Android uses independent staggered lanes at 720dp and wider, so unequal settings cards no longer reserve a shared row height; Music remains full width below the other cards.",
+      "implementation_ref": "app/src/main/java/com/armsone/stand/ui/SettingsScreen.kt",
+      "fixture": "settings_phone_landscape_tablet_tv",
+      "fallback_capable": false,
+      "evidence": [
+        {
+          "id": "settings-wide-layout-20260825",
+          "type": "capture_pair",
+          "path": ".parity/evidence/2026-08-25/google-tv-settings-music.png",
+          "sha256": "093e64ee43d826e890b842750090d8554e3936b325e9e0f24892f76cd8f61479",
+          "post_change": true
+        },
+        {
+          "id": "settings-wide-phone-layout-20260825",
+          "type": "capture_pair",
+          "path": ".parity/evidence/2026-08-25/android-landscape-settings-music.png",
+          "sha256": "282776e3991bae8c9f6e6f32bb0a3ff9314f5f6c203296cd94e01c97b341b6e2",
+          "post_change": true
+        }
+      ],
+      "status": "matched",
+      "attempts": [
+        {
+          "attempt": 1,
+          "date": "2026-08-25",
+          "action": "Compared current Apple and Android settings composition policies after user reported mismatched music and awkward panel placement",
+          "result": "Confirmed intentional service-name differences, persisted emulator music ordering, and a real Android responsive-layout mismatch caused by fixed grid rows and a width-only breakpoint"
+        },
+        {
+          "attempt": 2,
+          "date": "2026-08-25",
+          "action": "Replaced the row-locked wide grid with independent staggered lanes and retained Music as a full-line card",
+          "result": "assembleDebug passed and the API 36 Google TV capture showed continuous card flow without the former row-sized blank area"
+        }
+      ]
+    },
+    {
+      "id": "tv_home.top_cluster.spacing",
+      "route_state": "tv_home_active",
+      "element": "brand_and_music_strip",
+      "dimension": "top inset reduced to 30 percent and cluster moved upward",
+      "classification": "visual",
+      "source_ref": {
+        "kind": "runtime",
+        "value": "User requested the Google TV top whitespace be reduced to 30% while moving the brand and music strip upward together"
+      },
+      "target_observation": "The Google TV API 36 capture places S.tand at y=27 and the six-channel music strip at y=95 after applying an 11.4dp TV top inset; clock and weather remain unobstructed.",
+      "implementation_ref": "app/src/main/java/com/armsone/stand/ui/StandHomeScreen.kt",
+      "fixture": "google_tv_home_seoul_weather_70_brightness",
+      "fallback_capable": false,
+      "evidence": [
+        {
+          "id": "tv-home-streamlined-capture-20260825",
+          "type": "other",
+          "path": ".parity/evidence/2026-08-25/google-tv-home-music-clock-weather.png",
+          "sha256": "f8a86c37b89c5b63cc5e9a87b15db75f859845e6bdafb051f5594dbf926104b5"
+        },
+        {
+          "id": "tv-top-cluster-pair-20260825",
+          "type": "capture_pair",
+          "path": ".parity/evidence/2026-08-25/google-tv-top-cluster-capture-pair.md",
+          "sha256": "3b0fc1b6c3cd80d8138418113f192d94858ee843c69955826434ced568930557",
+          "post_change": true
+        }
+      ],
+      "status": "matched",
+      "attempts": [
+        {
+          "attempt": 1,
+          "date": "2026-08-25",
+          "action": "Changed the TV-only top inset from 38dp to 11.4dp and captured the installed API 36 build",
+          "result": "Requested layout is visible on Android; exact cross-platform visual parity remains uncloseable because iOS has no TV target capture"
+        },
+        {
+          "attempt": 2,
+          "date": "2026-08-25",
+          "action": "Compared before and after 1920x1080 captures from the same Google TV AVD and recorded a post-change capture pair",
+          "result": "The 11.4dp top inset moves the centered brand and six music cards upward while weather, clock, date, and compact controls remain unobstructed; Apple has no tvOS target"
+        }
+      ]
+    },
+    {
+      "id": "tv_home.product_scope.music_clock_weather",
+      "route_state": "tv_home_active",
+      "element": "tv_product_scope",
+      "dimension": "music clock weather retained while sleep and mode features are absent",
+      "classification": "functional",
+      "source_ref": {
+        "kind": "runtime",
+        "value": "User-defined Google TV product scope"
+      },
+      "target_observation": "The installed TV build shows music, Seoul weather, clock and date, plus Settings/theme/brightness/clock-size controls; UI Automator found no Boyiso, recording, sleep-sound, Object-mode or Mate-mode text.",
+      "implementation_ref": "app/src/main/java/com/armsone/stand/model/TvUiModePolicy.kt",
+      "fixture": "google_tv_home_seoul_weather_70_brightness",
+      "fallback_capable": false,
+      "evidence": [
+        {
+          "id": "tv-home-scope-runtime-20260825",
+          "type": "behavior_trace",
+          "path": ".parity/evidence/2026-08-25/tv-behavior-trace.md",
+          "sha256": "c7ad0c589f325cb2a1fa87bb105a5af1435da2946f49e54981457a9fae016743"
+        }
+      ],
+      "status": "matched",
+      "attempts": [
+        {
+          "attempt": 1,
+          "date": "2026-08-25",
+          "action": "Filtered TV home controls and mode labels while preserving phone/tablet callbacks and data",
+          "result": "Installed runtime hierarchy contains only the requested TV product surface and the remaining controls respond to D-pad input"
+        }
+      ]
+    },
+    {
+      "id": "tv_settings.product_scope.feature_gating",
+      "route_state": "tv_settings_default",
+      "element": "visible_sections",
+      "dimension": "Boyiso sleep sounds recording and mode settings absent",
+      "classification": "functional",
+      "source_ref": {
+        "kind": "runtime",
+        "value": "User-defined Google TV Settings scope"
+      },
+      "target_observation": "D-pad Select opened Settings with Music, Screen and Clock, Location permission and Information; forbidden TV-only product labels and cards were absent.",
+      "implementation_ref": "app/src/main/java/com/armsone/stand/ui/SettingsScreen.kt",
+      "fixture": "google_tv_settings_streamlined",
+      "fallback_capable": false,
+      "evidence": [
+        {
+          "id": "tv-settings-scope-runtime-20260825",
+          "type": "behavior_trace",
+          "path": ".parity/evidence/2026-08-25/tv-behavior-trace.md",
+          "sha256": "c7ad0c589f325cb2a1fa87bb105a5af1435da2946f49e54981457a9fae016743"
+        },
+        {
+          "id": "tv-settings-streamlined-capture-20260825",
+          "type": "other",
+          "path": ".parity/evidence/2026-08-25/google-tv-settings-streamlined.png",
+          "sha256": "4659e81139244d7f9f4f7915c433c1726583614d89281e49a57b014532027ed6"
+        }
+      ],
+      "status": "matched",
+      "attempts": [
+        {
+          "attempt": 1,
+          "date": "2026-08-25",
+          "action": "Applied TV-only section and permission-row policies, installed the APK and opened Settings with D-pad Select",
+          "result": "The runtime hierarchy contains the allowed sections and none of the removed TV features"
+        }
+      ]
+    },
+    {
+      "id": "tv_weather.mock_network_location.runtime",
+      "route_state": "tv_home_active",
+      "element": "weather_panel",
+      "dimension": "weather loads from emulator network-location fixture",
+      "classification": "functional",
+      "source_ref": {
+        "kind": "runtime",
+        "value": "Google TV AVD with coarse permission and location enabled initially had no last network location"
+      },
+      "target_observation": "After injecting 37.5665,126.9780 into the network test provider and relaunching, S.tand displayed 27°, drizzle, apparent 34° and Seoul Jung-gu.",
+      "implementation_ref": "app/src/main/java/com/armsone/stand/weather/WeatherService.kt",
+      "fixture": "google_tv_mock_network_location_seoul",
+      "fallback_capable": false,
+      "evidence": [
+        {
+          "id": "tv-weather-runtime-20260825",
+          "type": "behavior_trace",
+          "path": ".parity/evidence/2026-08-25/tv-behavior-trace.md",
+          "sha256": "c7ad0c589f325cb2a1fa87bb105a5af1435da2946f49e54981457a9fae016743"
+        }
+      ],
+      "status": "matched",
+      "attempts": [
+        {
+          "attempt": 1,
+          "date": "2026-08-25",
+          "action": "Diagnosed granted permission plus enabled location service with null last location, then configured a mock network provider",
+          "result": "Weather loaded after relaunch; the emulator-only cause and recovery path were proven"
+        }
+      ]
+    },
+    {
+      "id": "home.brand_update_check",
+      "route_state": "home",
+      "element": "centered_brand_logo",
+      "dimension": "manual latest-version check",
+      "classification": "functional",
+      "source_ref": {
+        "kind": "runtime",
+        "value": "User-requested logo action with platform-native release source"
+      },
+      "target_observation": "The centered logo is exposed as 최신 버전 확인; D-pad focus and Select on Google TV queried the published GitHub release and displayed 최신 버전입니다 with a focused 확인 action.",
+      "implementation_ref": "app/src/main/java/com/armsone/stand/ui/StandHomeScreen.kt",
+      "fixture": "google_tv_logo_latest_result",
+      "fallback_capable": false,
+      "evidence": [
+        {
+          "id": "logo-update-runtime-20260825",
+          "type": "behavior_trace",
+          "path": ".parity/evidence/2026-08-25/logo-update-check-behavior-trace.md",
+          "sha256": "abd59bd4521e8ffa44a7b37a6494132ebd1720ac1179f6caad158e1bf098c25d"
+        },
+        {
+          "id": "logo-update-tv-capture-20260825",
+          "type": "other",
+          "path": ".parity/evidence/2026-08-25/google-tv-logo-update-latest.png",
+          "sha256": "c33a36983021f7cccc09e4edfdef73dd498748d6ee877b57897cc7c562e2942e"
+        }
+      ],
+      "status": "matched",
+      "attempts": [
+        {
+          "attempt": 1,
+          "date": "2026-08-25",
+          "action": "Implemented a repeatable manual update check, four result states, logo semantics and TV focus handling on both platform projects.",
+          "result": "Apple unit tests and UI catalog passed; Android unit, lint and four Google TV instrumentation tests passed; D-pad runtime result captured."
+        }
+      ]
+    }
+  ]
+}

@@ -20,11 +20,47 @@ fun AppUpdateDialog(
     onDownload: () -> Unit,
     onInstall: () -> Unit,
     onLater: () -> Unit,
+    onRetry: () -> Unit = {},
 ) {
     when (state) {
-        AppUpdateState.Idle,
-        AppUpdateState.Checking,
-        -> Unit
+        AppUpdateState.Idle -> Unit
+
+        is AppUpdateState.Checking -> {
+            if (state.isManual) {
+                AlertDialog(
+                    onDismissRequest = {},
+                    title = { Text("최신 버전 확인 중") },
+                    text = {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(14.dp),
+                        ) {
+                            CircularProgressIndicator()
+                            Text("GitHub에서 최신 버전을 확인하고 있습니다.")
+                        }
+                    },
+                    confirmButton = {},
+                    dismissButton = {},
+                )
+            }
+        }
+
+        is AppUpdateState.Latest -> AlertDialog(
+            onDismissRequest = onLater,
+            title = { Text("최신 버전입니다") },
+            text = {
+                Text(
+                    state.message
+                        ?: "현재 설치된 에스텐드가 최신 버전입니다.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = onLater) { Text("확인") }
+            },
+        )
 
         is AppUpdateState.Available -> AlertDialog(
             onDismissRequest = onLater,
@@ -70,6 +106,24 @@ fun AppUpdateDialog(
             },
             dismissButton = {
                 TextButton(onClick = onLater) { Text("나중에") }
+            },
+        )
+
+        is AppUpdateState.Failed -> AlertDialog(
+            onDismissRequest = onLater,
+            title = { Text("최신 버전을 확인할 수 없습니다") },
+            text = { Text(state.message) },
+            confirmButton = {
+                if (state.canRetry) {
+                    TextButton(onClick = onRetry) { Text("다시 시도") }
+                } else {
+                    TextButton(onClick = onLater) { Text("확인") }
+                }
+            },
+            dismissButton = {
+                if (state.canRetry) {
+                    TextButton(onClick = onLater) { Text("닫기") }
+                }
             },
         )
     }

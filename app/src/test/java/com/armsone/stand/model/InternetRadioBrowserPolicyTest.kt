@@ -41,8 +41,18 @@ class InternetRadioBrowserPolicyTest {
     fun defaultsMatchTheIosBrowser() {
         assertEquals("https://www.google.com/", InternetRadioBrowserPolicy.homepage)
         assertEquals(
-            listOf("Google", "한국 라디오", "FMSTREAM", "Radio Browser"),
+            listOf("Google", "한국 라디오", "내가 사랑하는 인터넷 라디오", "FMSTREAM", "Radio Browser"),
             InternetRadioBrowserPolicy.favorites.map { it.title },
+        )
+        assertEquals(
+            listOf(
+                "https://www.google.com/",
+                "https://radio.bsod.kr/",
+                "https://blog.naver.com/armsone/224388181252",
+                "https://fmstream.org/",
+                "https://www.radio-browser.info/",
+            ),
+            InternetRadioBrowserPolicy.favorites.map { it.url },
         )
     }
 }

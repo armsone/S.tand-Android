@@ -169,6 +169,10 @@ class AppPoliciesTest {
 
     @Test
     fun batteryProtectionOnlyStopsLowUnpluggedDevice() {
+        assertEquals(0.2f, BatteryProtectionPolicy.normalizedLevel(20, 100, true)!!, 0f)
+        assertEquals(null, BatteryProtectionPolicy.normalizedLevel(0, 100, false))
+        assertEquals(null, BatteryProtectionPolicy.normalizedLevel(-1, 100, true))
+        assertEquals(null, BatteryProtectionPolicy.normalizedLevel(20, 0, true))
         assertTrue(BatteryProtectionPolicy.shouldProtect(0.2f, isCharging = false))
         assertFalse(BatteryProtectionPolicy.shouldProtect(0.2f, isCharging = true))
         assertFalse(BatteryProtectionPolicy.shouldProtect(0.5f, isCharging = false))

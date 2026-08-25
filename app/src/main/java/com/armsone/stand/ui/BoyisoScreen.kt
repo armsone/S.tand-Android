@@ -54,6 +54,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
@@ -67,6 +68,8 @@ import com.armsone.stand.boyiso.BoyisoConfiguration
 import com.armsone.stand.boyiso.BoyisoQrCode
 import com.armsone.stand.boyiso.BoyisoRole
 import com.armsone.stand.boyiso.BoyisoState
+import com.armsone.stand.model.TvUiModePolicy
+import com.armsone.stand.ui.components.standFocusable
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -90,6 +93,9 @@ fun BoyisoScreen(
         mutableStateOf(state.configuration.deviceName)
     }
 
+    val configuration = LocalConfiguration.current
+    val isTelevision = TvUiModePolicy.isTelevision(configuration)
+
     LaunchedEffect(state.configuration.roomId, state.configuration.roomKey) {
         if (state.configuration.hasRoom && !state.running) onStart()
     }
@@ -107,7 +113,10 @@ fun BoyisoScreen(
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(
+                        onClick = onBack,
+                        modifier = Modifier.standFocusable(),
+                    ) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "뒤로")
                     }
                 },
@@ -136,7 +145,10 @@ fun BoyisoScreen(
                                     onClick = {
                                         onUpdateConfiguration(state.configuration.copy(role = role))
                                     },
-                                    modifier = Modifier.weight(1f).height(64.dp),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(64.dp)
+                                        .standFocusable(shape = RoundedCornerShape(14.dp)),
                                 ) {
                                     Text(role.title, style = MaterialTheme.typography.titleMedium)
                                 }
@@ -145,7 +157,10 @@ fun BoyisoScreen(
                                     onClick = {
                                         onUpdateConfiguration(state.configuration.copy(role = role))
                                     },
-                                    modifier = Modifier.weight(1f).height(64.dp),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(64.dp)
+                                        .standFocusable(shape = RoundedCornerShape(14.dp)),
                                 ) {
                                     Text(role.title, style = MaterialTheme.typography.titleMedium)
                                 }
@@ -178,12 +193,16 @@ fun BoyisoScreen(
                             if (validationMessage == null) onCreateRoom()
                         }
                         val joinAction = {
-                            validationMessage = if (state.configuration.deviceName.isBlank()) {
-                                "내 이름을 입력해 주세요."
+                            if (isTelevision) {
+                                validationMessage = "TV는 카메라 스캔을 지원하지 않습니다. TV에서 '공간 만들기'로 QR을 띄우고 스마트폰으로 스캔해 주세요."
                             } else {
-                                null
+                                validationMessage = if (state.configuration.deviceName.isBlank()) {
+                                    "내 이름을 입력해 주세요."
+                                } else {
+                                    null
+                                }
+                                if (validationMessage == null) onScanInvitation()
                             }
-                            if (validationMessage == null) onScanInvitation()
                         }
                         if (maxWidth < 600.dp) {
                             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -196,7 +215,7 @@ fun BoyisoScreen(
                                 )
                                 BoyisoConnectionChoice(
                                     title = "공간 입장",
-                                    description = "카메라로 QR을 찍고 들어가요",
+                                    description = if (isTelevision) "스마트폰 카메라로 입장 권장" else "카메라로 QR을 찍고 들어가요",
                                     icon = { Icon(Icons.Default.QrCodeScanner, contentDescription = null) },
                                     primary = false,
                                     onClick = joinAction,
@@ -214,7 +233,7 @@ fun BoyisoScreen(
                                 )
                                 BoyisoConnectionChoice(
                                     title = "공간 입장",
-                                    description = "카메라로 QR을 찍고 들어가요",
+                                    description = if (isTelevision) "스마트폰 카메라로 입장 권장" else "카메라로 QR을 찍고 들어가요",
                                     icon = { Icon(Icons.Default.QrCodeScanner, contentDescription = null) },
                                     primary = false,
                                     onClick = joinAction,
@@ -233,7 +252,10 @@ fun BoyisoScreen(
                         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Button(
                                 onClick = onWalkie,
-                                modifier = Modifier.fillMaxWidth().height(72.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(72.dp)
+                                    .standFocusable(shape = RoundedCornerShape(18.dp)),
                             ) {
                                 Icon(Icons.Default.WifiTethering, contentDescription = null)
                                 Text(" 무전기 호출", style = MaterialTheme.typography.titleLarge)
@@ -245,7 +267,10 @@ fun BoyisoScreen(
                             )
                             OutlinedButton(
                                 onClick = onTokTok,
-                                modifier = Modifier.fillMaxWidth().height(56.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(56.dp)
+                                    .standFocusable(shape = RoundedCornerShape(14.dp)),
                             ) {
                                 Icon(Icons.Default.ChildCare, contentDescription = null)
                                 Text(" 톡톡 보내기", style = MaterialTheme.typography.titleMedium)
@@ -254,7 +279,10 @@ fun BoyisoScreen(
                     } else {
                         Button(
                             onClick = onTokTok,
-                            modifier = Modifier.fillMaxWidth().height(72.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(72.dp)
+                                .standFocusable(shape = RoundedCornerShape(18.dp)),
                         ) {
                             Icon(Icons.Default.ChildCare, contentDescription = null)
                             Text(" 톡톡 보내기", style = MaterialTheme.typography.titleLarge)
@@ -296,7 +324,9 @@ fun BoyisoScreen(
                                     nameDraft = state.configuration.deviceName
                                     nameEditorOpen = false
                                 },
-                                modifier = Modifier.weight(1f),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .standFocusable(shape = RoundedCornerShape(14.dp)),
                             ) { Text("취소") }
                             Button(
                                 onClick = {
@@ -306,13 +336,17 @@ fun BoyisoScreen(
                                         nameEditorOpen = false
                                     }
                                 },
-                                modifier = Modifier.weight(1f),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .standFocusable(shape = RoundedCornerShape(14.dp)),
                             ) { Text("저장") }
                         }
                     } else {
                         OutlinedButton(
                             onClick = { nameEditorOpen = true },
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .standFocusable(shape = RoundedCornerShape(14.dp)),
                         ) { Text("내 이름 수정") }
                     }
                 }
@@ -334,7 +368,10 @@ fun BoyisoScreen(
                         )
                         OutlinedButton(
                             onClick = onShareInvitation,
-                            modifier = Modifier.fillMaxWidth().height(56.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(56.dp)
+                                .standFocusable(shape = RoundedCornerShape(14.dp)),
                         ) {
                             Icon(Icons.Default.Share, contentDescription = null)
                             Text(" QR 사진 보내기")
@@ -355,7 +392,10 @@ fun BoyisoScreen(
             if (state.configuration.hasRoom) {
                 OutlinedButton(
                     onClick = { confirmsLeavingRoom = true },
-                    modifier = Modifier.fillMaxWidth().height(64.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(64.dp)
+                        .standFocusable(shape = RoundedCornerShape(14.dp)),
                 ) {
                     Text("공간에서 나오기", style = MaterialTheme.typography.titleMedium)
                 }
@@ -370,13 +410,19 @@ fun BoyisoScreen(
             title = { Text("공간에서 나올까요?") },
             text = { Text("같은 공간의 연결이 끊어집니다. 실수로 누른 경우 취소해 주세요.") },
             confirmButton = {
-                TextButton(onClick = {
-                    confirmsLeavingRoom = false
-                    onLeaveRoom()
-                }) { Text("나오기") }
+                TextButton(
+                    onClick = {
+                        confirmsLeavingRoom = false
+                        onLeaveRoom()
+                    },
+                    modifier = Modifier.standFocusable(),
+                ) { Text("나오기") }
             },
             dismissButton = {
-                TextButton(onClick = { confirmsLeavingRoom = false }) { Text("취소") }
+                TextButton(
+                    onClick = { confirmsLeavingRoom = false },
+                    modifier = Modifier.standFocusable(),
+                ) { Text("취소") }
             },
         )
     }
@@ -406,12 +452,18 @@ private fun BoyisoConnectionChoice(
     if (primary) {
         Button(
             onClick = onClick,
-            modifier = modifier.fillMaxWidth().heightIn(min = 82.dp),
+            modifier = modifier
+                .fillMaxWidth()
+                .heightIn(min = 82.dp)
+                .standFocusable(shape = RoundedCornerShape(18.dp)),
         ) { content() }
     } else {
         OutlinedButton(
             onClick = onClick,
-            modifier = modifier.fillMaxWidth().heightIn(min = 82.dp),
+            modifier = modifier
+                .fillMaxWidth()
+                .heightIn(min = 82.dp)
+                .standFocusable(shape = RoundedCornerShape(18.dp)),
         ) { content() }
     }
 }
