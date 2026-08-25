@@ -10,36 +10,39 @@ import org.junit.Test
 
 class GitHubUpdatePolicyTest {
     @Test
-    fun releaseTagMustUseTheExactAndroidVersionCodeFormat() {
-        assertEquals(28, GitHubUpdatePolicy.versionCode("android-v28"))
-        assertNull(GitHubUpdatePolicy.versionCode("v28"))
-        assertNull(GitHubUpdatePolicy.versionCode("android-v0"))
-        assertNull(GitHubUpdatePolicy.versionCode("android-v28-beta"))
+    fun releaseIdentitySeparatesProductVersionFromInternalVersionCode() {
+        assertEquals("2.1.1", GitHubUpdatePolicy.productVersion("android-v2.1.1"))
+        assertNull(GitHubUpdatePolicy.productVersion("android-v340540"))
+        assertNull(GitHubUpdatePolicy.productVersion("v2.1.1"))
+        assertNull(GitHubUpdatePolicy.productVersion("android-v02.1.1"))
+        assertNull(GitHubUpdatePolicy.productVersion("android-v2.1.1-beta"))
+        assertEquals(340540, GitHubUpdatePolicy.versionCode("Android-Version-Code: 340540\n\n변경 사항"))
+        assertNull(GitHubUpdatePolicy.versionCode("versionCode: 340540"))
     }
 
     @Test
     fun apkAssetMustComeFromTheMatchingRepositoryRelease() {
         assertTrue(
             GitHubUpdatePolicy.isApprovedApkAsset(
-                assetName = "S.tand-Android-v28.apk",
-                urlText = "https://github.com/armsone/S.tand-Android/releases/download/android-v28/S.tand-Android-v28.apk",
-                versionCode = 28,
+                assetName = "S.tand-Android-2.1.1.apk",
+                urlText = "https://github.com/armsone/S.tand-Android/releases/download/android-v2.1.1/S.tand-Android-2.1.1.apk",
+                productVersion = "2.1.1",
                 sizeBytes = 12_345L,
             ),
         )
         assertFalse(
             GitHubUpdatePolicy.isApprovedApkAsset(
-                assetName = "S.tand-Android-v28.apk",
-                urlText = "https://example.com/S.tand-Android-v28.apk",
-                versionCode = 28,
+                assetName = "S.tand-Android-2.1.1.apk",
+                urlText = "https://example.com/S.tand-Android-2.1.1.apk",
+                productVersion = "2.1.1",
                 sizeBytes = 12_345L,
             ),
         )
         assertFalse(
             GitHubUpdatePolicy.isApprovedApkAsset(
                 assetName = "other.apk",
-                urlText = "https://github.com/armsone/S.tand-Android/releases/download/android-v28/other.apk",
-                versionCode = 28,
+                urlText = "https://github.com/armsone/S.tand-Android/releases/download/android-v2.1.1/other.apk",
+                productVersion = "2.1.1",
                 sizeBytes = 12_345L,
             ),
         )
@@ -139,11 +142,16 @@ class GitHubUpdatePolicyTest {
     }
 
     private fun sampleRelease(versionCode: Int): GitHubAppRelease = GitHubAppRelease(
+        productVersion = if (versionCode > 340467) "2.1.1" else "2.1.0",
         versionCode = versionCode,
-        tagName = "android-v$versionCode",
-        assetName = "S.tand-Android-v$versionCode.apk",
+        tagName = if (versionCode > 340467) "android-v2.1.1" else "android-v2.1.0",
+        assetName = if (versionCode > 340467) "S.tand-Android-2.1.1.apk" else "S.tand-Android-2.1.0.apk",
         apkUrl = URL(
-            "https://github.com/armsone/S.tand-Android/releases/download/android-v$versionCode/S.tand-Android-v$versionCode.apk",
+            if (versionCode > 340467) {
+                "https://github.com/armsone/S.tand-Android/releases/download/android-v2.1.1/S.tand-Android-2.1.1.apk"
+            } else {
+                "https://github.com/armsone/S.tand-Android/releases/download/android-v2.1.0/S.tand-Android-2.1.0.apk"
+            },
         ),
         assetSizeBytes = 12_345_678L,
     )

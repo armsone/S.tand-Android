@@ -7,8 +7,9 @@ S.tand Android는 Google Play 대신 GitHub Release의 APK를 확인한다. 단�
 ## 앱의 확인 규칙
 
 - API: `https://api.github.com/repos/armsone/S.tand-Android/releases/latest`
-- 태그: `android-v{versionCode}` (예: `android-v28`)
-- APK 이름: `S.tand-Android-v{versionCode}.apk`
+- 태그: `android-v{제품버전}` (예: `android-v2.1.1`)
+- APK 이름: `S.tand-Android-{제품버전}.apk`
+- 릴리스 본문: 한 줄에 `Android-Version-Code: {versionCode}`를 기록한다.
 - draft와 prerelease는 무시한다.
 - 현재 versionCode보다 큰 버전만 표시한다.
 - 저장소 HTTPS 주소, 파일 크기, package name `com.armsone.stand`, APK versionCode와 현재 설치본의
@@ -18,8 +19,8 @@ S.tand Android는 Google Play 대신 GitHub Release의 APK를 확인한다. 단�
 
 1. `assembleDebug`, `testDebugUnitTest`, `lintDebug`와 지정 실기기 검증을 마친다.
 2. APK가 현재 설치본과 같은 개발용 인증서로 서명됐는지 `apksigner verify --print-certs`로 확인한다.
-3. versionCode가 `N`이면 검증한 APK를 `S.tand-Android-vN.apk`로 복사한다.
-4. `gh release create android-vN S.tand-Android-vN.apk --title "S.tand Android vN" --notes ...`로 공개한다.
+3. 제품 버전이 `X.Y.Z`이면 검증한 APK를 `S.tand-Android-X.Y.Z.apk`로 복사한다.
+4. `gh release create android-vX.Y.Z S.tand-Android-X.Y.Z.apk --title "S.tand Android X.Y.Z" --notes "Android-Version-Code: N\n\n..."`로 공개한다.
 5. GitHub API에서 tag, asset name, size와 다운로드 주소를 다시 읽어 확인한다.
 6. 낮은 versionCode의 실제 설치본에서 업데이트 안내, 다운로드, 알 수 없는 앱 설치 권한과 Android
    설치 화면을 확인한다. 앱 삭제나 데이터 초기화는 하지 않는다.

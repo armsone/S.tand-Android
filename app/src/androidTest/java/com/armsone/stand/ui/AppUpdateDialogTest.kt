@@ -21,11 +21,12 @@ class AppUpdateDialogTest {
     fun availableReleaseExplainsDataPreservationAndStartsDownload() {
         var downloadCount = 0
         val release = GitHubAppRelease(
+            productVersion = "2.1.1",
             versionCode = 29,
-            tagName = "android-v29",
-            assetName = "S.tand-Android-v29.apk",
+            tagName = "android-v2.1.1",
+            assetName = "S.tand-Android-2.1.1.apk",
             apkUrl = URL(
-                "https://github.com/armsone/S.tand-Android/releases/download/android-v29/S.tand-Android-v29.apk",
+                "https://github.com/armsone/S.tand-Android/releases/download/android-v2.1.1/S.tand-Android-2.1.1.apk",
             ),
             assetSizeBytes = 12_345L,
         )
@@ -44,6 +45,7 @@ class AppUpdateDialogTest {
         composeRule.onNodeWithText("새 버전이 있습니다").assertIsDisplayed()
         composeRule.onNodeWithText("기존 설정과 녹음은 유지됩니다.", substring = true)
             .assertIsDisplayed()
+        composeRule.onNodeWithText("2.1.1", substring = true).assertIsDisplayed()
         composeRule.onNodeWithText("업데이트").performClick()
         composeRule.waitForIdle()
 

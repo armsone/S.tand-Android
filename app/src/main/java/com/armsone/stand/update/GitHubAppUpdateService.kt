@@ -22,6 +22,7 @@ import kotlinx.coroutines.launch
 import org.json.JSONObject
 
 data class GitHubAppRelease(
+    val productVersion: String,
     val versionCode: Int,
     val tagName: String,
     val assetName: String,
@@ -263,15 +264,17 @@ internal object GitHubReleaseDecoder {
         val root = JSONObject(payload)
         if (root.optBoolean("draft", true) || root.optBoolean("prerelease", true)) return null
         val tag = root.optString("tag_name")
-        val versionCode = GitHubUpdatePolicy.versionCode(tag) ?: return null
+        val productVersion = GitHubUpdatePolicy.productVersion(tag) ?: return null
+        val versionCode = GitHubUpdatePolicy.versionCode(root.optString("body")) ?: return null
         val assets = root.optJSONArray("assets") ?: return null
         for (index in 0 until assets.length()) {
             val asset = assets.optJSONObject(index) ?: continue
             val name = asset.optString("name")
             val url = asset.optString("browser_download_url")
             val size = asset.optLong("size", -1L)
-            if (GitHubUpdatePolicy.isApprovedApkAsset(name, url, versionCode, size)) {
+            if (GitHubUpdatePolicy.isApprovedApkAsset(name, url, productVersion, size)) {
                 return GitHubAppRelease(
+                    productVersion = productVersion,
                     versionCode = versionCode,
                     tagName = tag,
                     assetName = name,
@@ -285,9 +288,13 @@ internal object GitHubReleaseDecoder {
 }
 
 internal object GitHubUpdatePolicy {
-    private val TAG_PATTERN = Regex("^android-v([1-9]\\d*)$")
+    private val TAG_PATTERN = Regex("^android-v((?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*))$")
+    private val VERSION_CODE_PATTERN = Regex("(?m)^Android-Version-Code: ([1-9]\\d*)$")
 
-    fun versionCode(tagName: String): Int? = TAG_PATTERN.matchEntire(tagName)
+    fun productVersion(tagName: String): String? = TAG_PATTERN.matchEntire(tagName)
+        ?.groupValues
+        ?.get(1)
+    fun versionCode(releaseNotes: String): Int? = VERSION_CODE_PATTERN.find(releaseNotes)
         ?.groupValues
         ?.get(1)
         ?.toIntOrNull()
@@ -295,18 +302,19 @@ internal object GitHubUpdatePolicy {
     fun isApprovedApkAsset(
         assetName: String,
         urlText: String,
-        versionCode: Int,
+        productVersion: String,
         sizeBytes: Long,
     ): Boolean {
-        if (assetName != "S.tand-Android-v$versionCode.apk") return false
+        if (assetName != "S.tand-Android-$productVersion.apk") return false
         if (sizeBytes <= 0L || sizeBytes > 200L * 1_024L * 1_024L) return false
         val url = runCatching { URL(urlText) }.getOrNull() ?: return false
         return url.protocol == "https" &&
             url.host == "github.com" &&
-            url.path.startsWith(
-                "/armsone/S.tand-Android/releases/download/android-v$versionCode/",
-            ) &&
-            url.path.endsWith("/$assetName")
+            url.userInfo == null &&
+            (url.port == -1 || url.port == 443) &&
+            url.query == null &&
+            url.ref == null &&
+            url.path == "/armsone/S.tand-Android/releases/download/android-v$productVersion/$assetName"
     }
 
     fun resolveCheckState(

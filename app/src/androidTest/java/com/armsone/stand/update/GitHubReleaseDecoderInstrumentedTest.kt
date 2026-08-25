@@ -10,22 +10,24 @@ class GitHubReleaseDecoderInstrumentedTest {
         val release = GitHubReleaseDecoder.decode(
             """
             {
-              "tag_name": "android-v28",
+              "tag_name": "android-v2.1.1",
               "draft": false,
               "prerelease": false,
+              "body": "Android-Version-Code: 340540\\n\\n변경 사항",
               "assets": [
                 {
-                  "name": "S.tand-Android-v28.apk",
+                  "name": "S.tand-Android-2.1.1.apk",
                   "size": 12345,
-                  "browser_download_url": "https://github.com/armsone/S.tand-Android/releases/download/android-v28/S.tand-Android-v28.apk"
+                  "browser_download_url": "https://github.com/armsone/S.tand-Android/releases/download/android-v2.1.1/S.tand-Android-2.1.1.apk"
                 }
               ]
             }
             """.trimIndent(),
         )
 
-        assertEquals(28, release?.versionCode)
-        assertEquals("S.tand-Android-v28.apk", release?.assetName)
+        assertEquals("2.1.1", release?.productVersion)
+        assertEquals(340540, release?.versionCode)
+        assertEquals("S.tand-Android-2.1.1.apk", release?.assetName)
     }
 
     @Test
@@ -34,7 +36,7 @@ class GitHubReleaseDecoderInstrumentedTest {
             GitHubReleaseDecoder.decode(
                 """
                 {
-                  "tag_name": "android-v28",
+                  "tag_name": "android-v2.1.1",
                   "draft": true,
                   "prerelease": false,
                   "assets": []

@@ -68,7 +68,7 @@ fun AppUpdateDialog(
             text = {
                 Text(
                     state.message
-                        ?: "GitHub에서 에스텐드 ${state.release.tagName.removePrefix("android-v")} 버전을 받습니다. 기존 설정과 녹음은 유지됩니다.",
+                        ?: "GitHub에서 에스텐드 ${state.release.productVersion} 버전을 받습니다. 기존 설정과 녹음은 유지됩니다.",
                 )
             },
             confirmButton = {
