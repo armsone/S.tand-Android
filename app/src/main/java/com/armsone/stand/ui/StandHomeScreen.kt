@@ -1029,8 +1029,8 @@ private fun HomeGestureLayer(
             .pointerInput(Unit) {
                 awaitEachGesture {
                     val down = awaitFirstDown(
-                        requireUnconsumed = false,
-                        pass = PointerEventPass.Initial,
+                        requireUnconsumed = true,
+                        pass = PointerEventPass.Final,
                     )
                     var axis: HomeAdjustmentAxis? = null
                     var startingLevel = 0f
@@ -1038,8 +1038,9 @@ private fun HomeGestureLayer(
                     var finished = false
 
                     do {
-                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        val event = awaitPointerEvent(PointerEventPass.Final)
                         val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                        if (axis == null && change.isConsumed) break
                         val translation = change.position - down.position
                         val pressed = event.changes.filter { it.pressed }
 

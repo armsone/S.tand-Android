@@ -20,6 +20,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipe
+import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
@@ -102,6 +103,7 @@ class MatchupUiCatalogTest {
 
     @Test
     fun phoneLandscapeMusicStripSlidesWhileSettingsControlStaysFixed() {
+        var systemVolumeChangeCount = 0
         val state = homeState().let { current ->
             current.copy(settings = current.settings.normalized())
         }
@@ -110,7 +112,10 @@ class MatchupUiCatalogTest {
             CompositionLocalProvider(LocalDensity provides Density(density = 1f, fontScale = 1f)) {
                 STandTheme(displayTheme = StandDisplayTheme.COLOR) {
                     Box(Modifier.size(width = 730.dp, height = 313.dp)) {
-                        CatalogHome(state = state)
+                        CatalogHome(
+                            state = state,
+                            onSystemVolumeChanged = { systemVolumeChangeCount += 1 },
+                        )
                     }
                 }
             }
@@ -121,15 +126,14 @@ class MatchupUiCatalogTest {
         val before = strip.captureToImage().asAndroidBitmap()
         val settingsBefore = composeRule.onNodeWithText("설정").fetchSemanticsNode().boundsInRoot
 
-        strip.performSemanticsAction(SemanticsActions.ScrollBy) { scrollBy ->
-            assertEquals(true, scrollBy(300f, 0f))
-        }
+        strip.performTouchInput { swipeLeft(durationMillis = 500) }
         composeRule.waitForIdle()
 
         val after = strip.captureToImage().asAndroidBitmap()
         val settingsAfter = composeRule.onNodeWithText("설정").fetchSemanticsNode().boundsInRoot
         assertFalse("음악 채널 영역이 왼쪽 스와이프 후에도 바뀌지 않았습니다.", before.sameAs(after))
         assertEquals(settingsBefore, settingsAfter)
+        assertEquals(0, systemVolumeChangeCount)
     }
 
     @Test
@@ -310,6 +314,7 @@ class MatchupUiCatalogTest {
     private fun CatalogHome(
         state: StandUiState,
         showPermissionReview: Boolean = false,
+        onSystemVolumeChanged: (Float) -> Unit = {},
     ) {
         StandHomeScreen(
             state = state,
@@ -321,7 +326,7 @@ class MatchupUiCatalogTest {
             onBrightnessLevelChanged = {},
             onBrightnessAdjustmentFinished = {},
             readSystemVolume = { 0.5f },
-            onSystemVolumeChanged = {},
+            onSystemVolumeChanged = onSystemVolumeChanged,
             onClockScaleChanged = {},
             onToggleTorch = {},
             onCycleMode = {},
