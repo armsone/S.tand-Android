@@ -12,6 +12,7 @@ import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.performClick
+import com.armsone.stand.BuildConfig
 import com.armsone.stand.model.InternetRadioConfiguration
 import com.armsone.stand.model.LampPhase
 import com.armsone.stand.model.StandModePreference
@@ -26,6 +27,43 @@ import org.junit.Test
 class StandHomeScreenTest {
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()
+
+    @Test
+    fun homeFooterShowsAppVersionInsteadOfInternalBuildNumber() {
+        composeRule.setContent {
+            STandTheme {
+                StandHomeScreen(
+                    state = StandUiState(displayBrightness = 0.42f),
+                    onScreenTap = {},
+                    onToggleTheme = {},
+                    onOpenEditor = {},
+                    onBrightnessAdjustmentStarted = {},
+                    onBrightnessLevelChanged = {},
+                    onBrightnessAdjustmentFinished = {},
+                    readSystemVolume = { 0.5f },
+                    onSystemVolumeChanged = {},
+                    onClockScaleChanged = {},
+                    onToggleTorch = {},
+                    onCycleMode = {},
+                    onToggleSession = {},
+                    onToggleOrientation = {},
+                    onOpenRecordings = {},
+                    onOpenAiShot = {},
+                    onOpenSettings = {},
+                    onOpenBoyiso = {},
+                    boyisoStatus = "연결 안 됨",
+                    boyisoCanSendTokTok = false,
+                    onSendBoyisoTokTok = {},
+                    onToggleRadio = {},
+                    onEditRadio = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithContentDescription(
+            "앱 버전 ${BuildConfig.VERSION_NAME}, 현재 밝기 42퍼센트",
+        ).assertIsDisplayed()
+    }
 
     @Test
     fun radioPanelSplitsPrimaryAndNextActionsIntoEqualHalves() {

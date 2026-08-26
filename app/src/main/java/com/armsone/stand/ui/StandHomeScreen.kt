@@ -448,7 +448,7 @@ fun StandHomeScreen(
             }
 
             Text(
-                text = "${BuildConfig.BUILD_NUMBER} · 밝기 " +
+                text = "${BuildConfig.VERSION_NAME} · 밝기 " +
                     "${(state.displayBrightness.coerceIn(0f, 1f) * 100f).roundToInt()}%",
                 color = Color.White.copy(
                     alpha = if (state.isDisplayDark) 0f else 0.28f,
@@ -463,7 +463,7 @@ fun StandHomeScreen(
                     .padding(bottom = 6.dp)
                     .semantics {
                         contentDescription =
-                            "빌드 번호 ${BuildConfig.BUILD_NUMBER}, 현재 밝기 " +
+                            "앱 버전 ${BuildConfig.VERSION_NAME}, 현재 밝기 " +
                             "${(state.displayBrightness.coerceIn(0f, 1f) * 100f).roundToInt()}퍼센트"
                     },
             )
