@@ -665,6 +665,39 @@
           "result": "Apple unit tests and UI catalog passed; Android unit, lint and four Google TV instrumentation tests passed; D-pad runtime result captured."
         }
       ]
+    },
+    {
+      "id": "home.edit_mode.stationary_long_press_entry",
+      "route_state": "home_portrait",
+      "element": "edit_mode_gesture",
+      "dimension": "stationary 2.0s hold and scroll drag cancellation",
+      "classification": "functional",
+      "source_ref": {
+        "kind": "source",
+        "value": "product-contract.yaml home.edit_mode.stationary_long_press_entry"
+      },
+      "target_observation": "Home edit mode starts only after a stationary 2.0 second touch without exceeding touch slop; horizontal volume or vertical brightness drag immediately cancels the hold and prevents entering edit mode. TV and D-pad behavior remain preserved.",
+      "implementation_ref": "app/src/main/java/com/armsone/stand/ui/StandHomeScreen.kt",
+      "fixture": "home_edit_gesture_v1",
+      "fallback_capable": false,
+      "evidence": [
+        {
+          "id": "home-edit-gesture-trace-20260826",
+          "type": "behavior_trace",
+          "path": ".parity/evidence/2026-08-26/home-edit-gesture-behavior-trace.md",
+          "sha256": "f89e3bb888340829720b67fe704e7f0a328c23822466905e90135152d70e50ef"
+        }
+      ],
+      "status": "implemented_source_only",
+      "attempts": [
+        {
+          "attempt": 1,
+          "date": "2026-08-26",
+          "action": "Applied 2.0s hold requirement in HomeEditGesturePolicy and StandHomeScreen gesture detection, cancelling on movement beyond touch slop, multi-touch, or gesture consumption.",
+          "result": "Source and JVM unit tests pass. Apple runtime behavior passed; Android APK installed on SM-T500 but touch behavior remained unverified because the tablet was locked and the existing emulator went offline."
+        }
+      ],
+      "reopen_history": []
     }
   ]
 }

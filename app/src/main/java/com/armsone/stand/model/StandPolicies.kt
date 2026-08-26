@@ -93,6 +93,24 @@ object HoldDurationAdjustment {
     }
 }
 
+object HomeEditGesturePolicy {
+    const val HOLD_DURATION_MILLIS = 2_000L
+
+    fun shouldCancelHold(
+        movementDistancePx: Float,
+        touchSlopPx: Float,
+        pointerCount: Int,
+    ): Boolean = movementDistancePx >= touchSlopPx || pointerCount > 1
+
+    fun canEnterEditMode(
+        holdDurationMillis: Long,
+        hasMovedBeyondSlop: Boolean,
+        pointerCount: Int,
+    ): Boolean = holdDurationMillis >= HOLD_DURATION_MILLIS &&
+        !hasMovedBeyondSlop &&
+        pointerCount == 1
+}
+
 object HomeClockScalePolicy {
     const val MINIMUM_SCALE = 0.7f
     const val MAXIMUM_TOUCH_SCALE = 1.35f

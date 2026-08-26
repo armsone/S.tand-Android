@@ -53,6 +53,90 @@ class StandPoliciesTest {
     }
 
     @Test
+    fun homeEditGestureRequiresTwoSecondsOfStationarySingleTouch() {
+        assertEquals(2_000L, HomeEditGesturePolicy.HOLD_DURATION_MILLIS)
+
+        assertFalse(
+            HomeEditGesturePolicy.canEnterEditMode(
+                holdDurationMillis = 1_999L,
+                hasMovedBeyondSlop = false,
+                pointerCount = 1,
+            ),
+        )
+        assertTrue(
+            HomeEditGesturePolicy.canEnterEditMode(
+                holdDurationMillis = 2_000L,
+                hasMovedBeyondSlop = false,
+                pointerCount = 1,
+            ),
+        )
+        assertTrue(
+            HomeEditGesturePolicy.canEnterEditMode(
+                holdDurationMillis = 3_000L,
+                hasMovedBeyondSlop = false,
+                pointerCount = 1,
+            ),
+        )
+        assertFalse(
+            HomeEditGesturePolicy.canEnterEditMode(
+                holdDurationMillis = 2_500L,
+                hasMovedBeyondSlop = true,
+                pointerCount = 1,
+            ),
+        )
+        assertFalse(
+            HomeEditGesturePolicy.canEnterEditMode(
+                holdDurationMillis = 2_500L,
+                hasMovedBeyondSlop = false,
+                pointerCount = 2,
+            ),
+        )
+        assertFalse(
+            HomeEditGesturePolicy.canEnterEditMode(
+                holdDurationMillis = 2_500L,
+                hasMovedBeyondSlop = false,
+                pointerCount = 0,
+            ),
+        )
+
+        assertFalse(
+            HomeEditGesturePolicy.shouldCancelHold(
+                movementDistancePx = 5f,
+                touchSlopPx = 10f,
+                pointerCount = 1,
+            ),
+        )
+        assertTrue(
+            HomeEditGesturePolicy.shouldCancelHold(
+                movementDistancePx = 10f,
+                touchSlopPx = 10f,
+                pointerCount = 1,
+            ),
+        )
+        assertTrue(
+            HomeEditGesturePolicy.shouldCancelHold(
+                movementDistancePx = 15f,
+                touchSlopPx = 10f,
+                pointerCount = 1,
+            ),
+        )
+        assertTrue(
+            HomeEditGesturePolicy.shouldCancelHold(
+                movementDistancePx = 0f,
+                touchSlopPx = 10f,
+                pointerCount = 2,
+            ),
+        )
+        assertTrue(
+            HomeEditGesturePolicy.shouldCancelHold(
+                movementDistancePx = 0f,
+                touchSlopPx = 10f,
+                pointerCount = 3,
+            ),
+        )
+    }
+
+    @Test
     fun faceDownBlackoutRequiresActiveSessionAndAlwaysBlocksTorch() {
         assertFalse(FaceDownLightingPolicy.shouldBlackout(false, true))
         assertTrue(FaceDownLightingPolicy.shouldBlackout(true, true))

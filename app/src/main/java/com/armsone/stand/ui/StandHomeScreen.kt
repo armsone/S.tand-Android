@@ -117,6 +117,7 @@ import com.armsone.stand.R
 import com.armsone.stand.BuildConfig
 import com.armsone.stand.model.EnvironmentDisplayMode
 import com.armsone.stand.model.HomeClockScalePolicy
+import com.armsone.stand.model.HomeEditGesturePolicy
 import com.armsone.stand.model.InternetRadioConfiguration
 import com.armsone.stand.model.ExternalMusicService
 import com.armsone.stand.model.HomeMusicChannelKind
@@ -990,21 +991,57 @@ private fun HomeGestureLayer(
 
                         var longPressTriggered = false
                         val longPressJob = launch {
-                            delay(viewConfiguration.longPressTimeoutMillis)
+                            delay(HomeEditGesturePolicy.HOLD_DURATION_MILLIS)
                             longPressTriggered = true
                             pendingSingleTap?.cancel()
                             previousTapUpTime = 0L
                             view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
                             latestOnOpenEditor.value()
                         }
-                        val up = waitForUpOrCancellation(pass = PointerEventPass.Final)
+
+                        var moved = false
+                        var upPosition = down.position
+                        var upTime = down.uptimeMillis
+                        var upConsumed = false
+                        var pressed = true
+
+                        while (pressed) {
+                            val event = awaitPointerEvent(PointerEventPass.Final)
+                            val change = event.changes.firstOrNull { it.id == down.id }
+                            if (change == null) {
+                                longPressJob.cancel()
+                                break
+                            }
+
+                            val distance = (change.position - down.position).getDistance()
+                            val pointerCount = event.changes.count { it.pressed }
+                            val isCancelledOrConsumed = change.isConsumed
+
+                            if (HomeEditGesturePolicy.shouldCancelHold(
+                                    movementDistancePx = distance,
+                                    touchSlopPx = viewConfiguration.touchSlop,
+                                    pointerCount = pointerCount,
+                                ) || isCancelledOrConsumed
+                            ) {
+                                if (distance >= viewConfiguration.touchSlop || pointerCount > 1 || isCancelledOrConsumed) {
+                                    moved = true
+                                }
+                                longPressJob.cancel()
+                            }
+
+                            upPosition = change.position
+                            upTime = change.uptimeMillis
+                            upConsumed = change.isConsumed
+                            pressed = change.pressed
+                        }
+
                         longPressJob.cancel()
 
-                        if (up != null && !longPressTriggered) {
+                        if (!moved && !pressed && !longPressTriggered && !upConsumed) {
                             val isDoubleTap = previousTapUpTime > 0L &&
-                                up.uptimeMillis - previousTapUpTime <=
+                                upTime - previousTapUpTime <=
                                 viewConfiguration.doubleTapTimeoutMillis &&
-                                (up.position - previousTapPosition).getDistance() <=
+                                (upPosition - previousTapPosition).getDistance() <=
                                 viewConfiguration.touchSlop * 4f
 
                             if (isDoubleTap) {
@@ -1012,8 +1049,8 @@ private fun HomeGestureLayer(
                                 pendingSingleTap = null
                                 previousTapUpTime = 0L
                             } else {
-                                previousTapUpTime = up.uptimeMillis
-                                previousTapPosition = up.position
+                                previousTapUpTime = upTime
+                                previousTapPosition = upPosition
                                 pendingSingleTap?.cancel()
                                 pendingSingleTap = launch {
                                     delay(viewConfiguration.doubleTapTimeoutMillis)
@@ -1022,6 +1059,9 @@ private fun HomeGestureLayer(
                                     latestOnScreenTap.value()
                                 }
                             }
+                        } else if (moved || longPressTriggered) {
+                            previousTapUpTime = 0L
+                            previousTapPosition = Offset.Unspecified
                         }
                     }
                 }
