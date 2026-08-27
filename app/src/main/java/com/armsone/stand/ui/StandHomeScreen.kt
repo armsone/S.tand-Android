@@ -2364,7 +2364,7 @@ private fun HomeControl(
             .size(
                 width = when {
                     isSettingsControl && isCompactTelevision -> 52.dp
-                    isCompactTelevision -> 84.dp
+                    isCompactTelevision -> 112.dp
                     isTelevision -> 160.dp
                     else -> 98.dp
                 },

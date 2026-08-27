@@ -4,16 +4,16 @@ S.tand iOS 앱을 Android에 맞게 옮기는 Kotlin·Jetpack Compose 프로젝�
 
 ## 현재 기준
 
-- Android 앱 버전: `2.1.0`
-- 사용자용 빌드 표기: `202608251027`
-- Android `versionCode`: `340467`
+- Android 앱 버전: `2.2.2`
+- 사용자용 빌드 표기: `202608271633`
+- Android `versionCode`: `343713`
 - applicationId: `com.armsone.stand`
 - 최소 SDK: 26
 - 대상/컴파일 SDK: 37
 - UI: 단일 Activity + Jetpack Compose
 - Apple 읽기 전용 기준: 형제 저장소 `../S.tand`, 공통 버전 `2.1.0`
 
-`2.1.0`은 휴대전화·태블릿 경험을 유지하면서 Google TV 런처, 10-foot 가로 화면, 리모컨 포커스와 TV 전용 음악·시간·날씨 흐름을 추가합니다. Google TV에서는 사용할 수 없는 보이소·잠소리·녹음·마이크·카메라 기능을 요청하지 않으며, 기존 설치의 사용자 설정은 보존합니다.
+`2.2.2`는 Google TV / Android TV 환경에서 홈 하단 콤팩트 제어 버튼 폭을 확장하여 "테마 전환", "앱 밝기", "시계 크기" 등의 한글 라벨이 잘림 없이 온전히 표시되도록 보강한 패치 릴리스입니다. 설정 버튼(정사각형 52dp), 카드 높이(52dp), D-pad 리모컨 동작 및 휴대전화·태블릿 레이아웃은 기존과 동일하게 유지됩니다.
 
 전체 기능 차이와 검증 상태는 [iOS 동등성 문서](docs/IOS_PARITY.md)를 확인하세요. 권한·저장·외부
 전송 근거는 [Android 개인정보·Data Safety 문서](docs/ANDROID_DATA_SAFETY.md)에 기록합니다.

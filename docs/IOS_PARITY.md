@@ -346,3 +346,11 @@ iOS 작업 트리의 `BoyisoModels.swift`, `BoyisoConnectivityService.swift`, `B
   - Google TV / Android TV 환경의 D-pad 리모컨 동작 및 미지원 기능 정책(`TvUiModePolicy`) 완벽 보존.
   - TalkBack 접근성 액션("화면 편집 열기") 및 하단 제외 영역(104dp) 보존.
 - 검증: `StandPoliciesTest` 단위 테스트 보강 완료, 실기기 런타임 캡처 및 제스처 트레이스는 미실행 상태로 보존.
+
+## 2026-08-27 S.tand 2.2.2 릴리스 후보 (Google TV 하단 제어 폭 보강)
+
+- 배포 메타데이터: versionName `2.2.2`, versionCode `343713`, Build-Number `202608271633`.
+- Google TV / Android TV 홈 하단 콤팩트 제어 카드 폭 확장:
+  - `StandHomeScreen.kt`의 `HomeControl`에서 비설정 콤팩트 TV 카드 폭을 `84.dp`에서 `112.dp`로 확장하여 "테마 전환", "앱 밝기", "시계 크기" 한글 라벨이 잘림 없이 온전히 표시되도록 수정.
+  - 설정 버튼(정사각형 `52.dp × 52.dp`), 콤팩트 TV 카드 높이(`52.dp`), 일반 TV 크기(`160.dp × 100.dp`), 휴대전화/태블릿 레이아웃(`98.dp × 66.dp`) 및 D-pad 포커스/리모컨 제어 동작은 기존과 동일하게 유지.
+- 검증: 소스 레벨 구현 확인 완료, 물리적 Google TV / Android TV 실기기 검증은 미실행(대기) 상태.
