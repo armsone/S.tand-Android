@@ -131,14 +131,14 @@ internal fun StandControlTileContent(
             modifier = Modifier
                 .align(Alignment.Center)
                 .padding(
-                    horizontal = if (isTelevision) 10.dp else 5.dp,
-                    vertical = if (compactTelevision) 5.dp else if (isTelevision) 10.dp else 5.dp,
+                    horizontal = if (isTelevision) 8.dp else 5.dp,
+                    vertical = if (isTelevision) 6.dp else 5.dp,
                 ),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
             Row(
-                horizontalArrangement = Arrangement.spacedBy(if (isTelevision) 8.dp else 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(if (isTelevision) 6.dp else 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(
@@ -146,14 +146,14 @@ internal fun StandControlTileContent(
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary.copy(alpha = if (dimmed) 0.52f else 1f),
                     modifier = Modifier.size(
-                        if (compactTelevision) 20.dp else if (isTelevision) 26.dp else 17.dp,
+                        if (isTelevision) 18.dp else 17.dp,
                     ),
                 )
                 Text(
                     text = presentation.title,
                     color = Color.White.copy(alpha = if (dimmed) 0.46f else 0.86f),
-                    fontSize = if (dimmed) 9.5.sp else if (compactTelevision) 11.sp else if (isTelevision) 14.sp else 9.sp,
-                    lineHeight = if (dimmed) 10.5.sp else if (compactTelevision) 12.sp else if (isTelevision) 16.sp else 10.5.sp,
+                    fontSize = if (isTelevision) 12.sp else if (dimmed) 9.5.sp else 9.sp,
+                    lineHeight = if (isTelevision) 15.sp else if (dimmed) 10.5.sp else 10.5.sp,
                     fontWeight = FontWeight.SemiBold,
                     textAlign = TextAlign.Start,
                     maxLines = 1,
@@ -161,12 +161,12 @@ internal fun StandControlTileContent(
                 )
             }
             if (!hideStatus) {
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(if (isTelevision) 4.dp else 12.dp))
                 Text(
                     text = presentation.status,
-                    color = Color.White.copy(alpha = 0.42f),
-                    fontSize = if (compactTelevision) 9.sp else if (isTelevision) 12.sp else 7.5.sp,
-                    lineHeight = if (compactTelevision) 10.sp else if (isTelevision) 14.sp else 9.sp,
+                    color = Color.White.copy(alpha = if (isTelevision) 0.65f else 0.42f),
+                    fontSize = if (isTelevision) 10.5.sp else 7.5.sp,
+                    lineHeight = if (isTelevision) 13.5.sp else 9.sp,
                     fontWeight = FontWeight.Medium,
                     textAlign = TextAlign.Center,
                     maxLines = 1,

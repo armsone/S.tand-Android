@@ -366,7 +366,7 @@ fun StandHomeScreen(
                         start = (if (isPortrait) 16.dp else 28.dp) + tvSafePaddingHorizontal,
                         top = homeTopPadding,
                         end = (if (isPortrait) 16.dp else 28.dp) + tvSafePaddingHorizontal,
-                        bottom = (if (isPortrait) 28.dp else 18.dp) + tvSafePaddingVertical,
+                        bottom = (if (isPortrait) 28.dp else if (isTelevision) 24.dp else 18.dp) + tvSafePaddingVertical,
                     ),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
@@ -461,7 +461,7 @@ fun StandHomeScreen(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .padding(WindowInsets.safeDrawing.asPaddingValues())
-                    .padding(bottom = 6.dp)
+                    .padding(bottom = 6.dp + tvSafePaddingVertical)
                     .semantics {
                         contentDescription =
                             "앱 버전 ${BuildConfig.VERSION_NAME}, 현재 밝기 " +
@@ -2117,7 +2117,6 @@ private fun HomeControls(
                 modifier = initialFocusModifier,
                 isTelevision = isTelevision,
                 isCompactTelevision = isTelevision,
-                isSettingsControl = kind == StandControlKind.SETTINGS,
             )
         }
         if (isTelevision) {
@@ -2354,7 +2353,6 @@ private fun HomeControl(
     modifier: Modifier = Modifier,
     isTelevision: Boolean = false,
     isCompactTelevision: Boolean = false,
-    isSettingsControl: Boolean = false,
 ) {
     Surface(
         color = Color.Transparent,
@@ -2363,13 +2361,11 @@ private fun HomeControl(
         modifier = modifier
             .size(
                 width = when {
-                    isSettingsControl && isCompactTelevision -> 52.dp
                     isCompactTelevision -> 112.dp
                     isTelevision -> 160.dp
                     else -> 98.dp
                 },
                 height = when {
-                    isSettingsControl && isCompactTelevision -> 52.dp
                     isCompactTelevision -> 52.dp
                     isTelevision -> 100.dp
                     else -> 66.dp
@@ -2392,7 +2388,7 @@ private fun HomeControl(
             showReorderHandle = false,
             isTelevision = isTelevision,
             compactTelevision = isCompactTelevision,
-            hideStatus = isSettingsControl && isCompactTelevision,
+            hideStatus = false,
             dimmed = isCompactTelevision,
         )
     }

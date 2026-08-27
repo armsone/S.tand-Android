@@ -5,8 +5,8 @@ S.tand iOS 앱을 Android에 맞게 옮기는 Kotlin·Jetpack Compose 프로젝�
 ## 현재 기준
 
 - Android 앱 버전: `2.2.2`
-- 사용자용 빌드 표기: `202608271633`
-- Android `versionCode`: `343713`
+- 사용자용 빌드 표기: `202608271720`
+- Android `versionCode`: `343760`
 - applicationId: `com.armsone.stand`
 - 최소 SDK: 26
 - 대상/컴파일 SDK: 37
