@@ -176,6 +176,50 @@ data class StandScreenLayout(
                     controlOrder = StandControlKind.DefaultOrder,
                 )
             }
+
+        val Television: StandScreenLayout
+            get() {
+                val weather = PanelTransform(
+                    x = 0f,
+                    y = -0.067452006f,
+                    scale = 0.55f,
+                )
+                val clockTransform = PanelTransform(
+                    x = 0f,
+                    y = 0.21553229f,
+                    scale = 1.1122912f,
+                )
+                val secondsScale = 0.82054085f
+                val defaultCanvasWidth = 960f
+                val defaultCanvasHeight = 540f
+                val alignedSeconds = TvClockAlignmentPolicy.calculateAlignedSecondsTransform(
+                    clockTransform = clockTransform,
+                    canvasWidthDp = defaultCanvasWidth,
+                    canvasHeightDp = defaultCanvasHeight,
+                    isPortrait = false,
+                    secondsScale = secondsScale,
+                )
+                return StandScreenLayout(
+                    clock = clockTransform,
+                    seconds = alignedSeconds,
+                    weatherIcon = weather,
+                    weatherTemperature = weather,
+                    weatherCondition = weather,
+                    date = PanelTransform(x = 0f, y = 0.43815008f, scale = 0.85f),
+                    status = PanelTransform(x = 0f, y = 0.5f),
+                    brightnessRule = PanelTransform(x = 0f, y = 0.34f),
+                    battery = PanelTransform(x = 0f, y = 0.5245899f),
+                    radio = PanelTransform(x = 0.4f, y = -0.3f, scale = 0.75f),
+                    secondaryRadio = PanelTransform(
+                        x = -0.4f,
+                        y = -0.3f,
+                        scale = 0.75f,
+                    ),
+                    radiosGrouped = false,
+                    weatherGroupIds = listOf(1, 1, 1),
+                    controlOrder = StandControlKind.DefaultOrder,
+                )
+            }
     }
 }
 
@@ -500,6 +544,65 @@ object HomeEditorResetPolicy {
 
     fun controls(layout: StandScreenLayout): StandScreenLayout =
         layout.copy(controlOrder = StandControlKind.DefaultOrder)
+}
+
+object TvClockAlignmentPolicy {
+    const val VERTICAL_SPACING_DP = 8f
+
+    fun calculateAlignedSecondsTransform(
+        clockTransform: PanelTransform,
+        canvasWidthDp: Float,
+        canvasHeightDp: Float,
+        isPortrait: Boolean = false,
+        secondsScale: Float = 0.82054085f,
+        verticalSpacingDp: Float = VERTICAL_SPACING_DP,
+    ): PanelTransform {
+        if (!canvasWidthDp.isFinite() || canvasWidthDp <= 0f ||
+            !canvasHeightDp.isFinite() || canvasHeightDp <= 0f
+        ) {
+            return PanelTransform(x = 0.192f, y = 0.29101223f, scale = secondsScale)
+        }
+
+        val widthFraction = if (isPortrait) 0.78f else 0.52f
+        val maximumClockWidth = if (isPortrait) 456f else 560f
+        val clockWidth = (canvasWidthDp * widthFraction)
+            .coerceAtMost(maximumClockWidth)
+            .coerceAtMost(canvasWidthDp)
+        val gap = if (isPortrait) 8f else 12f
+        val colonWidth = if (isPortrait) 18f else 24f
+        val cardAspectRatio = if (isPortrait) 126f / 92f else 164f / 116f
+        val cardWidth = ((clockWidth - gap * 2f - colonWidth) / 2f).coerceAtLeast(1f)
+        val cardHeight = cardWidth / cardAspectRatio
+
+        val panelWidth = if (isPortrait) 48f else 58f
+        val panelHeight = if (isPortrait) 36f else 42f
+
+        val safeClockScale = clockTransform.scale.takeIf { it.isFinite() && it > 0f } ?: 1f
+        val safeSecondsScale = secondsScale.takeIf { it.isFinite() && it > 0f } ?: 1f
+
+        val clockRenderWidth = clockWidth * safeClockScale
+        val clockRenderHeight = cardHeight * safeClockScale
+        val secondsRenderWidth = panelWidth * safeSecondsScale
+        val secondsRenderHeight = panelHeight * safeSecondsScale
+
+        val clockCenterX = clockTransform.x * canvasWidthDp
+        val clockCenterY = clockTransform.y * canvasHeightDp
+
+        val minuteCardRight = clockCenterX + clockRenderWidth / 2f
+        val secondsCenterX = minuteCardRight - secondsRenderWidth / 2f
+
+        val minuteCardBottom = clockCenterY + clockRenderHeight / 2f
+        val secondsCenterY = minuteCardBottom + verticalSpacingDp + secondsRenderHeight / 2f
+
+        val secondsX = (secondsCenterX / canvasWidthDp).coerceIn(-1f, 1f)
+        val secondsY = (secondsCenterY / canvasHeightDp).coerceIn(-1f, 1f)
+
+        return PanelTransform(
+            x = secondsX,
+            y = secondsY,
+            scale = safeSecondsScale,
+        )
+    }
 }
 
 private fun Float.finiteOrZero(): Float = if (isFinite()) this else 0f

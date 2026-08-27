@@ -134,6 +134,7 @@ import com.armsone.stand.model.StandScreenLayout
 import com.armsone.stand.model.StandModePreference
 import com.armsone.stand.model.StandExperienceMode
 import com.armsone.stand.model.SimplifiedBrightnessModePolicy
+import com.armsone.stand.model.TvClockAlignmentPolicy
 import com.armsone.stand.model.TvUiModePolicy
 import com.armsone.stand.model.WeatherPiece
 import com.armsone.stand.platform.InternetRadioState
@@ -1290,7 +1291,7 @@ private fun DashboardCanvas(
     modifier: Modifier = Modifier,
     isTelevision: Boolean = false,
 ) {
-    val layout = if (isPortrait) {
+    val rawLayout = if (isPortrait) {
         state.settings.portraitLayout
     } else {
         state.settings.landscapeLayout
@@ -1299,6 +1300,20 @@ private fun DashboardCanvas(
     BoxWithConstraints(modifier = modifier) {
         val canvasWidth = maxWidth
         val canvasHeight = maxHeight
+        val layout = remember(rawLayout, canvasWidth, canvasHeight, isTelevision, isPortrait) {
+            if (isTelevision) {
+                val alignedSeconds = TvClockAlignmentPolicy.calculateAlignedSecondsTransform(
+                    clockTransform = rawLayout.clock,
+                    canvasWidthDp = canvasWidth.value,
+                    canvasHeightDp = canvasHeight.value,
+                    isPortrait = isPortrait,
+                    secondsScale = rawLayout.seconds.scale,
+                )
+                rawLayout.copy(seconds = alignedSeconds)
+            } else {
+                rawLayout
+            }
+        }
         Box(
             modifier = Modifier
                 .fillMaxSize()
