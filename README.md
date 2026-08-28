@@ -4,16 +4,16 @@ S.tand iOS 앱을 Android에 맞게 옮기는 Kotlin·Jetpack Compose 프로젝�
 
 ## 현재 기준
 
-- Android 앱 버전: `2.3.2`
-- 사용자용 빌드 표기: `202608282205`
-- Android `versionCode`: `345485`
+- Android 앱 버전: `2.3.3`
+- 사용자용 빌드 표기: `202608282218`
+- Android `versionCode`: `345498`
 - applicationId: `com.armsone.stand`
 - 최소 SDK: 26
 - 대상/컴파일 SDK: 37
 - UI: 단일 Activity + Jetpack Compose
 - Apple 읽기 전용 기준: 형제 저장소 `../S.tand`, 공통 버전 `2.3.0`
 
-`2.3.2`는 Android·Google TV와 Apple 기기 사이에서 라디오 채널 파일을 옮길 수 있고, 오래된 `http://` 직접 스트림도 경고와 함께 재생합니다. Google TV에서는 설정의 `라디오 가져오기·내보내기` 버튼으로 QR 수신 화면을 열 수 있고, 마지막 리모컨 조작 5초 뒤 선택선만 숨기며 홈 화면의 뒤로가기는 앱의 기본 종료 동작을 유지합니다.
+`2.3.3`은 Android·Google TV와 Apple 기기 사이에서 라디오 채널 파일을 옮길 수 있고, 오래된 `http://` 직접 스트림도 경고와 함께 재생합니다. Google TV에서는 설정의 `라디오 가져오기·내보내기` 버튼으로 QR 수신 화면을 열 수 있고, 마지막 리모컨 조작 5초 뒤 테두리와 검은 선택 효과를 모두 숨기며 홈 화면의 뒤로가기는 앱의 기본 종료 동작을 유지합니다.
 
 전체 기능 차이와 검증 상태는 [iOS 동등성 문서](docs/IOS_PARITY.md)를 확인하세요. 권한·저장·외부
 전송 근거는 [Android 개인정보·Data Safety 문서](docs/ANDROID_DATA_SAFETY.md)에 기록합니다.

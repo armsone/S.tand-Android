@@ -20,6 +20,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -1676,14 +1677,26 @@ internal fun MusicPanel(
     val active = state.externalMusicService == service
     val detail = if (active) "음악 듣기 모드" else "대기 중"
     val visibleAlpha = contentAlpha * if (isTelevision) 0.48f else 1f
+    val tvInteractionSource = remember { MutableInteractionSource() }
     Surface(
         modifier = modifier
             .width(width)
             .height(if (isTelevision) 44.dp else 60.dp)
             .standFocusable(shape = RoundedCornerShape(13.dp))
-            .combinedClickable(
-                onClick = { onOpenExternalMusic(service) },
-                onLongClick = if (active) onEndExternalMusic else null,
+            .then(
+                if (isTelevision) {
+                    Modifier.combinedClickable(
+                        interactionSource = tvInteractionSource,
+                        indication = null,
+                        onClick = { onOpenExternalMusic(service) },
+                        onLongClick = if (active) onEndExternalMusic else null,
+                    )
+                } else {
+                    Modifier.combinedClickable(
+                        onClick = { onOpenExternalMusic(service) },
+                        onLongClick = if (active) onEndExternalMusic else null,
+                    )
+                },
             )
             .semantics(mergeDescendants = true) {
                 contentDescription = "${service.displayName}, $detail"
@@ -1766,6 +1779,7 @@ internal fun RadioPanel(
         else -> "등록한 인터넷 라디오를 재생합니다."
     }
     val visibleAlpha = contentAlpha * if (isTelevision) 0.48f else 1f
+    val tvInteractionSource = remember { MutableInteractionSource() }
     Surface(
         modifier = modifier
             .width(width)
@@ -1774,9 +1788,20 @@ internal fun RadioPanel(
                 if (isTelevision || configuration == null) {
                     Modifier
                         .standFocusable(shape = RoundedCornerShape(13.dp))
-                        .combinedClickable(
-                            onClick = onPrimaryClick,
-                            onLongClick = onLongClick,
+                        .then(
+                            if (isTelevision) {
+                                Modifier.combinedClickable(
+                                    interactionSource = tvInteractionSource,
+                                    indication = null,
+                                    onClick = onPrimaryClick,
+                                    onLongClick = onLongClick,
+                                )
+                            } else {
+                                Modifier.combinedClickable(
+                                    onClick = onPrimaryClick,
+                                    onLongClick = onLongClick,
+                                )
+                            },
                         )
                         .semantics(mergeDescendants = true) {
                             contentDescription = "$title, $detail. $accessibilityHint"
