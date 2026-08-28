@@ -536,6 +536,16 @@ fun SettingsScreen(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                        TextButton(
+                            onClick = onManageInternetRadios,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .standFocusable(shape = RoundedCornerShape(12.dp)),
+                        ) {
+                            Icon(Icons.Default.Radio, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("라디오 가져오기·내보내기")
+                        }
                         Text(
                             state.externalMusicMessage
                                 ?: if (isTelevision) {
