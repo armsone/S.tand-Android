@@ -7,7 +7,6 @@
 package com.armsone.stand.ui
 
 import android.view.HapticFeedbackConstants
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
@@ -69,6 +68,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -90,7 +90,6 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -102,7 +101,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -152,6 +150,7 @@ import com.armsone.stand.ui.components.ClockDateAndSeconds
 import com.armsone.stand.ui.components.ClockSeconds
 import com.armsone.stand.ui.components.FlipClock
 import com.armsone.stand.ui.components.standFocusable
+import com.armsone.stand.ui.components.LocalStandFocusIndicatorEnabled
 import com.armsone.stand.ui.components.standPanelSurface
 import com.armsone.stand.ui.components.rememberBurnInOffset
 import com.armsone.stand.ui.theme.lampGradientColors
@@ -200,19 +199,14 @@ fun StandHomeScreen(
     val burnInOffset = rememberBurnInOffset()
     val configuration = LocalConfiguration.current
     val isTelevision = TvUiModePolicy.isTelevision(configuration)
-    val focusManager = LocalFocusManager.current
-    var hasFocusedElement by remember { mutableStateOf(false) }
+    var showTvFocusIndicator by remember { mutableStateOf(false) }
     var focusInteractionCount by remember { mutableStateOf(0L) }
     var adjustmentFeedback by remember { mutableStateOf<HomeAdjustmentFeedback?>(null) }
 
-    BackHandler(enabled = isTelevision && hasFocusedElement) {
-        focusManager.clearFocus(force = true)
-    }
-
-    LaunchedEffect(isTelevision, hasFocusedElement, focusInteractionCount) {
-        if (isTelevision && hasFocusedElement) {
+    LaunchedEffect(isTelevision, showTvFocusIndicator, focusInteractionCount) {
+        if (isTelevision && showTvFocusIndicator) {
             delay(5_000L)
-            focusManager.clearFocus(force = true)
+            showTvFocusIndicator = false
         }
     }
 
@@ -223,17 +217,20 @@ fun StandHomeScreen(
         }
     }
 
+    CompositionLocalProvider(
+        LocalStandFocusIndicatorEnabled provides (!isTelevision || showTvFocusIndicator),
+    ) {
     BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
             .background(Color.Black)
             .onPreviewKeyEvent { event ->
-                if (isTelevision && hasFocusedElement && event.type == KeyEventType.KeyDown && isMeaningfulTvKey(event.key)) {
+                if (isTelevision && event.type == KeyEventType.KeyDown && isMeaningfulTvKey(event.key)) {
+                    showTvFocusIndicator = true
                     focusInteractionCount++
                 }
                 false
             }
-            .onFocusChanged { hasFocusedElement = it.hasFocus }
             .focusGroup(),
     ) {
         val isPortrait = if (isTelevision) false else maxHeight > maxWidth
@@ -526,6 +523,7 @@ fun StandHomeScreen(
             }
         }
         }
+    }
     }
 }
 

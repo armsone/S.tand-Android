@@ -8,6 +8,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
@@ -17,6 +18,8 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+
+internal val LocalStandFocusIndicatorEnabled = staticCompositionLocalOf { true }
 
 /**
  * Modifier that highlights a focusable component with high-contrast border and subtle scale
@@ -29,10 +32,11 @@ fun Modifier.standFocusable(
     scaleOnFocus: Boolean = true,
 ): Modifier = composed {
     var isFocused by remember { mutableStateOf(false) }
+    val focusIndicatorEnabled = LocalStandFocusIndicatorEnabled.current
     val borderColor = focusedBorderColor ?: MaterialTheme.colorScheme.primary
     val effectiveShape = shape ?: androidx.compose.foundation.shape.RoundedCornerShape(14.dp)
     val scale by animateFloatAsState(
-        targetValue = if (isFocused && scaleOnFocus) 1.04f else 1.0f,
+        targetValue = if (isFocused && focusIndicatorEnabled && scaleOnFocus) 1.04f else 1.0f,
         animationSpec = tween(durationMillis = 150),
         label = "tv-focus-scale",
     )
@@ -44,7 +48,7 @@ fun Modifier.standFocusable(
             scaleY = scale
         }
         .then(
-            if (isFocused) {
+            if (isFocused && focusIndicatorEnabled) {
                 Modifier.border(focusedBorderWidth, borderColor, effectiveShape)
             } else {
                 Modifier
