@@ -50,12 +50,19 @@ import com.armsone.stand.model.EnvironmentDisplayMode
 import com.armsone.stand.model.OrientationPreference
 import com.armsone.stand.model.PermissionReminderPolicy
 import com.armsone.stand.model.RadioShareImportPolicy
+import com.armsone.stand.model.InternetRadioCodec
+import com.armsone.stand.model.InternetRadioImportPolicy
+import com.armsone.stand.model.RadioDecodeResult
+import com.armsone.stand.model.RadioImportPreview
 import com.armsone.stand.model.ScreenLayoutCodec
 import com.armsone.stand.model.ClockFontChoice
 import com.armsone.stand.model.ClockHourMode
 import com.armsone.stand.model.ExternalMusicService
 import com.armsone.stand.model.StandModePreference
 import com.armsone.stand.model.TvUiModePolicy
+import com.armsone.stand.platform.RadioTransferServer
+import com.armsone.stand.ui.RadioImportPreviewDialog
+import com.armsone.stand.ui.RadioTransferReceiveDialog
 import com.armsone.stand.boyiso.BoyisoManager
 import com.armsone.stand.boyiso.BoyisoQrCode
 import com.armsone.stand.boyiso.BoyisoRole
@@ -148,6 +155,29 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private var radioTransferServer: RadioTransferServer? = null
+    private var pendingRadioImportPreview by mutableStateOf<RadioImportPreview?>(null)
+    private var showRadioTransferDialog by mutableStateOf(false)
+    private var radioTransferUrl by mutableStateOf<String?>(null)
+    private var radioTransferFallback by mutableStateOf<String?>(null)
+    private var radioTransferError by mutableStateOf<String?>(null)
+
+    private val exportRadioLauncher = registerForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json"),
+    ) { uri: Uri? ->
+        if (uri != null) {
+            exportRadioChannelsToUri(uri)
+        }
+    }
+
+    private val importRadioLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri: Uri? ->
+        if (uri != null) {
+            importRadioChannelsFromUri(uri)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         pendingPermissionRequest = savedInstanceState
@@ -230,6 +260,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onStop() {
+        stopRadioTransferReceiver()
         BoyisoManager.isAppVisible = false
         stopObservingSystemBrightness()
         standViewModel.onAppBackground()
@@ -238,9 +269,121 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        stopRadioTransferReceiver()
         appUpdateService.close()
         if (boyisoManagerDelegate.isInitialized()) boyisoManager.close()
         super.onDestroy()
+    }
+
+    private fun exportRadioChannelsToUri(uri: Uri) {
+        val channels = standViewModel.uiState.value.settings.internetRadioChannels
+        if (channels.isEmpty()) {
+            showToast("내보낼 라디오 채널이 없습니다.")
+            return
+        }
+        try {
+            val json = InternetRadioCodec.encode(channels)
+            val stream = contentResolver.openOutputStream(uri) ?: run {
+                showToast("저장할 파일을 만들 수 없습니다.")
+                return
+            }
+            stream.use {
+                stream.write(json.toByteArray(Charsets.UTF_8))
+                stream.flush()
+            }
+            showToast("라디오 채널을 파일로 내보냈습니다.")
+        } catch (e: Exception) {
+            showToast("라디오 채널 내보내기에 실패했습니다: ${e.message}")
+        }
+    }
+
+    private fun importRadioChannelsFromUri(uri: Uri) {
+        try {
+            val bytes = contentResolver.openInputStream(uri)?.use { stream ->
+                val buffer = java.io.ByteArrayOutputStream()
+                val temp = ByteArray(4096)
+                var totalRead = 0
+                while (true) {
+                    val read = stream.read(temp)
+                    if (read == -1) break
+                    buffer.write(temp, 0, read)
+                    totalRead += read
+                    if (totalRead > InternetRadioCodec.MAX_PAYLOAD_BYTES) {
+                        showToast("파일 크기가 제한(128KB)을 초과했습니다.")
+                        return
+                    }
+                }
+                buffer.toByteArray()
+            } ?: run {
+                showToast("파일을 열 수 없습니다.")
+                return
+            }
+
+            when (val result = InternetRadioCodec.decode(bytes)) {
+                is RadioDecodeResult.Success -> {
+                    val preview = InternetRadioImportPolicy.evaluate(
+                        currentChannels = standViewModel.uiState.value.settings.internetRadioChannels,
+                        importedChannels = result.channels,
+                    )
+                    pendingRadioImportPreview = preview
+                }
+                is RadioDecodeResult.Failure -> {
+                    showToast(result.message)
+                }
+            }
+        } catch (e: Exception) {
+            showToast("파일을 읽는 도중 오류가 발생했습니다: ${e.message}")
+        }
+    }
+
+    private fun startRadioTransferReceiver() {
+        stopRadioTransferReceiver()
+        showRadioTransferDialog = true
+        radioTransferUrl = null
+        radioTransferFallback = null
+        radioTransferError = null
+
+        val server = RadioTransferServer(
+            onStarted = { url, fallback, _ ->
+                runOnUiThread {
+                    radioTransferUrl = url
+                    radioTransferFallback = fallback
+                    radioTransferError = null
+                }
+            },
+            onSuccess = { importedChannels ->
+                runOnUiThread {
+                    stopRadioTransferReceiver()
+                    val preview = InternetRadioImportPolicy.evaluate(
+                        currentChannels = standViewModel.uiState.value.settings.internetRadioChannels,
+                        importedChannels = importedChannels,
+                    )
+                    pendingRadioImportPreview = preview
+                }
+            },
+            onError = { error ->
+                runOnUiThread {
+                    radioTransferError = error
+                }
+            },
+            onClosed = {
+                runOnUiThread {
+                    if (showRadioTransferDialog) {
+                        showRadioTransferDialog = false
+                    }
+                }
+            },
+        )
+        radioTransferServer = server
+        if (!server.start()) {
+            // Error handled via callback
+        }
+    }
+
+    private fun stopRadioTransferReceiver() {
+        radioTransferServer?.close()
+        radioTransferServer = null
+        showRadioTransferDialog = false
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -717,6 +860,13 @@ class MainActivity : ComponentActivity() {
                         browserReturnDestination = AppDestination.RADIO_MANAGEMENT
                         destination = AppDestination.BROWSER
                     },
+                    onExport = {
+                        exportRadioLauncher.launch(InternetRadioCodec.DEFAULT_FILE_NAME)
+                    },
+                    onImportFile = {
+                        importRadioLauncher.launch(arrayOf("application/json", "application/octet-stream", "*/*"))
+                    },
+                    onReceiveFromPhone = ::startRadioTransferReceiver,
                     onBack = { destination = secondaryReturnDestination },
                 )
 
@@ -818,6 +968,30 @@ class MainActivity : ComponentActivity() {
                         }
                         appUpdateService.dismiss()
                     },
+                )
+            }
+            if (showRadioTransferDialog) {
+                RadioTransferReceiveDialog(
+                    uploadUrl = radioTransferUrl,
+                    fallbackAddress = radioTransferFallback,
+                    errorMessage = radioTransferError,
+                    onDismiss = ::stopRadioTransferReceiver,
+                )
+            }
+            pendingRadioImportPreview?.let { preview ->
+                RadioImportPreviewDialog(
+                    preview = preview,
+                    onConfirmAdd = { channels ->
+                        standViewModel.importInternetRadioChannels(channels, replaceExisting = false)
+                        pendingRadioImportPreview = null
+                        showToast("라디오 채널을 추가했습니다.")
+                    },
+                    onConfirmReplace = { channels ->
+                        standViewModel.importInternetRadioChannels(channels, replaceExisting = true)
+                        pendingRadioImportPreview = null
+                        showToast("기존 라디오 채널을 가져온 채널로 교체했습니다.")
+                    },
+                    onDismiss = { pendingRadioImportPreview = null },
                 )
             }
             activeTokTokSender?.let { sender ->

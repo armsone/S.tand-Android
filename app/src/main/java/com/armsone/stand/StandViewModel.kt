@@ -19,6 +19,8 @@ import com.armsone.stand.model.EnvironmentDisplayMode
 import com.armsone.stand.model.FaceDownLightingPolicy
 import com.armsone.stand.model.LampPhase
 import com.armsone.stand.model.LampTorchLightingPolicy
+import com.armsone.stand.model.InternetRadioConfiguration
+import com.armsone.stand.model.InternetRadioImportPolicy
 import com.armsone.stand.model.InternetRadioMutationPolicy
 import com.armsone.stand.model.ExternalMusicPlaybackState
 import com.armsone.stand.model.ExternalMusicService
@@ -767,6 +769,31 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
             val channel = reordered.removeAt(sourceIndex)
             reordered.add(destinationIndex, channel)
             current.copy(internetRadioChannels = reordered)
+        }
+    }
+
+    fun importInternetRadioChannels(
+        channels: List<InternetRadioConfiguration>,
+        replaceExisting: Boolean,
+    ) {
+        val currentChannels = mutableUiState.value.settings.internetRadioChannels
+        val updatedChannels = if (replaceExisting) {
+            InternetRadioImportPolicy.applyReplace(channels)
+        } else {
+            InternetRadioImportPolicy.applyAdd(currentChannels, channels)
+        }
+        val activeID = activeInternetRadioChannelID(internetRadioPlayer.state.value)
+        if (activeID != null && updatedChannels.none { it.id == activeID }) {
+            internetRadioPlayer.stop()
+        }
+        settingsRepository.update { current ->
+            val selected = updatedChannels.firstOrNull { it.id == current.selectedInternetRadioId }
+                ?: updatedChannels.firstOrNull()
+            current.copy(
+                internetRadio = selected,
+                internetRadioChannels = updatedChannels,
+                selectedInternetRadioId = selected?.id,
+            )
         }
     }
 

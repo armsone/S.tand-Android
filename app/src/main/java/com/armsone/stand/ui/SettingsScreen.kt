@@ -1197,14 +1197,21 @@ private fun InlineRadioEditor(
             label = { Text("이름 (선택)") },
             singleLine = true,
         )
+        val isHttp = url.trim().startsWith("http://", ignoreCase = true)
         OutlinedTextField(
             value = url,
             onValueChange = onUrlChange,
             modifier = Modifier.fillMaxWidth(),
-            label = { Text("https://…") },
+            label = { Text("주소") },
+            placeholder = { Text("https://… 또는 http://…") },
             singleLine = true,
             isError = error != null,
-            supportingText = error?.let { message -> { Text(message) } },
+            supportingText = {
+                when {
+                    error != null -> Text(error)
+                    isHttp -> Text("암호화되지 않은 방송 주소", color = Color(0xFFFBBF24))
+                }
+            },
         )
         Row(
             modifier = Modifier.fillMaxWidth(),

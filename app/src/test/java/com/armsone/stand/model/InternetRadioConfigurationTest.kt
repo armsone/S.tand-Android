@@ -12,9 +12,13 @@ class InternetRadioConfigurationTest {
         assertEquals("https://radio.example/live", result?.streamUrl)
     }
 
-    @Test fun rejectsInsecureOrCredentialUrls() {
-        assertNull(InternetRadioConfiguration("FM", "http://radio.example/live").normalizedOrNull())
+    @Test fun acceptsLegacyHttpIncludingIpPortAndRejectsCredentials() {
+        val legacy = InternetRadioConfiguration("FM", "http://192.0.2.10:8000/live").normalizedOrNull()
+        assertEquals("http://192.0.2.10:8000/live", legacy?.streamUrl)
+        assertTrue(legacy?.isUnencrypted == true)
+        assertNull(InternetRadioConfiguration("FM", "ftp://radio.example/live").normalizedOrNull())
         assertNull(InternetRadioConfiguration("FM", "https://id:pw@radio.example/live").normalizedOrNull())
+        assertNull(InternetRadioConfiguration("FM", "http://id:pw@radio.example/live").normalizedOrNull())
     }
 
     @Test fun reconnectBackoffStopsAfterFiveAttempts() {
@@ -56,12 +60,15 @@ class InternetRadioConfigurationTest {
         )
     }
 
-    @Test fun sharedRadioImportAcceptsOnlyOneValidatedHttpsUrl() {
+    @Test fun sharedRadioImportAcceptsOneValidatedHttpOrHttpsUrl() {
         assertEquals(
             "https://radio.example/live",
             RadioShareImportPolicy.validatedUrlOrNull("  https://radio.example/live  "),
         )
-        assertNull(RadioShareImportPolicy.validatedUrlOrNull("http://radio.example/live"))
+        assertEquals(
+            "http://192.0.2.10:8000/live",
+            RadioShareImportPolicy.validatedUrlOrNull("http://192.0.2.10:8000/live"),
+        )
         assertNull(RadioShareImportPolicy.validatedUrlOrNull("https://id:pw@radio.example/live"))
         assertNull(RadioShareImportPolicy.validatedUrlOrNull("설명 https://radio.example/live"))
     }

@@ -92,15 +92,21 @@ fun InternetRadioScreen(
                 singleLine = true,
                 shape = RoundedCornerShape(16.dp),
             )
+            val isHttp = url.trim().startsWith("http://", ignoreCase = true)
             OutlinedTextField(
                 value = url,
                 onValueChange = { url = it.take(2_048); error = null },
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text("주소") },
-                placeholder = { Text("https://…") },
+                placeholder = { Text("https://… 또는 http://…") },
                 singleLine = true,
                 isError = error != null,
-                supportingText = error?.let { message -> { Text(message) } },
+                supportingText = {
+                    when {
+                        error != null -> Text(error!!)
+                        isHttp -> Text("암호화되지 않은 방송 주소", color = androidx.compose.ui.graphics.Color(0xFFEAB308))
+                    }
+                },
                 shape = RoundedCornerShape(16.dp),
             )
             OutlinedButton(
@@ -115,7 +121,7 @@ fun InternetRadioScreen(
                 Text("복사한 주소 붙여넣기")
             }
             Text(
-                "직접 이용 권한을 확인한 합법적인 HTTPS 스트림 주소만 등록해 주세요. 이름은 최대 30자, 주소는 최대 2,048자로 저장됩니다.",
+                "직접 이용 권한을 확인한 합법적인 HTTP 또는 HTTPS 스트림 주소를 등록해 주세요. 이름은 최대 30자, 주소는 최대 2,048자로 저장됩니다.",
                 style = MaterialTheme.typography.bodySmall,
             )
             OutlinedButton(

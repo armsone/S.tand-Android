@@ -36,14 +36,14 @@ class RadioShareReceiverActivity : ComponentActivity() {
                     ) {
                         Text("에스텐드 라디오", style = MaterialTheme.typography.headlineSmall)
                         if (sharedUrl == null) {
-                            Text("웹페이지가 아닌 합법적인 HTTPS 직접 스트림 주소 한 개를 공유해 주세요.")
+                            Text("웹페이지가 아닌 합법적인 HTTP 또는 HTTPS 직접 스트림 주소 한 개를 공유해 주세요.")
                             Spacer(Modifier.weight(1f))
                             OutlinedButton(
                                 onClick = ::finish,
                                 modifier = Modifier.fillMaxWidth(),
                             ) { Text("닫기") }
                         } else {
-                            Text("웹페이지가 아니라 라디오가 직접 재생되는 합법적인 HTTPS 주소여야 합니다.")
+                            Text("웹페이지가 아니라 라디오가 직접 재생되는 합법적인 HTTP 또는 HTTPS 주소여야 합니다.")
                             Text(sharedUrl, style = MaterialTheme.typography.bodyMedium)
                             Spacer(Modifier.weight(1f))
                             Row(

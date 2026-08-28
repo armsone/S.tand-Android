@@ -7,12 +7,14 @@
 package com.armsone.stand.ui
 
 import android.view.HapticFeedbackConstants
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -88,12 +90,19 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -189,7 +198,23 @@ fun StandHomeScreen(
     catalogNow: LocalDateTime? = null,
 ) {
     val burnInOffset = rememberBurnInOffset()
+    val configuration = LocalConfiguration.current
+    val isTelevision = TvUiModePolicy.isTelevision(configuration)
+    val focusManager = LocalFocusManager.current
+    var hasFocusedElement by remember { mutableStateOf(false) }
+    var focusInteractionCount by remember { mutableStateOf(0L) }
     var adjustmentFeedback by remember { mutableStateOf<HomeAdjustmentFeedback?>(null) }
+
+    BackHandler(enabled = isTelevision && hasFocusedElement) {
+        focusManager.clearFocus(force = true)
+    }
+
+    LaunchedEffect(isTelevision, hasFocusedElement, focusInteractionCount) {
+        if (isTelevision && hasFocusedElement) {
+            delay(5_000L)
+            focusManager.clearFocus(force = true)
+        }
+    }
 
     LaunchedEffect(adjustmentFeedback) {
         if (adjustmentFeedback != null) {
@@ -201,10 +226,16 @@ fun StandHomeScreen(
     BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
-            .background(Color.Black),
+            .background(Color.Black)
+            .onPreviewKeyEvent { event ->
+                if (isTelevision && hasFocusedElement && event.type == KeyEventType.KeyDown && isMeaningfulTvKey(event.key)) {
+                    focusInteractionCount++
+                }
+                false
+            }
+            .onFocusChanged { hasFocusedElement = it.hasFocus }
+            .focusGroup(),
     ) {
-        val configuration = LocalConfiguration.current
-        val isTelevision = TvUiModePolicy.isTelevision(configuration)
         val isPortrait = if (isTelevision) false else maxHeight > maxWidth
         val isExpanded = isTelevision || maxWidth >= 600.dp
         val tvSafePaddingHorizontal = if (isTelevision) TvUiModePolicy.SAFE_MARGIN_HORIZONTAL_DP.dp else 0.dp
@@ -1742,10 +1773,13 @@ internal fun RadioPanel(
             .width(width)
             .height(if (isTelevision) 44.dp else 60.dp)
             .then(
-                if (configuration == null) {
+                if (isTelevision || configuration == null) {
                     Modifier
                         .standFocusable(shape = RoundedCornerShape(13.dp))
-                        .combinedClickable(onClick = onPrimaryClick)
+                        .combinedClickable(
+                            onClick = onPrimaryClick,
+                            onLongClick = onLongClick,
+                        )
                         .semantics(mergeDescendants = true) {
                             contentDescription = "$title, $detail. $accessibilityHint"
                             stateDescription = detail
@@ -1783,7 +1817,7 @@ internal fun RadioPanel(
                 detailAlpha = 0.58f,
                 isTelevision = isTelevision,
             )
-            if (configuration != null) {
+            if (configuration != null && !isTelevision) {
                 Row(modifier = Modifier.fillMaxSize()) {
                     Box(
                         modifier = Modifier
@@ -2440,4 +2474,20 @@ private fun weatherSummary(code: Int): String = when (code) {
     85, 86 -> "눈 소나기"
     95, 96, 99 -> "뇌우"
     else -> "날씨 정보"
+}
+
+private fun isMeaningfulTvKey(key: Key): Boolean = when (key) {
+    Key.DirectionUp,
+    Key.DirectionDown,
+    Key.DirectionLeft,
+    Key.DirectionRight,
+    Key.DirectionCenter,
+    Key.Enter,
+    Key.NumPadEnter,
+    Key.Back,
+    Key.Escape,
+    Key.Tab,
+    Key.PageUp,
+    Key.PageDown -> true
+    else -> false
 }

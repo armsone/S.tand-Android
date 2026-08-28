@@ -6,6 +6,13 @@ iOS 기준: `main` / `1c92b69`, `1.0.0 (0.32.5)`
 
 Android 기준: 작업 트리의 versionName `0.0.1`, versionCode `57`, 빌드 `0.0.57`
 
+## 2026-08-28 Android 라디오 설정 이동
+
+- Android 휴대전화·태블릿·Google TV는 사용자 라디오 채널을 `S.tand-Radio.standradio.json`으로 내보내고 다시 가져올 수 있다.
+- Google TV는 같은 Wi-Fi에서 일회용 QR 업로드 페이지를 열어 휴대전화의 파일을 직접 받을 수 있으며, 외부 서버·계정·클라우드 업로드를 사용하지 않는다.
+- 가져오기는 미리보기와 명시적 확인을 거치며 기존 채널을 자동으로 덮어쓰거나 자동 재생하지 않는다.
+- Android와 Apple은 같은 `s.tand-radio` v1 파일 규격을 사용하며 사용자 소유의 오래된 `http://` 스트림을 경고와 함께 지원한다.
+
 ## 2026-08-20 iPhone 가로 기본 배치 누락 보완
 
 - iOS `1c92b69`의 `StandScreenLayout.landscape` 수치를 Android 가로 기본 배치에 직접 대응했다. 시계·초·날씨 3조각·날짜·상태·밝기 기준·배터리·두 라디오의 위치와 크기가 대상이다.

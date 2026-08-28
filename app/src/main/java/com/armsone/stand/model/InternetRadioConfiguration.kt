@@ -8,15 +8,20 @@ data class InternetRadioConfiguration(
     val streamUrl: String,
     val id: String = UUID.randomUUID().toString(),
 ) {
+    val isUnencrypted: Boolean
+        get() {
+            val scheme = runCatching { URI(streamUrl.trim()).scheme }.getOrNull()
+            return scheme?.equals("http", ignoreCase = true) == true
+        }
+
     fun normalizedOrNull(): InternetRadioConfiguration? {
         val name = displayName.trim().ifEmpty { "인터넷 라디오" }
         val url = streamUrl.trim()
         if (name.length > 30 || url.isEmpty() || url.length > 2_048) return null
         val uri = runCatching { URI(url) }.getOrNull() ?: return null
-        if (!uri.scheme.equals("https", ignoreCase = true) ||
-            uri.host.isNullOrBlank() ||
-            uri.userInfo != null
-        ) return null
+        val scheme = uri.scheme?.lowercase() ?: return null
+        if (scheme != "http" && scheme != "https") return null
+        if (uri.host.isNullOrBlank() || uri.userInfo != null) return null
         val stableID = id.trim().takeIf { it.isNotEmpty() } ?: UUID.randomUUID().toString()
         return copy(displayName = name, streamUrl = url, id = stableID)
     }
@@ -30,8 +35,9 @@ data class InternetRadioConfiguration(
             if (url.length > 2_048) return "라디오 주소가 너무 깁니다."
             val uri = runCatching { URI(url) }.getOrNull()
                 ?: return "서버 주소를 확인해 주세요."
-            if (!uri.scheme.equals("https", ignoreCase = true)) {
-                return "https://로 시작하는 안전한 스트림 주소만 사용할 수 있습니다."
+            val scheme = uri.scheme?.lowercase()
+            if (scheme != "http" && scheme != "https") {
+                return "http:// 또는 https://로 시작하는 스트림 주소만 사용할 수 있습니다."
             }
             if (uri.host.isNullOrBlank()) return "서버 주소를 확인해 주세요."
             if (uri.userInfo != null) {
