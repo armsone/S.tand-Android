@@ -658,6 +658,12 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun moveHomeMusicChannel(fromIndex: Int, toIndex: Int) {
+        settingsRepository.update { current ->
+            current.moveHomeMusicChannel(fromIndex, toIndex)
+        }
+    }
+
     fun saveInternetRadio(displayName: String, streamUrl: String): String? {
         return saveInternetRadioChannel(
             channelID = mutableUiState.value.settings.selectedInternetRadioId,
@@ -774,7 +780,24 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
             val reordered = current.internetRadioChannels.toMutableList()
             val channel = reordered.removeAt(sourceIndex)
             reordered.add(destinationIndex, channel)
-            current.copy(internetRadioChannels = reordered)
+            val radioIndices = current.homeMusicChannels.indices.filter {
+                current.homeMusicChannels[it].radioID != null
+            }
+            val reorderedHomeChannels = if (radioIndices.size == reordered.size) {
+                val updated = current.homeMusicChannels.toMutableList()
+                for (i in radioIndices.indices) {
+                    val homeIndex = radioIndices[i]
+                    val slot = current.homeMusicChannels[homeIndex].radioSlot
+                    updated[homeIndex] = HomeMusicChannelSelection.radio(reordered[i].id, slot = slot)
+                }
+                updated
+            } else {
+                current.homeMusicChannels
+            }
+            current.copy(
+                internetRadioChannels = reordered,
+                homeMusicChannels = reorderedHomeChannels,
+            )
         }
     }
 

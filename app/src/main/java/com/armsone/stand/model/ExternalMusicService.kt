@@ -155,6 +155,25 @@ object HomeMusicChannelPolicy {
         return result
     }
 
+    /**
+     * Moves a channel selection directly from [fromIndex] to [toIndex] (like iOS's drag-and-drop reordering).
+     */
+    fun moving(
+        current: List<HomeMusicChannelSelection>,
+        fromIndex: Int,
+        toIndex: Int,
+        radioChannels: List<InternetRadioConfiguration>,
+    ): List<HomeMusicChannelSelection> {
+        val normalized = normalized(current, radioChannels).toMutableList()
+        if (fromIndex !in normalized.indices || toIndex !in normalized.indices || fromIndex == toIndex) {
+            return normalized
+        }
+        val item = normalized.removeAt(fromIndex)
+        val boundedDestination = toIndex.coerceIn(0, normalized.size)
+        normalized.add(boundedDestination, item)
+        return normalized
+    }
+
     /** Swaps by (kind, radioSlot, radioID) identity so re-picking an already-placed radio or slot moves it. */
     fun assigning(
         current: List<HomeMusicChannelSelection>,
@@ -169,10 +188,11 @@ object HomeMusicChannelPolicy {
                 HomeMusicChannelKind.SPOTIFY, HomeMusicChannelKind.YOUTUBE_MUSIC ->
                     candidate.kind == selection.kind
                 HomeMusicChannelKind.INTERNET_RADIO ->
-                    candidate.kind == HomeMusicChannelKind.INTERNET_RADIO && (
-                        (selection.radioSlot != null && candidate.radioSlot == selection.radioSlot) ||
-                        (selection.radioID != null && candidate.radioID == selection.radioID)
-                    )
+                    candidate.kind == HomeMusicChannelKind.INTERNET_RADIO && if (selection.radioID != null) {
+                        candidate.radioID == selection.radioID
+                    } else {
+                        candidate.radioID == null && selection.radioSlot != null && candidate.radioSlot == selection.radioSlot
+                    }
             }
         }
         if (otherIndex >= 0 && otherIndex != slot) {
@@ -183,6 +203,56 @@ object HomeMusicChannelPolicy {
             normalized[slot] = selection
         }
         return normalized
+    }
+
+    fun calculateSlotCenters(
+        itemHeightsPx: List<Float>,
+        spacingPx: Float,
+    ): List<Float> {
+        if (itemHeightsPx.isEmpty()) return emptyList()
+        val centers = ArrayList<Float>(itemHeightsPx.size)
+        var currentTop = 0f
+        for (height in itemHeightsPx) {
+            centers.add(currentTop + height / 2f)
+            currentTop += height + spacingPx
+        }
+        return centers
+    }
+
+    fun calculateTargetIndex(
+        draggedIndex: Int,
+        dragOffsetY: Float,
+        slotCenters: List<Float>,
+    ): Int {
+        if (draggedIndex !in slotCenters.indices) return draggedIndex
+        val currentCenter = slotCenters[draggedIndex] + dragOffsetY
+        var closestIndex = draggedIndex
+        var minDistance = Float.MAX_VALUE
+        for (i in slotCenters.indices) {
+            val distance = kotlin.math.abs(slotCenters[i] - currentCenter)
+            if (distance < minDistance) {
+                minDistance = distance
+                closestIndex = i
+            }
+        }
+        return closestIndex
+    }
+
+    fun calculateItemDisplacement(
+        itemIndex: Int,
+        draggedIndex: Int?,
+        targetIndex: Int?,
+        draggedItemHeightPx: Float,
+        spacingPx: Float,
+    ): Float {
+        if (draggedIndex == null || targetIndex == null || draggedIndex == targetIndex) return 0f
+        if (itemIndex == draggedIndex) return 0f
+        val shiftAmount = draggedItemHeightPx + spacingPx
+        return when {
+            draggedIndex < targetIndex && itemIndex in (draggedIndex + 1)..targetIndex -> -shiftAmount
+            draggedIndex > targetIndex && itemIndex in targetIndex until draggedIndex -> shiftAmount
+            else -> 0f
+        }
     }
 
     private fun normalizedRadioSlot(requested: Int?, used: Set<Int>, slotCount: Int): Int? {

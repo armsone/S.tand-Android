@@ -415,3 +415,19 @@ iOS 작업 트리의 `BoyisoModels.swift`, `BoyisoConnectivityService.swift`, `B
   - `validRadioIDsInRequested`를 먼저 산출하여 요청된 모든 유효 라디오 ID를 보호하고, `unplacedRadios`만 새 빈 슬롯에 할당하도록 정제.
   - `HomeMusicChannelPolicy.assigning`에서 `radioSlot` 식별자를 대조하도록 보강하여 빈 라디오 슬롯 간 이동 및 임의 위치 재정렬이 온전히 동작하고 즉시 반영·영속화되도록 복원.
 - 검증: `HomeMusicChannelPolicyTest`에 외부 서비스, 등록 라디오, 빈 슬롯 간 순서 변경 및 직렬화 라운드트립 단위 테스트 추가.
+
+## 2026-08-29 Android 휴대전화 설정 음악 카드 직접 드래그앤드롭 재정렬 완성 (iOS 동등성)
+
+- 직접 드래그앤드롭(Direct Drag-to-Reorder) 상호작용:
+  - 기존 탭 핸들 확장 위/아래 화살표 UI(`reorderingMusicSlot`)를 완전히 제거하고, iOS와 동일하게 카드 길게 누르기(Long-press) 또는 드래그 핸들 직접 드래그로 즉시 수직 이동되도록 구현.
+  - 드래그 중인 카드에 대해 `zIndex(10f)`, 부드러운 확대 스케일(`1.025f`), 그림자 입체감(`elevation 8.dp`), 테두리/배경 하이라이트 및 실시간 수직 이동(`translationY`) 피드백 적용.
+  - 드래그 중 다른 카드들은 스프링 애니메이션(`animateFloatAsState`)으로 비어 있는 슬롯 위치로 부드럽게 밀려나는 변위(displacement) 효과 제공.
+  - 슬롯 경계 이동 시 `HapticFeedbackType.TextHandleMove`, 드래그 시작 및 완료 시 `HapticFeedbackType.LongPress` 햅틱 피드백 연결.
+- 접근성 및 TV/모바일 격리:
+  - TalkBack 등 스크린 리더 환경을 위해 `CustomAccessibilityAction`("위로 이동", "아래로 이동")을 카드 및 드래그 핸들에 제공하여 시맨틱스 접근성 완벽 유지.
+  - 재생/일시정지 및 인터넷 라디오 인라인 편집 연필 버튼 탭 상호작용 온전히 보존.
+  - Google TV D-pad 포커스/내비게이션에 간섭하지 않도록 설계.
+  - 하단 안내 문구를 iOS 동등 문구("길게 눌러 홈 순서를 바꾸고, 라디오의 연필을 누르면 같은 자리에서 바로 수정할 수 있습니다.")로 동기화.
+- 순서 영속화 및 정책:
+  - `HomeMusicChannelPolicy.moving`을 추가하여 6개 카드 연속 재정렬을 수행하고 `StandViewModel.moveHomeMusicChannel`을 통해 기존 단일 저장소(`SettingsRepository`) 경로로 즉시 영속화.
+- 검증: `HomeMusicChannelPolicyTest`에 하향/상향 직접 드래그, 경계값, 슬롯 중심점/변위 계산 단위 테스트 추가.

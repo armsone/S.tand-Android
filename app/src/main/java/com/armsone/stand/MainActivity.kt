@@ -708,6 +708,7 @@ class MainActivity : ComponentActivity() {
                     onOpenExternalMusic = ::openExternalMusic,
                     onEndExternalMusic = standViewModel::endExternalMusicMode,
                     onAssignHomeMusicChannel = standViewModel::assignHomeMusicChannel,
+                    onMoveHomeMusicChannel = standViewModel::moveHomeMusicChannel,
                     onSaveInternetRadio = standViewModel::saveInternetRadioChannel,
                     onDeleteInternetRadio = standViewModel::deleteInternetRadioChannel,
                     onManageInternetRadios = {

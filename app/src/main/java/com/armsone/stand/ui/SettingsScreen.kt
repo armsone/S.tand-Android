@@ -6,13 +6,18 @@
 package com.armsone.stand.ui
 
 import androidx.annotation.RawRes
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -85,25 +90,37 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -113,6 +130,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import com.armsone.stand.BuildConfig
 import com.armsone.stand.R
 import com.armsone.stand.model.AppSettings
@@ -120,6 +138,7 @@ import com.armsone.stand.model.ClockFontChoice
 import com.armsone.stand.model.ClockVisualPolicy
 import com.armsone.stand.model.ExternalMusicService
 import com.armsone.stand.model.HomeMusicChannelKind
+import com.armsone.stand.model.HomeMusicChannelPolicy
 import com.armsone.stand.model.HomeMusicChannelSelection
 import com.armsone.stand.model.SettingsInformationArchitecture
 import com.armsone.stand.model.SettingsSectionKind
@@ -158,6 +177,7 @@ fun SettingsScreen(
     onOpenExternalMusic: (ExternalMusicService) -> Unit = {},
     onEndExternalMusic: () -> Unit = {},
     onAssignHomeMusicChannel: (Int, HomeMusicChannelSelection) -> Unit = { _, _ -> },
+    onMoveHomeMusicChannel: (Int, Int) -> Unit = { _, _ -> },
     onSaveInternetRadio: (String?, String, String) -> String?,
     onDeleteInternetRadio: (String) -> Unit,
     onManageInternetRadios: () -> Unit,
@@ -186,7 +206,6 @@ fun SettingsScreen(
     var radioDraftName by remember { mutableStateOf("") }
     var radioDraftURL by remember { mutableStateOf("") }
     var radioValidationMessage by remember { mutableStateOf<String?>(null) }
-    var reorderingMusicSlot by remember { mutableStateOf<Int?>(null) }
     val settings = state.settings
     val settingsBase = Color(red = 0.115f, green = 0.085f, blue = 0.078f)
     val settingsBackground = Brush.linearGradient(
@@ -305,190 +324,366 @@ fun SettingsScreen(
                             ?: "${settings.homeMusicChannels.size}개 채널 · 한곳에서 바로 전환",
                         icon = Icons.Default.MusicNote,
                     ) {
+                        val hapticFeedback = LocalHapticFeedback.current
+                        val density = LocalDensity.current
+                        val spacingPx = with(density) { 14.dp.toPx() }
+                        val channels = settings.homeMusicChannels
+                        var draggedSlot by remember { mutableStateOf<Int?>(null) }
+                        var dragOffsetY by remember { mutableFloatStateOf(0f) }
+                        val itemHeights = remember { mutableStateMapOf<Int, Float>() }
+
+                        val slotHeightsList = remember(channels.size, itemHeights.toMap()) {
+                            (0 until channels.size).map { itemHeights[it] ?: with(density) { 58.dp.toPx() } }
+                        }
+                        val slotCenters = remember(slotHeightsList, spacingPx) {
+                            HomeMusicChannelPolicy.calculateSlotCenters(slotHeightsList, spacingPx)
+                        }
+                        val targetSlot = remember(draggedSlot, dragOffsetY, slotCenters) {
+                            draggedSlot?.let { from ->
+                                HomeMusicChannelPolicy.calculateTargetIndex(from, dragOffsetY, slotCenters)
+                            }
+                        }
+                        val currentTargetSlot by rememberUpdatedState(targetSlot)
+
+                        var previousTargetSlot by remember { mutableStateOf<Int?>(null) }
+                        LaunchedEffect(targetSlot) {
+                            if (targetSlot != null && targetSlot != previousTargetSlot && previousTargetSlot != null) {
+                                hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            }
+                            previousTargetSlot = targetSlot
+                        }
+
+                        val performMove: (Int, Int) -> Unit = { from, to ->
+                            if (from in channels.indices && to in channels.indices && from != to) {
+                                onMoveHomeMusicChannel(from, to)
+                            }
+                        }
+
                         Text(
                             "홈 음악 채널 순서",
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        settings.homeMusicChannels.forEachIndexed { slot, selection ->
-                            val channel = selection.radioID?.let { radioID ->
-                                settings.internetRadioChannels.firstOrNull { it.id == radioID }
-                            }
-                            val service = when (selection.kind) {
-                                HomeMusicChannelKind.SPOTIFY -> ExternalMusicService.SPOTIFY
-                                HomeMusicChannelKind.YOUTUBE_MUSIC -> ExternalMusicService.YOUTUBE_MUSIC
-                                HomeMusicChannelKind.INTERNET_RADIO -> null
-                            }
-                            val radioActive = channel != null && when (val radioState = state.internetRadioState) {
-                                is InternetRadioState.Loading -> radioState.channelID == channel.id
-                                is InternetRadioState.Playing -> radioState.channelID == channel.id
-                                is InternetRadioState.Reconnecting -> radioState.channelID == channel.id
-                                else -> false
-                            }
-                            val serviceActive = service != null && state.externalMusicService == service
-                            val active = radioActive || serviceActive
-                            val status = when {
-                                service != null && serviceActive -> "음악 듣기 모드 · 앱 다시 열기"
-                                service != null -> "로그인하고 음악 앱 열기"
-                                channel == null -> "등록을 기다림"
-                                state.internetRadioState is InternetRadioState.Loading && radioActive -> "연결 중"
-                                state.internetRadioState is InternetRadioState.Playing && radioActive -> "재생 중"
-                                state.internetRadioState is InternetRadioState.Reconnecting && radioActive ->
-                                    "${state.internetRadioState.delaySeconds}초 뒤 재연결"
-                                state.internetRadioState is InternetRadioState.Failed -> state.internetRadioState.message
-                                else -> "대기 중"
-                            }
-                            Surface(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(min = 58.dp),
-                                color = if (active) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
-                                else Color.White.copy(alpha = 0.05f),
-                                shape = RoundedCornerShape(13.dp),
-                                border = BorderStroke(
-                                    1.dp,
-                                    if (active) MaterialTheme.colorScheme.primary.copy(alpha = 0.30f)
-                                    else Color.White.copy(alpha = 0.06f),
-                                ),
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+
+                        channels.forEachIndexed { slot, selection ->
+                            key(selection.stableID) {
+                                val isDragging = (draggedSlot == slot)
+                                val channel = selection.radioID?.let { radioID ->
+                                    settings.internetRadioChannels.firstOrNull { it.id == radioID }
+                                }
+                                val service = when (selection.kind) {
+                                    HomeMusicChannelKind.SPOTIFY -> ExternalMusicService.SPOTIFY
+                                    HomeMusicChannelKind.YOUTUBE_MUSIC -> ExternalMusicService.YOUTUBE_MUSIC
+                                    HomeMusicChannelKind.INTERNET_RADIO -> null
+                                }
+                                val radioActive = channel != null && when (val radioState = state.internetRadioState) {
+                                    is InternetRadioState.Loading -> radioState.channelID == channel.id
+                                    is InternetRadioState.Playing -> radioState.channelID == channel.id
+                                    is InternetRadioState.Reconnecting -> radioState.channelID == channel.id
+                                    else -> false
+                                }
+                                val serviceActive = service != null && state.externalMusicService == service
+                                val active = radioActive || serviceActive
+                                val status = when {
+                                    service != null && serviceActive -> "음악 듣기 모드 · 앱 다시 열기"
+                                    service != null -> "로그인하고 음악 앱 열기"
+                                    channel == null -> "등록을 기다림"
+                                    state.internetRadioState is InternetRadioState.Loading && radioActive -> "연결 중"
+                                    state.internetRadioState is InternetRadioState.Playing && radioActive -> "재생 중"
+                                    state.internetRadioState is InternetRadioState.Reconnecting && radioActive ->
+                                        "${state.internetRadioState.delaySeconds}초 뒤 재연결"
+                                    state.internetRadioState is InternetRadioState.Failed -> state.internetRadioState.message
+                                    else -> "대기 중"
+                                }
+
+                                val displacementY = HomeMusicChannelPolicy.calculateItemDisplacement(
+                                    itemIndex = slot,
+                                    draggedIndex = draggedSlot,
+                                    targetIndex = targetSlot,
+                                    draggedItemHeightPx = draggedSlot?.let { slotHeightsList.getOrElse(it) { with(density) { 58.dp.toPx() } } } ?: 0f,
+                                    spacingPx = spacingPx,
+                                )
+                                val animatedDisplacementY by animateFloatAsState(
+                                    targetValue = displacementY,
+                                    animationSpec = spring(
+                                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                                        stiffness = Spring.StiffnessMediumLow,
+                                    ),
+                                    label = "musicCardDisplacement_$slot",
+                                )
+                                val cardElevation by animateDpAsState(
+                                    targetValue = if (isDragging) 8.dp else 0.dp,
+                                    animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                                    label = "musicCardElevation_$slot",
+                                )
+                                val cardScale by animateFloatAsState(
+                                    targetValue = if (isDragging) 1.025f else 1.0f,
+                                    animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                                    label = "musicCardScale_$slot",
+                                )
+
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .onGloballyPositioned { coordinates ->
+                                            itemHeights[slot] = coordinates.size.height.toFloat()
+                                        }
+                                        .zIndex(if (isDragging) 10f else 1f)
+                                        .graphicsLayer {
+                                            translationY = if (isDragging) dragOffsetY else animatedDisplacementY
+                                            scaleX = cardScale
+                                            scaleY = cardScale
+                                            shadowElevation = cardElevation.toPx()
+                                            shape = RoundedCornerShape(13.dp)
+                                            clip = false
+                                        },
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
                                 ) {
-                                    IconButton(
-                                        onClick = {
+                                    Surface(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .heightIn(min = 58.dp)
+                                            .then(
+                                                if (isTelevision) {
+                                                    Modifier
+                                                } else {
+                                                    Modifier.pointerInput(slot, channels.size) {
+                                                        detectDragGesturesAfterLongPress(
+                                                            onDragStart = {
+                                                                draggedSlot = slot
+                                                                dragOffsetY = 0f
+                                                                hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                            },
+                                                            onDrag = { change, dragAmount ->
+                                                                change.consume()
+                                                                dragOffsetY += dragAmount.y
+                                                            },
+                                                            onDragEnd = {
+                                                                val from = draggedSlot
+                                                                val to = currentTargetSlot
+                                                                if (from != null && to != null && from != to) {
+                                                                    performMove(from, to)
+                                                                    hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                                }
+                                                                draggedSlot = null
+                                                                dragOffsetY = 0f
+                                                            },
+                                                            onDragCancel = {
+                                                                draggedSlot = null
+                                                                dragOffsetY = 0f
+                                                            },
+                                                        )
+                                                    }
+                                                },
+                                            )
+                                            .semantics {
+                                                customActions = buildList {
+                                                    if (slot > 0) {
+                                                        add(
+                                                            CustomAccessibilityAction("위로 이동") {
+                                                                performMove(slot, slot - 1)
+                                                                true
+                                                            },
+                                                        )
+                                                    }
+                                                    if (slot < channels.lastIndex) {
+                                                        add(
+                                                            CustomAccessibilityAction("아래로 이동") {
+                                                                performMove(slot, slot + 1)
+                                                                true
+                                                            },
+                                                        )
+                                                    }
+                                                }
+                                            },
+                                        color = when {
+                                            isDragging -> MaterialTheme.colorScheme.primary.copy(alpha = 0.22f)
+                                            active -> MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                            else -> Color.White.copy(alpha = 0.05f)
+                                        },
+                                        shape = RoundedCornerShape(13.dp),
+                                        border = BorderStroke(
+                                            1.dp,
                                             when {
-                                                service != null -> onOpenExternalMusic(service)
-                                                channel != null -> onToggleInternetRadio(channel.id)
-                                                else -> {
-                                                    editingRadioID = null
-                                                    addingRadio = true
-                                                    radioDraftName = ""
-                                                    radioDraftURL = ""
-                                                    radioValidationMessage = null
+                                                isDragging -> MaterialTheme.colorScheme.primary.copy(alpha = 0.50f)
+                                                active -> MaterialTheme.colorScheme.primary.copy(alpha = 0.30f)
+                                                else -> Color.White.copy(alpha = 0.06f)
+                                            },
+                                        ),
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 8.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                        ) {
+                                            IconButton(
+                                                onClick = {
+                                                    when {
+                                                        service != null -> onOpenExternalMusic(service)
+                                                        channel != null -> onToggleInternetRadio(channel.id)
+                                                        else -> {
+                                                            editingRadioID = null
+                                                            addingRadio = true
+                                                            radioDraftName = ""
+                                                            radioDraftURL = ""
+                                                            radioValidationMessage = null
+                                                        }
+                                                    }
+                                                },
+                                                modifier = Modifier.size(44.dp),
+                                            ) {
+                                                Icon(
+                                                    when {
+                                                        radioActive -> Icons.Default.PauseCircle
+                                                        service == ExternalMusicService.SPOTIFY -> Icons.Default.MusicNote
+                                                        else -> Icons.Default.PlayArrow
+                                                    },
+                                                    contentDescription = when {
+                                                        service != null -> "${service.displayName} 열기"
+                                                        channel != null -> "${channel.displayName} 재생"
+                                                        else -> "인터넷 라디오 등록"
+                                                    },
+                                                    modifier = Modifier.size(20.dp),
+                                                )
+                                            }
+                                            Column(Modifier.weight(1f)) {
+                                                Text(musicSelectionTitle(selection, settings), fontWeight = FontWeight.SemiBold)
+                                                Text(
+                                                    status,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = Color.White.copy(alpha = 0.54f),
+                                                    maxLines = 1,
+                                                )
+                                            }
+                                            if (channel != null) {
+                                                IconButton(
+                                                    onClick = {
+                                                        editingRadioID = channel.id
+                                                        addingRadio = false
+                                                        radioDraftName = channel.displayName
+                                                        radioDraftURL = channel.streamUrl
+                                                        radioValidationMessage = null
+                                                    },
+                                                    modifier = Modifier
+                                                        .size(44.dp)
+                                                        .background(Color.White.copy(alpha = 0.07f), CircleShape),
+                                                ) {
+                                                    Icon(
+                                                        Icons.Default.Edit,
+                                                        contentDescription = "${channel.displayName} 수정",
+                                                        modifier = Modifier.size(13.dp),
+                                                    )
                                                 }
                                             }
-                                        },
-                                        modifier = Modifier.size(44.dp),
-                                    ) {
-                                        Icon(
-                                            when {
-                                                radioActive -> Icons.Default.PauseCircle
-                                                service == ExternalMusicService.SPOTIFY -> Icons.Default.MusicNote
-                                                else -> Icons.Default.PlayArrow
-                                            },
-                                            contentDescription = when {
-                                                service != null -> "${service.displayName} 열기"
-                                                channel != null -> "${channel.displayName} 재생"
-                                                else -> "인터넷 라디오 등록"
-                                            },
-                                            modifier = Modifier.size(20.dp),
-                                        )
-                                    }
-                                    Column(Modifier.weight(1f)) {
-                                        Text(musicSelectionTitle(selection, settings), fontWeight = FontWeight.SemiBold)
-                                        Text(
-                                            status,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = Color.White.copy(alpha = 0.54f),
-                                            maxLines = 1,
-                                        )
-                                    }
-                                    if (channel != null) {
-                                        IconButton(
-                                            onClick = {
-                                                editingRadioID = channel.id
-                                                addingRadio = false
-                                                radioDraftName = channel.displayName
-                                                radioDraftURL = channel.streamUrl
-                                                radioValidationMessage = null
-                                            },
-                                            modifier = Modifier
-                                                .size(44.dp)
-                                                .background(Color.White.copy(alpha = 0.07f), CircleShape),
-                                        ) {
-                                            Icon(
-                                                Icons.Default.Edit,
-                                                contentDescription = "${channel.displayName} 수정",
-                                                modifier = Modifier.size(13.dp),
-                                            )
+                                            if (isTelevision) {
+                                                Row {
+                                                    IconButton(
+                                                        onClick = { performMove(slot, slot - 1) },
+                                                        enabled = slot > 0,
+                                                    ) {
+                                                        Icon(Icons.Default.KeyboardArrowUp, contentDescription = "위로 이동")
+                                                    }
+                                                    IconButton(
+                                                        onClick = { performMove(slot, slot + 1) },
+                                                        enabled = slot < channels.lastIndex,
+                                                    ) {
+                                                        Icon(Icons.Default.KeyboardArrowDown, contentDescription = "아래로 이동")
+                                                    }
+                                                }
+                                            } else {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(44.dp)
+                                                        .pointerInput(slot, channels.size) {
+                                                            detectVerticalDragGestures(
+                                                                onDragStart = {
+                                                                    draggedSlot = slot
+                                                                    dragOffsetY = 0f
+                                                                    hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                                },
+                                                                onVerticalDrag = { change, dragAmount ->
+                                                                    change.consume()
+                                                                    dragOffsetY += dragAmount
+                                                                },
+                                                                onDragEnd = {
+                                                                    val from = draggedSlot
+                                                                    val to = currentTargetSlot
+                                                                    if (from != null && to != null && from != to) {
+                                                                        performMove(from, to)
+                                                                        hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                                    }
+                                                                    draggedSlot = null
+                                                                    dragOffsetY = 0f
+                                                                },
+                                                                onDragCancel = {
+                                                                    draggedSlot = null
+                                                                    dragOffsetY = 0f
+                                                                },
+                                                            )
+                                                        }
+                                                        .semantics {
+                                                            contentDescription = "${musicSelectionTitle(selection, settings)} 순서 변경"
+                                                            role = Role.Button
+                                                            customActions = buildList {
+                                                                if (slot > 0) {
+                                                                    add(
+                                                                        CustomAccessibilityAction("위로 이동") {
+                                                                            performMove(slot, slot - 1)
+                                                                            true
+                                                                        },
+                                                                    )
+                                                                }
+                                                                if (slot < channels.lastIndex) {
+                                                                    add(
+                                                                        CustomAccessibilityAction("아래로 이동") {
+                                                                            performMove(slot, slot + 1)
+                                                                            true
+                                                                        },
+                                                                    )
+                                                                }
+                                                            }
+                                                        },
+                                                    contentAlignment = Alignment.Center,
+                                                ) {
+                                                    Icon(
+                                                        Icons.Default.DragHandle,
+                                                        contentDescription = null,
+                                                        tint = if (isDragging) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.38f),
+                                                        modifier = Modifier.size(20.dp),
+                                                    )
+                                                }
+                                            }
                                         }
                                     }
-                                    IconButton(
-                                        onClick = {
-                                            reorderingMusicSlot = if (reorderingMusicSlot == slot) null else slot
-                                        },
-                                        modifier = Modifier.size(44.dp),
-                                    ) {
-                                        Icon(
-                                            Icons.Default.DragHandle,
-                                            contentDescription = "${musicSelectionTitle(selection, settings)} 순서 변경",
-                                            tint = Color.White.copy(alpha = 0.38f),
-                                            modifier = Modifier.size(20.dp),
+                                    if (channel != null && editingRadioID == channel.id) {
+                                        InlineRadioEditor(
+                                            name = radioDraftName,
+                                            url = radioDraftURL,
+                                            error = radioValidationMessage,
+                                            onNameChange = {
+                                                radioDraftName = it.take(30)
+                                                radioValidationMessage = null
+                                            },
+                                            onUrlChange = {
+                                                radioDraftURL = it.take(2_048)
+                                                radioValidationMessage = null
+                                            },
+                                            onSave = {
+                                                radioValidationMessage = onSaveInternetRadio(
+                                                    channel.id,
+                                                    radioDraftName,
+                                                    radioDraftURL,
+                                                )
+                                                if (radioValidationMessage == null) editingRadioID = null
+                                            },
+                                            onDelete = {
+                                                pendingRadioDeletionID = channel.id
+                                            },
+                                            onOpenBrowser = onOpenInternetRadioBrowser,
+                                            onClose = { editingRadioID = null },
                                         )
                                     }
                                 }
-                            }
-                            if (reorderingMusicSlot == slot) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.End,
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    Text(
-                                        "${slot + 1}/${settings.homeMusicChannels.size} 위치",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                    IconButton(
-                                        onClick = {
-                                            onAssignHomeMusicChannel(slot - 1, selection)
-                                            reorderingMusicSlot = slot - 1
-                                        },
-                                        enabled = slot > 0,
-                                    ) {
-                                        Icon(Icons.Default.KeyboardArrowUp, contentDescription = "위로 이동")
-                                    }
-                                    IconButton(
-                                        onClick = {
-                                            onAssignHomeMusicChannel(slot + 1, selection)
-                                            reorderingMusicSlot = slot + 1
-                                        },
-                                        enabled = slot < settings.homeMusicChannels.lastIndex,
-                                    ) {
-                                        Icon(Icons.Default.KeyboardArrowDown, contentDescription = "아래로 이동")
-                                    }
-                                    TextButton(onClick = { reorderingMusicSlot = null }) { Text("완료") }
-                                }
-                            }
-                            if (channel != null && editingRadioID == channel.id) {
-                                InlineRadioEditor(
-                                    name = radioDraftName,
-                                    url = radioDraftURL,
-                                    error = radioValidationMessage,
-                                    onNameChange = {
-                                        radioDraftName = it.take(30)
-                                        radioValidationMessage = null
-                                    },
-                                    onUrlChange = {
-                                        radioDraftURL = it.take(2_048)
-                                        radioValidationMessage = null
-                                    },
-                                    onSave = {
-                                        radioValidationMessage = onSaveInternetRadio(
-                                            channel.id,
-                                            radioDraftName,
-                                            radioDraftURL,
-                                        )
-                                        if (radioValidationMessage == null) editingRadioID = null
-                                    },
-                                    onDelete = {
-                                        pendingRadioDeletionID = channel.id
-                                    },
-                                    onOpenBrowser = onOpenInternetRadioBrowser,
-                                    onClose = { editingRadioID = null },
-                                )
                             }
                         }
                         if (addingRadio) {
@@ -532,7 +727,7 @@ fun SettingsScreen(
                             ) { Text(if (settings.internetRadioChannels.isEmpty()) "첫 채널 추가" else "채널 추가") }
                         }
                         Text(
-                            "순서 버튼을 누른 뒤 위·아래로 홈 순서를 바꾸고, 라디오의 연필을 누르면 같은 자리에서 바로 수정할 수 있습니다.",
+                            "길게 눌러 홈 순서를 바꾸고, 라디오의 연필을 누르면 같은 자리에서 바로 수정할 수 있습니다.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )

@@ -117,6 +117,15 @@ data class AppSettings(
         )
     }
 
+    fun moveHomeMusicChannel(fromIndex: Int, toIndex: Int): AppSettings = copy(
+        homeMusicChannels = HomeMusicChannelPolicy.moving(
+            current = homeMusicChannels,
+            fromIndex = fromIndex,
+            toIndex = toIndex,
+            radioChannels = internetRadioChannels,
+        ),
+    )
+
     companion object {
         const val DEFAULT_CLOCK_SCALE = 1.0059053f
         const val MAXIMUM_INTERNET_RADIO_CHANNEL_COUNT = 4
