@@ -131,6 +131,7 @@ import com.armsone.stand.ui.components.ClockDateAndSeconds
 import com.armsone.stand.ui.components.ClockSeconds
 import com.armsone.stand.ui.components.FlipClock
 import com.armsone.stand.ui.components.flipTextSplitMask
+import com.armsone.stand.ui.components.standFocusable
 import com.armsone.stand.ui.components.standPanelSurface
 import com.armsone.stand.ui.theme.fontFamily
 import com.armsone.stand.ui.theme.fontWeight
@@ -338,7 +339,10 @@ private fun EditorHeader(
             modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = onCancel) {
+            IconButton(
+                onClick = onCancel,
+                modifier = Modifier.standFocusable(shape = RoundedCornerShape(12.dp)),
+            ) {
                 Icon(Icons.Default.Close, contentDescription = "화면 편집 취소")
             }
             Text(
@@ -347,10 +351,16 @@ private fun EditorHeader(
                 textAlign = TextAlign.Center,
                 fontWeight = FontWeight.SemiBold,
             )
-            IconButton(onClick = onReset) {
+            IconButton(
+                onClick = onReset,
+                modifier = Modifier.standFocusable(shape = RoundedCornerShape(12.dp)),
+            ) {
                 Icon(Icons.Default.RestartAlt, contentDescription = resetDescription)
             }
-            TextButton(onClick = onSave) {
+            TextButton(
+                onClick = onSave,
+                modifier = Modifier.standFocusable(shape = RoundedCornerShape(12.dp)),
+            ) {
                 Icon(Icons.Default.Check, contentDescription = null)
                 Spacer(Modifier.width(4.dp))
                 Text("저장")

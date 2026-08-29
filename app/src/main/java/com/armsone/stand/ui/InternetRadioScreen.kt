@@ -35,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.unit.dp
 import com.armsone.stand.model.InternetRadioConfiguration
+import com.armsone.stand.ui.components.standFocusable
 
 @Composable
 fun InternetRadioScreen(
@@ -61,15 +62,21 @@ fun InternetRadioScreen(
             TopAppBar(
                 title = { Text(if (configuration == null) "채널 추가" else "채널 수정") },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(
+                        onClick = onBack,
+                        modifier = Modifier.standFocusable(shape = RoundedCornerShape(12.dp)),
+                    ) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "뒤로")
                     }
                 },
                 actions = {
-                    TextButton(onClick = {
-                        error = onSave(name, url)
-                        if (error == null) onBack()
-                    }) { Text("저장") }
+                    TextButton(
+                        onClick = {
+                            error = onSave(name, url)
+                            if (error == null) onBack()
+                        },
+                        modifier = Modifier.standFocusable(shape = RoundedCornerShape(12.dp)),
+                    ) { Text("저장") }
                 },
             )
         },
@@ -86,7 +93,9 @@ fun InternetRadioScreen(
             OutlinedTextField(
                 value = name,
                 onValueChange = { name = it.take(30); error = null },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .standFocusable(shape = RoundedCornerShape(16.dp)),
                 label = { Text("이름 (선택)") },
                 placeholder = { Text("비워 두면 인터넷 라디오로 저장됩니다") },
                 singleLine = true,
@@ -96,7 +105,9 @@ fun InternetRadioScreen(
             OutlinedTextField(
                 value = url,
                 onValueChange = { url = it.take(2_048); error = null },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .standFocusable(shape = RoundedCornerShape(16.dp)),
                 label = { Text("주소") },
                 placeholder = { Text("https://… 또는 http://…") },
                 singleLine = true,
@@ -116,7 +127,9 @@ fun InternetRadioScreen(
                         error = null
                     }
                 },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .standFocusable(shape = RoundedCornerShape(16.dp)),
             ) {
                 Text("복사한 주소 붙여넣기")
             }
@@ -126,7 +139,9 @@ fun InternetRadioScreen(
             )
             OutlinedButton(
                 onClick = onOpenBrowser,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .standFocusable(shape = RoundedCornerShape(16.dp)),
             ) {
                 Icon(Icons.Default.Public, contentDescription = null)
                 Text("웹에서 주소 찾기", modifier = Modifier.padding(start = 8.dp))
@@ -141,7 +156,9 @@ fun InternetRadioScreen(
             if (configuration != null) {
                 OutlinedButton(
                     onClick = { confirmsDeletion = true },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .standFocusable(shape = RoundedCornerShape(16.dp)),
                 ) { Text("이 채널 삭제") }
             }
             Spacer(Modifier.padding(bottom = 12.dp))
@@ -159,10 +176,14 @@ fun InternetRadioScreen(
                         onDelete()
                         onBack()
                     },
+                    modifier = Modifier.standFocusable(shape = RoundedCornerShape(12.dp)),
                 ) { Text("채널 삭제") }
             },
             dismissButton = {
-                OutlinedButton(onClick = { confirmsDeletion = false }) { Text("취소") }
+                OutlinedButton(
+                    onClick = { confirmsDeletion = false },
+                    modifier = Modifier.standFocusable(shape = RoundedCornerShape(12.dp)),
+                ) { Text("취소") }
             },
         )
     }

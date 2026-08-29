@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -19,6 +20,7 @@ import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.armsone.stand.model.RadioShareImportPolicy
+import com.armsone.stand.ui.components.standFocusable
 import com.armsone.stand.ui.theme.STandTheme
 
 class RadioShareReceiverActivity : ComponentActivity() {
@@ -40,7 +42,9 @@ class RadioShareReceiverActivity : ComponentActivity() {
                             Spacer(Modifier.weight(1f))
                             OutlinedButton(
                                 onClick = ::finish,
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .standFocusable(shape = RoundedCornerShape(12.dp)),
                             ) { Text("닫기") }
                         } else {
                             Text("웹페이지가 아니라 라디오가 직접 재생되는 합법적인 HTTP 또는 HTTPS 주소여야 합니다.")
@@ -52,11 +56,15 @@ class RadioShareReceiverActivity : ComponentActivity() {
                             ) {
                                 OutlinedButton(
                                     onClick = ::finish,
-                                    modifier = Modifier.weight(1f),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .standFocusable(shape = RoundedCornerShape(12.dp)),
                                 ) { Text("취소") }
                                 Button(
                                     onClick = { openRadioDraft(sharedUrl) },
-                                    modifier = Modifier.weight(1f),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .standFocusable(shape = RoundedCornerShape(12.dp)),
                                 ) { Text("라디오 주소로 가져오기") }
                             }
                         }

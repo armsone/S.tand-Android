@@ -86,6 +86,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.armsone.stand.model.InternetRadioBrowserAddressResult
 import com.armsone.stand.model.InternetRadioBrowserPolicy
+import com.armsone.stand.ui.components.standFocusable
 
 private val BrowserBackground = Color(0xFF1B1412)
 private val BrowserPanel = Color.White.copy(alpha = 0.09f)
@@ -197,6 +198,7 @@ fun InternetRadioBrowserScreen(
             modifier = fieldModifier
                 .widthIn(min = 88.dp)
                 .heightIn(min = 56.dp)
+                .standFocusable(shape = RoundedCornerShape(24.dp))
                 .onFocusChanged { addressFieldIsFocused = it.isFocused },
             placeholder = { Text("웹 주소 입력", maxLines = 1) },
             singleLine = true,
@@ -556,6 +558,7 @@ private fun BrowserToolbarButton(
     Surface(
         modifier = modifier
             .size(48.dp)
+            .standFocusable(shape = CircleShape)
             .combinedClickable(
                 enabled = enabled,
                 role = Role.Button,
@@ -625,6 +628,7 @@ private fun BrowserFavoritesPanel(
                 Surface(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .standFocusable(shape = RoundedCornerShape(8.dp))
                         .combinedClickable(
                             role = Role.Button,
                             onClickLabel = favorite.title,

@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
@@ -12,6 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.armsone.stand.ui.components.standFocusable
 import com.armsone.stand.update.AppUpdateState
 
 @Composable
@@ -59,7 +61,10 @@ fun AppUpdateDialog(
                 )
             },
             confirmButton = {
-                TextButton(onClick = onLater) { Text("확인") }
+                TextButton(
+                    onClick = onLater,
+                    modifier = Modifier.standFocusable(shape = RoundedCornerShape(12.dp)),
+                ) { Text("확인") }
             },
         )
 
@@ -73,10 +78,16 @@ fun AppUpdateDialog(
                 )
             },
             confirmButton = {
-                TextButton(onClick = onDownload) { Text("업데이트") }
+                TextButton(
+                    onClick = onDownload,
+                    modifier = Modifier.standFocusable(shape = RoundedCornerShape(12.dp)),
+                ) { Text("업데이트") }
             },
             dismissButton = {
-                TextButton(onClick = onLater) { Text("나중에") }
+                TextButton(
+                    onClick = onLater,
+                    modifier = Modifier.standFocusable(shape = RoundedCornerShape(12.dp)),
+                ) { Text("나중에") }
             },
         )
 
@@ -95,7 +106,12 @@ fun AppUpdateDialog(
                     Text(state.progressPercent?.let { "$it% 다운로드 중" } ?: "업데이트를 받는 중입니다.")
                 }
             },
-            confirmButton = { TextButton(onClick = onCancel) { Text("취소") } },
+            confirmButton = {
+                TextButton(
+                    onClick = onCancel,
+                    modifier = Modifier.standFocusable(shape = RoundedCornerShape(12.dp)),
+                ) { Text("취소") }
+            },
         )
 
         is AppUpdateState.Ready -> AlertDialog(
@@ -103,10 +119,16 @@ fun AppUpdateDialog(
             title = { Text("업데이트 준비 완료") },
             text = { Text("서명과 SHA-256 확인을 마쳤습니다. Android 설치 화면에서 설치를 눌러 주세요.") },
             confirmButton = {
-                TextButton(onClick = onInstall) { Text("설치 화면 열기") }
+                TextButton(
+                    onClick = onInstall,
+                    modifier = Modifier.standFocusable(shape = RoundedCornerShape(12.dp)),
+                ) { Text("설치 화면 열기") }
             },
             dismissButton = {
-                TextButton(onClick = onLater) { Text("나중에") }
+                TextButton(
+                    onClick = onLater,
+                    modifier = Modifier.standFocusable(shape = RoundedCornerShape(12.dp)),
+                ) { Text("나중에") }
             },
         )
 
@@ -116,14 +138,23 @@ fun AppUpdateDialog(
             text = { Text(state.message) },
             confirmButton = {
                 if (state.canRetry) {
-                    TextButton(onClick = onRetry) { Text("다시 시도") }
+                    TextButton(
+                        onClick = onRetry,
+                        modifier = Modifier.standFocusable(shape = RoundedCornerShape(12.dp)),
+                    ) { Text("다시 시도") }
                 } else {
-                    TextButton(onClick = onLater) { Text("확인") }
+                    TextButton(
+                        onClick = onLater,
+                        modifier = Modifier.standFocusable(shape = RoundedCornerShape(12.dp)),
+                    ) { Text("확인") }
                 }
             },
             dismissButton = {
                 if (state.canRetry) {
-                    TextButton(onClick = onLater) { Text("닫기") }
+                    TextButton(
+                        onClick = onLater,
+                        modifier = Modifier.standFocusable(shape = RoundedCornerShape(12.dp)),
+                    ) { Text("닫기") }
                 }
             },
         )

@@ -439,3 +439,10 @@ iOS 작업 트리의 `BoyisoModels.swift`, `BoyisoConnectivityService.swift`, `B
 - `settingsFocusable(isTelevision)` 분기로 설정 화면의 TV 환경에만 적용하며 홈 화면과 휴대전화·태블릿의 터치·드래그 동작은 유지한다.
 - 배포 후보: versionName `2.3.9`, versionCode `346850`, Build-Number `202608292050`.
 - 검증: `testDebugUnitTest`, `lintDebug`, `assembleDebug` 통과. 연결된 실제 Google TV가 없어 제조사 TV 실기기 리모컨 확인은 미실행 상태다.
+
+## 2026-08-29 Google TV 전체 화면 리모컨 포커스 색상 확대
+
+- 공통 `standFocusable`이 Google TV에서 기본적으로 테마 포인트색 배경, 2.5dp 포커스 링과 1.04배 확대를 표시하도록 중앙화했다.
+- 홈·시작·업데이트 창·라디오 추가/브라우저·공유 수신·글꼴/저작권·잠소리/수면 리포트·화면 편집 등 TV에서 접근 가능한 조작부에 포커스 표시를 보강했다.
+- `TvUiModePolicy.isTelevision`으로 공통 포커스 색상을 TV에만 적용하며 휴대전화·태블릿의 터치와 직접 드래그 동작은 유지한다.
+- 배포 후보: versionName `2.3.10`, versionCode `346859`, Build-Number `202608292059`.

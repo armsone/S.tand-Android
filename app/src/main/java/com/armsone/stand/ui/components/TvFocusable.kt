@@ -18,14 +18,18 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.armsone.stand.model.TvUiModePolicy
 
 internal val LocalStandFocusIndicatorEnabled = staticCompositionLocalOf { true }
 
 /**
- * Modifier that highlights a focusable component with high-contrast border, optional background
- * color tint, and subtle scale when focused by a 5-way TV D-pad or keyboard.
+ * Modifier that highlights a focusable component with high-contrast border, primary-color
+ * background tint, and subtle scale when focused by a 5-way TV D-pad or keyboard on Google TV / Android TV.
+ *
+ * When not running on a television or when focus indicators are disabled, leaves the component unmodified.
  */
 fun Modifier.standFocusable(
     shape: Shape? = null,
@@ -34,10 +38,17 @@ fun Modifier.standFocusable(
     focusedContainerColor: Color? = null,
     scaleOnFocus: Boolean = true,
 ): Modifier = composed {
+    val configuration = LocalConfiguration.current
+    val isTelevision = TvUiModePolicy.isTelevision(configuration)
+    if (!isTelevision) {
+        return@composed this
+    }
+
     var isFocused by remember { mutableStateOf(false) }
     val focusIndicatorEnabled = LocalStandFocusIndicatorEnabled.current
     val borderColor = focusedBorderColor ?: MaterialTheme.colorScheme.primary
     val effectiveShape = shape ?: RoundedCornerShape(14.dp)
+    val containerColor = focusedContainerColor ?: MaterialTheme.colorScheme.primary.copy(alpha = 0.24f)
     val scale by animateFloatAsState(
         targetValue = if (isFocused && focusIndicatorEnabled && scaleOnFocus) 1.04f else 1.0f,
         animationSpec = tween(durationMillis = 150),
@@ -52,8 +63,8 @@ fun Modifier.standFocusable(
         }
         .then(
             if (isFocused && focusIndicatorEnabled) {
-                val containerModifier = if (focusedContainerColor != null && focusedContainerColor != Color.Unspecified) {
-                    Modifier.background(focusedContainerColor, effectiveShape)
+                val containerModifier = if (containerColor != Color.Unspecified && containerColor != Color.Transparent) {
+                    Modifier.background(containerColor, effectiveShape)
                 } else {
                     Modifier
                 }
@@ -65,9 +76,9 @@ fun Modifier.standFocusable(
 }
 
 /**
- * Focus highlighting modifier specifically for Google TV Settings interactive controls/buttons/cards.
+ * Focus highlighting modifier specifically for Google TV Settings and interactive controls/buttons/cards.
  *
- * When [isTelevision] is true, highlights the focused interactive element with a restrained
+ * When [isTelevision] is true, delegates to [standFocusable] to highlight the focused interactive element with a
  * primary-color background tint, high-contrast primary border, and subtle scale on TV remote / D-pad focus.
  * When [isTelevision] is false, leaves the element unmodified to preserve phone/tablet visuals.
  */
@@ -78,18 +89,14 @@ fun Modifier.settingsFocusable(
     focusedBorderWidth: Dp = 2.5.dp,
     focusedContainerColor: Color? = null,
     scaleOnFocus: Boolean = true,
-): Modifier = composed {
-    if (!isTelevision) {
-        this
-    } else {
-        val containerColor = focusedContainerColor ?: MaterialTheme.colorScheme.primary.copy(alpha = 0.24f)
-        val borderColor = focusedBorderColor ?: MaterialTheme.colorScheme.primary
-        standFocusable(
-            shape = shape,
-            focusedBorderColor = borderColor,
-            focusedBorderWidth = focusedBorderWidth,
-            focusedContainerColor = containerColor,
-            scaleOnFocus = scaleOnFocus,
-        )
-    }
+): Modifier = if (!isTelevision) {
+    this
+} else {
+    standFocusable(
+        shape = shape,
+        focusedBorderColor = focusedBorderColor,
+        focusedBorderWidth = focusedBorderWidth,
+        focusedContainerColor = focusedContainerColor,
+        scaleOnFocus = scaleOnFocus,
+    )
 }

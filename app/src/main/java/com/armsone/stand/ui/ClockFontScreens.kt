@@ -59,6 +59,7 @@ import com.armsone.stand.R
 import com.armsone.stand.model.ClockFontChoice
 import com.armsone.stand.model.ClockVisualPolicy
 import com.armsone.stand.ui.components.flipTextSplitMask
+import com.armsone.stand.ui.components.standFocusable
 import com.armsone.stand.ui.components.standPanelSurface
 import com.armsone.stand.ui.theme.fontFamily
 import com.armsone.stand.ui.theme.fontWeight
@@ -77,7 +78,10 @@ fun ClockFontOptionsScreen(
             TopAppBar(
                 title = { Text("시계 글꼴") },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(
+                        onClick = onBack,
+                        modifier = Modifier.standFocusable(shape = RoundedCornerShape(12.dp)),
+                    ) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "뒤로")
                     }
                 },
@@ -114,6 +118,7 @@ private fun ClockFontOptionTile(
     Card(
         modifier = Modifier
             .fillMaxWidth()
+            .standFocusable(shape = RoundedCornerShape(15.dp))
             .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
             .semantics(mergeDescendants = true) {
                 contentDescription = "${font.displayName} 플립시계 미리보기${if (selected) ", 선택됨" else ""}"
@@ -205,7 +210,10 @@ fun FontLicensesScreen(
             TopAppBar(
                 title = { Text("폰트 저작권") },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(
+                        onClick = onBack,
+                        modifier = Modifier.standFocusable(shape = RoundedCornerShape(12.dp)),
+                    ) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "뒤로")
                     }
                 },
@@ -241,6 +249,7 @@ fun FontLicensesScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .standFocusable(shape = RoundedCornerShape(12.dp))
                         .clickable { onOpenLicense(font) }
                         .padding(horizontal = 18.dp, vertical = 15.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -280,7 +289,10 @@ fun FontLicenseDetailScreen(
             TopAppBar(
                 title = { Text(font.displayName) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(
+                        onClick = onBack,
+                        modifier = Modifier.standFocusable(shape = RoundedCornerShape(12.dp)),
+                    ) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "뒤로")
                     }
                 },

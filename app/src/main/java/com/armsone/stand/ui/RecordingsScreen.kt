@@ -103,6 +103,7 @@ import com.armsone.stand.model.RecordingSwipeDeletePolicy
 import com.armsone.stand.recording.RecordingClip
 import com.armsone.stand.recording.RecordingSessionGroup
 import com.armsone.stand.recording.RecordingSessionPolicy
+import com.armsone.stand.ui.components.standFocusable
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
@@ -259,6 +260,7 @@ fun RecordingsScreen(
                                 player.stop()
                                 onBack()
                             },
+                            modifier = Modifier.standFocusable(shape = RoundedCornerShape(12.dp)),
                         ) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "닫기")
                         }
@@ -268,6 +270,7 @@ fun RecordingsScreen(
                             IconButton(
                                 onClick = { listActionsExpanded = true },
                                 enabled = !isBusy,
+                                modifier = Modifier.standFocusable(shape = RoundedCornerShape(12.dp)),
                             ) {
                                 Icon(Icons.Default.MoreVert, contentDescription = "목록 작업")
                             }
@@ -613,6 +616,7 @@ private fun RecordingsPagePicker(
                     modifier = Modifier
                         .weight(1f)
                         .clip(RoundedCornerShape(11.dp))
+                        .standFocusable(shape = RoundedCornerShape(11.dp))
                         .clickable { onSelected(page) },
                     shape = RoundedCornerShape(11.dp),
                     color = if (page == selectedPage) {
@@ -709,7 +713,10 @@ private fun SleepReportCard(
 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("분석 요약", modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold)
-                TextButton(onClick = onShareReport) {
+                TextButton(
+                    onClick = onShareReport,
+                    modifier = Modifier.standFocusable(shape = RoundedCornerShape(12.dp)),
+                ) {
                     Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp))
                     Text(" 리포트 공유")
                 }
@@ -736,7 +743,8 @@ private fun SleepReportCard(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(13.dp))
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.13f)),
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.13f))
+                        .standFocusable(shape = RoundedCornerShape(13.dp)),
                 ) {
                     Icon(
                         if (isPlayingQueue) Icons.Default.GraphicEq else Icons.Default.PlayArrow,
@@ -879,7 +887,11 @@ private fun TodayMergeCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            TextButton(onClick = onMerge, enabled = enabled) {
+            TextButton(
+                onClick = onMerge,
+                enabled = enabled,
+                modifier = Modifier.standFocusable(shape = RoundedCornerShape(12.dp)),
+            ) {
                 if (isBusy) {
                     CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
                 } else {
@@ -910,20 +922,30 @@ private fun SelectionToolsCard(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                TextButton(onClick = onSelectAll, enabled = enabled, modifier = Modifier.weight(1f)) {
+                TextButton(
+                    onClick = onSelectAll,
+                    enabled = enabled,
+                    modifier = Modifier
+                        .weight(1f)
+                        .standFocusable(shape = RoundedCornerShape(12.dp)),
+                ) {
                     Text("모두 고르기")
                 }
                 TextButton(
                     onClick = onSelectToday,
                     enabled = enabled && hasToday,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .standFocusable(shape = RoundedCornerShape(12.dp)),
                 ) {
                     Text("오늘만")
                 }
                 TextButton(
                     onClick = onClear,
                     enabled = enabled && selectedCount > 0,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .standFocusable(shape = RoundedCornerShape(12.dp)),
                 ) {
                     Text("선택 풀기")
                 }
@@ -965,6 +987,7 @@ private fun RecordingSessionCard(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .standFocusable(shape = RoundedCornerShape(22.dp))
                     .clickable(onClick = onToggleExpanded)
                     .semantics(mergeDescendants = true) {
                         contentDescription = sessionAccessibilityLabel(session)
@@ -1206,6 +1229,7 @@ private fun MergedRecordingsCard(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .standFocusable(shape = RoundedCornerShape(22.dp))
                     .clickable(onClick = onToggleExpanded)
                     .padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -1392,7 +1416,9 @@ private fun RecordingRow(
                 selectionMode -> IconButton(
                     onClick = onToggleSelection,
                     enabled = enabled,
-                    modifier = Modifier.size(48.dp),
+                    modifier = Modifier
+                        .size(48.dp)
+                        .standFocusable(shape = RoundedCornerShape(13.dp)),
                 ) {
                     Icon(
                         if (isSelected) Icons.Default.CheckBox else Icons.Default.CheckBoxOutlineBlank,
@@ -1467,7 +1493,8 @@ private fun PlaybackIconButton(
         modifier = Modifier
             .size(44.dp)
             .clip(RoundedCornerShape(14.dp))
-            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)),
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.18f))
+            .standFocusable(shape = RoundedCornerShape(14.dp)),
     ) {
         if (isPreparing) {
             CircularProgressIndicator(
@@ -1499,7 +1526,8 @@ private fun RecordingActionButton(
         modifier = Modifier
             .size(48.dp)
             .clip(RoundedCornerShape(13.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant),
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .standFocusable(shape = RoundedCornerShape(13.dp)),
     ) {
         Icon(imageVector = icon, contentDescription = description, tint = tint, modifier = Modifier.size(20.dp))
     }
@@ -1530,7 +1558,11 @@ private fun RecordingSelectionDock(
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = onClear, enabled = !isBusy) {
+                    IconButton(
+                        onClick = onClear,
+                        enabled = !isBusy,
+                        modifier = Modifier.standFocusable(shape = RoundedCornerShape(12.dp)),
+                    ) {
                         Icon(Icons.Default.Close, contentDescription = "선택 해제")
                     }
                     Text(
@@ -1539,7 +1571,11 @@ private fun RecordingSelectionDock(
                         fontWeight = FontWeight.Bold,
                     )
                     Spacer(modifier = Modifier.weight(1f))
-                    IconButton(onClick = onDelete, enabled = !isBusy) {
+                    IconButton(
+                        onClick = onDelete,
+                        enabled = !isBusy,
+                        modifier = Modifier.standFocusable(shape = RoundedCornerShape(12.dp)),
+                    ) {
                         Icon(
                             Icons.Default.Delete,
                             contentDescription = "선택 삭제",
@@ -1550,7 +1586,9 @@ private fun RecordingSelectionDock(
                 TextButton(
                     onClick = onMerge,
                     enabled = canMerge,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .standFocusable(shape = RoundedCornerShape(12.dp)),
                 ) {
                     Text("한데 묶기")
                 }
@@ -1561,13 +1599,25 @@ private fun RecordingSelectionDock(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                IconButton(onClick = onClear, enabled = !isBusy) {
+                IconButton(
+                    onClick = onClear,
+                    enabled = !isBusy,
+                    modifier = Modifier.standFocusable(shape = RoundedCornerShape(12.dp)),
+                ) {
                     Icon(Icons.Default.Close, contentDescription = "선택 해제")
                 }
                 Text("${count}개 선택", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.weight(1f))
-                TextButton(onClick = onMerge, enabled = canMerge) { Text("한데 묶기") }
-                IconButton(onClick = onDelete, enabled = !isBusy) {
+                TextButton(
+                    onClick = onMerge,
+                    enabled = canMerge,
+                    modifier = Modifier.standFocusable(shape = RoundedCornerShape(12.dp)),
+                ) { Text("한데 묶기") }
+                IconButton(
+                    onClick = onDelete,
+                    enabled = !isBusy,
+                    modifier = Modifier.standFocusable(shape = RoundedCornerShape(12.dp)),
+                ) {
                     Icon(Icons.Default.Delete, contentDescription = "선택 삭제", tint = MaterialTheme.colorScheme.error)
                 }
             }
@@ -1666,6 +1716,7 @@ private fun PlaybackBoostButton(
         onClick = onClick,
         modifier = Modifier
             .size(48.dp)
+            .standFocusable(shape = RoundedCornerShape(13.dp))
             .semantics {
                 contentDescription = if (boostEnabled) {
                     "작은 소리 두 배 증폭 끄기"
@@ -1720,7 +1771,8 @@ private fun PlaybackCloseButton(onClose: () -> Unit) {
         modifier = Modifier
             .size(48.dp)
             .clip(RoundedCornerShape(13.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant),
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .standFocusable(shape = RoundedCornerShape(13.dp)),
     ) {
         Icon(Icons.Default.Close, contentDescription = "재생 닫기")
     }
@@ -1782,7 +1834,10 @@ private fun RecordingStatusCard(
                 style = MaterialTheme.typography.bodySmall,
             )
             if (!isBusy && !message.isNullOrBlank()) {
-                IconButton(onClick = onDismiss) {
+                IconButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.standFocusable(shape = RoundedCornerShape(12.dp)),
+                ) {
                     Icon(Icons.Default.Close, contentDescription = "작업 메시지 닫기")
                 }
             }
@@ -1832,8 +1887,14 @@ private fun ConfirmActionDialog(
             Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Text(message, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = onDismiss) { Text("취소") }
-                TextButton(onClick = onConfirm) { Text(confirmLabel, color = MaterialTheme.colorScheme.error) }
+                TextButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.standFocusable(shape = RoundedCornerShape(12.dp)),
+                ) { Text("취소") }
+                TextButton(
+                    onClick = onConfirm,
+                    modifier = Modifier.standFocusable(shape = RoundedCornerShape(12.dp)),
+                ) { Text(confirmLabel, color = MaterialTheme.colorScheme.error) }
             }
         }
     }
@@ -1855,17 +1916,26 @@ private fun MergeSourcesDialog(
             )
             TextButton(
                 onClick = { onMerge(false) },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .standFocusable(shape = RoundedCornerShape(12.dp)),
             ) {
                 Text("원본 보관하며 합치기")
             }
             TextButton(
                 onClick = { onMerge(true) },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .standFocusable(shape = RoundedCornerShape(12.dp)),
             ) {
                 Text("합치고 원본 삭제", color = MaterialTheme.colorScheme.error)
             }
-            TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text("취소") }
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .standFocusable(shape = RoundedCornerShape(12.dp)),
+            ) { Text("취소") }
         }
     }
 }
