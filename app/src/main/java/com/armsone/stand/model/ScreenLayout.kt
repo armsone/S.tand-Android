@@ -555,6 +555,58 @@ object TvClockAlignmentPolicy {
         baseCellHeightDp: Float = BASE_WEATHER_CELL_HEIGHT_DP,
     ): Float = baseCellHeightDp * baseScale * (scaleMultiplier - 1f)
 
+    fun calculateClockCardHeightDp(
+        canvasWidthDp: Float,
+        isPortrait: Boolean = false,
+    ): Float {
+        if (!canvasWidthDp.isFinite() || canvasWidthDp <= 0f) return 0f
+        val widthFraction = if (isPortrait) 0.78f else 0.52f
+        val maximumClockWidth = if (isPortrait) 456f else 560f
+        val clockWidth = (canvasWidthDp * widthFraction)
+            .coerceAtMost(maximumClockWidth)
+            .coerceAtMost(canvasWidthDp)
+        val gap = if (isPortrait) 8f else 12f
+        val colonWidth = if (isPortrait) 18f else 24f
+        val cardAspectRatio = if (isPortrait) 126f / 92f else 164f / 116f
+        val cardWidth = ((clockWidth - gap * 2f - colonWidth) / 2f).coerceAtLeast(1f)
+        return cardWidth / cardAspectRatio
+    }
+
+    fun calculateWeatherBottomDp(
+        weatherTransform: PanelTransform,
+        canvasHeightDp: Float,
+        isPortrait: Boolean = false,
+    ): Float {
+        val baseCellHeight = if (isPortrait) 94f else BASE_WEATHER_CELL_HEIGHT_DP
+        val weatherRenderHeight = baseCellHeight * weatherTransform.scale
+        val weatherCenterY = weatherTransform.y * canvasHeightDp
+        return weatherCenterY + weatherRenderHeight / 2f
+    }
+
+    fun calculateClockTopDp(
+        clockTransform: PanelTransform,
+        canvasWidthDp: Float,
+        canvasHeightDp: Float,
+        isPortrait: Boolean = false,
+    ): Float {
+        val cardHeight = calculateClockCardHeightDp(canvasWidthDp, isPortrait)
+        val clockRenderHeight = cardHeight * clockTransform.scale
+        val clockCenterY = clockTransform.y * canvasHeightDp
+        return clockCenterY - clockRenderHeight / 2f
+    }
+
+    fun calculateVisibleVerticalSpaceDp(
+        weatherTransform: PanelTransform,
+        clockTransform: PanelTransform,
+        canvasWidthDp: Float,
+        canvasHeightDp: Float,
+        isPortrait: Boolean = false,
+    ): Float {
+        val weatherBottom = calculateWeatherBottomDp(weatherTransform, canvasHeightDp, isPortrait)
+        val clockTop = calculateClockTopDp(clockTransform, canvasWidthDp, canvasHeightDp, isPortrait)
+        return clockTop - weatherBottom
+    }
+
     fun calculateShiftedClockTransform(
         clockTransform: PanelTransform,
         canvasHeightDp: Float,
@@ -580,11 +632,24 @@ object TvClockAlignmentPolicy {
             scaleMultiplier = WEATHER_SCALE_MULTIPLIER,
             baseCellHeightDp = baseCellHeight,
         )
-        val tvClock = calculateShiftedClockTransform(
+        val shiftedClock = calculateShiftedClockTransform(
             clockTransform = rawLayout.clock,
             canvasHeightDp = canvasHeightDp,
             addedWeatherHeightDp = addedWeatherHeightDp,
         )
+        val baselineSpace = calculateVisibleVerticalSpaceDp(
+            weatherTransform = tvWeather,
+            clockTransform = shiftedClock,
+            canvasWidthDp = canvasWidthDp,
+            canvasHeightDp = canvasHeightDp,
+            isPortrait = isPortrait,
+        )
+        val reductionDp = if (canvasHeightDp.isFinite() && canvasHeightDp > 0f) baselineSpace / 2f else 0f
+        val tvClock = if (canvasHeightDp.isFinite() && canvasHeightDp > 0f) {
+            shiftedClock.copy(y = shiftedClock.y - (reductionDp / canvasHeightDp)).normalized()
+        } else {
+            shiftedClock
+        }
         val alignedSeconds = calculateAlignedSecondsTransform(
             clockTransform = tvClock,
             canvasWidthDp = canvasWidthDp,

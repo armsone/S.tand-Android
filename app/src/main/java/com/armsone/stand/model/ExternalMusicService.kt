@@ -92,7 +92,16 @@ object HomeMusicChannelPolicy {
         radioChannels: List<InternetRadioConfiguration>,
     ): List<HomeMusicChannelSelection> {
         val slotCount = AppSettings.MAXIMUM_INTERNET_RADIO_CHANNEL_COUNT
-        val remainingRadios = radioChannels.toMutableList()
+        val validRadioIDsInRequested = mutableSetOf<String>()
+        for (candidate in requested) {
+            if (candidate.kind == HomeMusicChannelKind.INTERNET_RADIO && candidate.radioID != null) {
+                if (candidate.radioID !in validRadioIDsInRequested && radioChannels.any { it.id == candidate.radioID }) {
+                    validRadioIDsInRequested.add(candidate.radioID)
+                }
+            }
+        }
+        val unplacedRadios = radioChannels.filter { it.id !in validRadioIDsInRequested }.toMutableList()
+        val remainingRequestedRadioIDs = validRadioIDsInRequested.toMutableSet()
         val usedSlots = mutableSetOf<Int>()
         var hasSpotify = false
         var hasYouTubeMusic = false
@@ -112,19 +121,20 @@ object HomeMusicChannelPolicy {
                     val slot = normalizedRadioSlot(candidate.radioSlot, usedSlots, slotCount)
                         ?: continue
                     usedSlots += slot
-                    val matchIndex = candidate.radioID
-                        ?.let { id -> remainingRadios.indexOfFirst { it.id == id } } ?: -1
+                    val requestedId = candidate.radioID
                     when {
-                        matchIndex >= 0 -> result += HomeMusicChannelSelection.radio(
-                            remainingRadios.removeAt(matchIndex).id,
-                            slot,
-                        )
-                        candidate.radioID == null && remainingRadios.isNotEmpty() ->
+                        requestedId != null && remainingRequestedRadioIDs.remove(requestedId) -> {
+                            result += HomeMusicChannelSelection.radio(requestedId, slot)
+                        }
+                        unplacedRadios.isNotEmpty() && (candidate.radioID == null || candidate.radioSlot == null) -> {
                             result += HomeMusicChannelSelection.radio(
-                                remainingRadios.removeAt(0).id,
+                                unplacedRadios.removeAt(0).id,
                                 slot,
                             )
-                        else -> result += HomeMusicChannelSelection.emptyRadio(slot)
+                        }
+                        else -> {
+                            result += HomeMusicChannelSelection.emptyRadio(slot)
+                        }
                     }
                 }
             }
@@ -135,8 +145,8 @@ object HomeMusicChannelPolicy {
 
         for (slot in 0 until slotCount) {
             if (slot in usedSlots) continue
-            result += if (remainingRadios.isNotEmpty()) {
-                HomeMusicChannelSelection.radio(remainingRadios.removeAt(0).id, slot)
+            result += if (unplacedRadios.isNotEmpty()) {
+                HomeMusicChannelSelection.radio(unplacedRadios.removeAt(0).id, slot)
             } else {
                 HomeMusicChannelSelection.emptyRadio(slot)
             }
@@ -145,7 +155,7 @@ object HomeMusicChannelPolicy {
         return result
     }
 
-    /** Swaps by (kind, radioID) identity so re-picking an already-placed radio moves it. */
+    /** Swaps by (kind, radioSlot, radioID) identity so re-picking an already-placed radio or slot moves it. */
     fun assigning(
         current: List<HomeMusicChannelSelection>,
         slot: Int,
@@ -155,7 +165,15 @@ object HomeMusicChannelPolicy {
         val normalized = normalized(current, radioChannels).toMutableList()
         if (slot !in normalized.indices || !isValid(selection, radioChannels)) return normalized
         val otherIndex = normalized.indexOfFirst { candidate ->
-            candidate.kind == selection.kind && candidate.radioID == selection.radioID
+            when (selection.kind) {
+                HomeMusicChannelKind.SPOTIFY, HomeMusicChannelKind.YOUTUBE_MUSIC ->
+                    candidate.kind == selection.kind
+                HomeMusicChannelKind.INTERNET_RADIO ->
+                    candidate.kind == HomeMusicChannelKind.INTERNET_RADIO && (
+                        (selection.radioSlot != null && candidate.radioSlot == selection.radioSlot) ||
+                        (selection.radioID != null && candidate.radioID == selection.radioID)
+                    )
+            }
         }
         if (otherIndex >= 0 && otherIndex != slot) {
             val previous = normalized[slot]

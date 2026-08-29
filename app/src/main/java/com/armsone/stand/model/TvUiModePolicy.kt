@@ -13,6 +13,12 @@ object TvUiModePolicy {
     const val MINIMUM_BRIGHTNESS_STEP = 0.1f
     const val BRIGHTNESS_STEP_COUNT = 10
     const val CLOCK_SCALE_STEP_COUNT = 6
+    const val REMOTE_INACTIVITY_DELAY_MS = 5_000L
+
+    fun bottomControlsAlpha(
+        isTelevision: Boolean,
+        isRemoteActive: Boolean,
+    ): Float = if (!isTelevision || isRemoteActive) 1f else 0f
 
     private val clockScaleLevels = floatArrayOf(0.7f, 0.9f, 1.1f, 1.3f, 1.5f, 1.7f)
 

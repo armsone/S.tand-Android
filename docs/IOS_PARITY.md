@@ -394,3 +394,24 @@ iOS 작업 트리의 `BoyisoModels.swift`, `BoyisoConnectivityService.swift`, `B
   - 모든 TV 전용 변경은 `isTelevision` 분기를 통해 안전하게 격리되어, 모바일 및 태블릿의 기존 배터리 표시, 매이트 모드 감지/전환, 화면 편집 및 기본 배치는 그대로 유지.
 - 배포 후보: versionName `2.3.6`, versionCode `346696`, Build-Number `202608291816`.
 - 검증: `TvUiModePolicyTest`, `ScreenLayoutTest` 단위 테스트 통과 및 소스 정합성 검증 완료. 실기기 검증은 대기 상태.
+
+## 2026-08-29 Google TV 날씨-시계 간격 절반 축소 및 설정 버튼 리모컨 유휴 투명화
+
+- 날씨-시계 세로 간격 50% 축소:
+  - Google TV 대시보드에서 `TvClockAlignmentPolicy.calculateTvDashboardLayout`을 통해 날씨 영역 하단과 시계 상단 사이의 시각적 세로 간격(`visibleVerticalSpaceDp`)을 측정하고, 시계 위치를 보정하여 가시 세로 여백을 정확히 기존의 절반(`50%`)으로 축소.
+  - 초(seconds) 패널은 이동된 시계 패널 아래로 `TvClockAlignmentPolicy.calculateAlignedSecondsTransform`을 통해 계속 자동 동기화 정렬.
+- 하단 설정 버튼 리모컨 유휴 투명화 (Idle Auto-Hide):
+  - Google TV 환경에서 리모컨 조작이 유휴 상태일 때 하단 설정 버튼(및 TV 보조 제어)을 완전 투명(`alpha = 0f`) 처리하여 시계·날씨·음악 중심의 미니멀 오브제 디스플레이를 제공.
+  - 리모컨 방향키/선택/기능키 등 모든 버튼 및 내비게이션 입력 시 즉시 가시화(`alpha = 1f`, 부드러운 트윈 애니메이션)되며, 입력 시점부터 5초(`REMOTE_INACTIVITY_DELAY_MS = 5000L`) 후 다시 투명화. 연속 입력 시 대기 타이머 자동 재시작.
+  - 투명 상태에서도 D-pad 포커스 탐색과 접근성 시맨틱스(Accessibility Semantics)를 온전히 유지.
+- 휴대전화 및 태블릿 호환성:
+  - 모든 변경은 `isTelevision` 분기 및 `TvUiModePolicy`로 격리되어 모바일 및 태블릿의 기존 레이아웃·동작에 전혀 영향을 주지 않음.
+- 검증: `TvUiModePolicyTest`에 날씨-시계 가시 간격 50% 축소 및 리모컨 유휴 알파/지연 정책 테스트 추가. 소스 레벨 정합성 검증 완료.
+
+## 2026-08-29 Android 휴대전화 음악 패널 재정렬 정상화
+
+- 원인 분석 및 해결:
+  - `HomeMusicChannelPolicy.normalized`가 `requested` 순서 정규화 시 미배치 라디오를 탐욕적으로 첫 빈 슬롯에 채우면서, 빈 슬롯이나 라디오 슬롯을 앞뒤로 이동했을 때 슬롯 순서가 뒤바뀌거나 복구되던 회귀를 해결.
+  - `validRadioIDsInRequested`를 먼저 산출하여 요청된 모든 유효 라디오 ID를 보호하고, `unplacedRadios`만 새 빈 슬롯에 할당하도록 정제.
+  - `HomeMusicChannelPolicy.assigning`에서 `radioSlot` 식별자를 대조하도록 보강하여 빈 라디오 슬롯 간 이동 및 임의 위치 재정렬이 온전히 동작하고 즉시 반영·영속화되도록 복원.
+- 검증: `HomeMusicChannelPolicyTest`에 외부 서비스, 등록 라디오, 빈 슬롯 간 순서 변경 및 직렬화 라운드트립 단위 테스트 추가.

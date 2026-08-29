@@ -111,4 +111,101 @@ class HomeMusicChannelPolicyTest {
         val decoded = HomeMusicChannelSelection.decode(selection.encoded())
         assertEquals(selection, decoded)
     }
+
+    @Test
+    fun reorderingRadioBeforeExternalMusicServicesPreservesExactOrderAcrossNormalization() {
+        val standard = listOf(
+            HomeMusicChannelSelection.Spotify,
+            HomeMusicChannelSelection.YouTubeMusic,
+            HomeMusicChannelSelection.radio("jazz", slot = 0),
+            HomeMusicChannelSelection.radio("classic", slot = 1),
+            HomeMusicChannelSelection.emptyRadio(2),
+            HomeMusicChannelSelection.emptyRadio(3),
+        )
+        val moved = HomeMusicChannelPolicy.assigning(
+            current = standard,
+            slot = 0,
+            selection = standard[2],
+            radioChannels = radios,
+        )
+        assertEquals(
+            listOf("radio:0:jazz", "youtube_music", "spotify", "radio:1:classic", "radio:2:", "radio:3:"),
+            moved.map { it.stableID },
+        )
+        val normalizedAgain = HomeMusicChannelPolicy.normalized(moved, radios)
+        assertEquals(
+            listOf("radio:0:jazz", "youtube_music", "spotify", "radio:1:classic", "radio:2:", "radio:3:"),
+            normalizedAgain.map { it.stableID },
+        )
+    }
+
+    @Test
+    fun reorderingEmptyRadioSlotBeforeConfiguredRadioPreservesBothPositionsWithoutStealing() {
+        val standard = listOf(
+            HomeMusicChannelSelection.Spotify,
+            HomeMusicChannelSelection.YouTubeMusic,
+            HomeMusicChannelSelection.radio("jazz", slot = 0),
+            HomeMusicChannelSelection.radio("classic", slot = 1),
+            HomeMusicChannelSelection.emptyRadio(2),
+            HomeMusicChannelSelection.emptyRadio(3),
+        )
+        val moved = HomeMusicChannelPolicy.assigning(
+            current = standard,
+            slot = 2,
+            selection = standard[4],
+            radioChannels = radios,
+        )
+        assertEquals(
+            listOf("spotify", "youtube_music", "radio:2:", "radio:1:classic", "radio:0:jazz", "radio:3:"),
+            moved.map { it.stableID },
+        )
+        val normalized = HomeMusicChannelPolicy.normalized(moved, radios)
+        assertEquals(
+            listOf("spotify", "youtube_music", "radio:2:", "radio:1:classic", "radio:0:jazz", "radio:3:"),
+            normalized.map { it.stableID },
+        )
+    }
+
+    @Test
+    fun reorderingEmptyRadioSlotsAmongThemselvesPreservesUniqueSlotIdentities() {
+        val standard = listOf(
+            HomeMusicChannelSelection.Spotify,
+            HomeMusicChannelSelection.YouTubeMusic,
+            HomeMusicChannelSelection.radio("jazz", slot = 0),
+            HomeMusicChannelSelection.emptyRadio(1),
+            HomeMusicChannelSelection.emptyRadio(2),
+            HomeMusicChannelSelection.emptyRadio(3),
+        )
+        val moved = HomeMusicChannelPolicy.assigning(
+            current = standard,
+            slot = 4,
+            selection = standard[5],
+            radioChannels = radios.take(1),
+        )
+        assertEquals(
+            listOf("spotify", "youtube_music", "radio:0:jazz", "radio:1:", "radio:3:", "radio:2:"),
+            moved.map { it.stableID },
+        )
+        val normalized = HomeMusicChannelPolicy.normalized(moved, radios.take(1))
+        assertEquals(
+            listOf("spotify", "youtube_music", "radio:0:jazz", "radio:1:", "radio:3:", "radio:2:"),
+            normalized.map { it.stableID },
+        )
+    }
+
+    @Test
+    fun reorderedChannelsSurvivePersistenceRoundTrip() {
+        val custom = listOf(
+            HomeMusicChannelSelection.radio("classic", slot = 1),
+            HomeMusicChannelSelection.emptyRadio(3),
+            HomeMusicChannelSelection.Spotify,
+            HomeMusicChannelSelection.YouTubeMusic,
+            HomeMusicChannelSelection.radio("jazz", slot = 0),
+            HomeMusicChannelSelection.emptyRadio(2),
+        )
+        val encodedStrings = custom.map { it.encoded() }
+        val decoded = encodedStrings.mapNotNull { HomeMusicChannelSelection.decode(it) }
+        val normalized = HomeMusicChannelPolicy.normalized(decoded, radios)
+        assertEquals(custom.map { it.stableID }, normalized.map { it.stableID })
+    }
 }

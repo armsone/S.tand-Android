@@ -191,7 +191,7 @@ class TvUiModePolicyTest {
     }
 
     @Test
-    fun testTvWeatherEnlargementAndClockShift() {
+    fun testTvWeatherEnlargementAndClockShiftHalvesVerticalSpace() {
         val baseLayout = StandScreenLayout.Television
         val baseScale = baseLayout.weatherIcon.scale
         val addedHeightDp = TvClockAlignmentPolicy.calculateAddedWeatherHeightDp(
@@ -203,6 +203,7 @@ class TvUiModePolicyTest {
         assertEquals(33.916575f, addedHeightDp, 0.001f)
 
         val canvasHeightDp = 540f
+        val canvasWidthDp = 960f
         val oldClock = PanelTransform(x = 0f, y = 0.21553229f, scale = 1.1122912f)
         val shiftedClock = TvClockAlignmentPolicy.calculateShiftedClockTransform(
             clockTransform = oldClock,
@@ -217,12 +218,40 @@ class TvUiModePolicyTest {
 
         val adjustedLayout = TvClockAlignmentPolicy.calculateTvDashboardLayout(
             rawLayout = baseLayout,
-            canvasWidthDp = 960f,
+            canvasWidthDp = canvasWidthDp,
             canvasHeightDp = canvasHeightDp,
         )
         assertEquals(baseScale * 1.5f, adjustedLayout.weatherIcon.scale, 0.0001f)
         assertEquals(adjustedLayout.weatherIcon, adjustedLayout.weatherTemperature)
         assertEquals(adjustedLayout.weatherIcon, adjustedLayout.weatherCondition)
-        assertEquals(baseLayout.clock.y + expectedAddedY, adjustedLayout.clock.y, 0.0001f)
+
+        // Verify that the visible vertical space is exactly halved
+        val baselineSpace = TvClockAlignmentPolicy.calculateVisibleVerticalSpaceDp(
+            weatherTransform = adjustedLayout.weatherIcon,
+            clockTransform = shiftedClock,
+            canvasWidthDp = canvasWidthDp,
+            canvasHeightDp = canvasHeightDp,
+        )
+        val halvedSpace = TvClockAlignmentPolicy.calculateVisibleVerticalSpaceDp(
+            weatherTransform = adjustedLayout.weatherIcon,
+            clockTransform = adjustedLayout.clock,
+            canvasWidthDp = canvasWidthDp,
+            canvasHeightDp = canvasHeightDp,
+        )
+        assertEquals(baselineSpace / 2f, halvedSpace, 0.001f)
+        assertEquals(0.23472161f, adjustedLayout.clock.y, 0.0001f)
+    }
+
+    @Test
+    fun testBottomControlsAlphaAndInactivityDelay() {
+        assertEquals(5_000L, TvUiModePolicy.REMOTE_INACTIVITY_DELAY_MS)
+
+        // Non-TV platforms always keep controls fully visible
+        assertEquals(1.0f, TvUiModePolicy.bottomControlsAlpha(isTelevision = false, isRemoteActive = false), 0.001f)
+        assertEquals(1.0f, TvUiModePolicy.bottomControlsAlpha(isTelevision = false, isRemoteActive = true), 0.001f)
+
+        // On TV, idle remote makes controls fully transparent, active remote makes them visible
+        assertEquals(0.0f, TvUiModePolicy.bottomControlsAlpha(isTelevision = true, isRemoteActive = false), 0.001f)
+        assertEquals(1.0f, TvUiModePolicy.bottomControlsAlpha(isTelevision = true, isRemoteActive = true), 0.001f)
     }
 }

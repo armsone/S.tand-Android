@@ -7,6 +7,8 @@
 package com.armsone.stand.ui
 
 import android.view.HapticFeedbackConstants
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
@@ -206,7 +208,7 @@ fun StandHomeScreen(
 
     LaunchedEffect(isTelevision, showTvFocusIndicator, focusInteractionCount) {
         if (isTelevision && showTvFocusIndicator) {
-            delay(5_000L)
+            delay(TvUiModePolicy.REMOTE_INACTIVITY_DELAY_MS)
             showTvFocusIndicator = false
         }
     }
@@ -231,6 +233,15 @@ fun StandHomeScreen(
                     focusInteractionCount++
                 }
                 false
+            }
+            .pointerInput(isTelevision) {
+                if (isTelevision) {
+                    awaitEachGesture {
+                        awaitFirstDown(pass = PointerEventPass.Initial)
+                        showTvFocusIndicator = true
+                        focusInteractionCount++
+                    }
+                }
             }
             .focusGroup(),
     ) {
@@ -458,6 +469,7 @@ fun StandHomeScreen(
                         isPortrait = isPortrait,
                         isExpanded = isExpanded,
                         isTelevision = isTelevision,
+                        isRemoteActive = showTvFocusIndicator,
                         onToggleTorch = onToggleTorch,
                         onCycleMode = onCycleMode,
                         onToggleSession = onToggleSession,
@@ -2123,6 +2135,7 @@ private fun HomeControls(
     isPortrait: Boolean,
     isExpanded: Boolean,
     isTelevision: Boolean = false,
+    isRemoteActive: Boolean = true,
     onToggleTorch: () -> Unit,
     onCycleMode: () -> Unit,
     onToggleSession: () -> Unit,
@@ -2152,8 +2165,19 @@ private fun HomeControls(
             initialFocusRequester.requestFocus()
         }
     }
+    val bottomControlsTargetAlpha = TvUiModePolicy.bottomControlsAlpha(
+        isTelevision = isTelevision,
+        isRemoteActive = isRemoteActive,
+    )
+    val bottomControlsAlpha by animateFloatAsState(
+        targetValue = bottomControlsTargetAlpha,
+        animationSpec = tween(durationMillis = 200),
+        label = "tv-bottom-controls-alpha",
+    )
     FlowRow(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .graphicsLayer { alpha = bottomControlsAlpha },
         maxItemsInEachRow = if (isTelevision) 8 else if (isExpanded || !isPortrait) 7 else 4,
         horizontalArrangement = Arrangement.spacedBy(
             if (isTelevision) 5.dp else 7.dp,
@@ -2511,17 +2535,6 @@ private fun weatherSummary(code: Int): String = when (code) {
 }
 
 private fun isMeaningfulTvKey(key: Key): Boolean = when (key) {
-    Key.DirectionUp,
-    Key.DirectionDown,
-    Key.DirectionLeft,
-    Key.DirectionRight,
-    Key.DirectionCenter,
-    Key.Enter,
-    Key.NumPadEnter,
-    Key.Back,
-    Key.Escape,
-    Key.Tab,
-    Key.PageUp,
-    Key.PageDown -> true
-    else -> false
+    Key.Unknown -> false
+    else -> true
 }
