@@ -320,6 +320,76 @@ class BoyisoScreenTest {
     }
 
     @Test
+    fun inactiveRoomDisplaysStartButtonAndTriggersStartAction() {
+        var startCount = 0
+        composeRule.setContent {
+            STandTheme {
+                BoyisoScreen(
+                    state = BoyisoState(
+                        configuration = BoyisoConfiguration(
+                            role = BoyisoRole.VIEWER,
+                            roomId = "room",
+                            roomKey = "12345678901234567890123456789012",
+                            deviceName = "엄마",
+                        ),
+                        running = false,
+                    ),
+                    invitationUri = null,
+                    onUpdateConfiguration = {},
+                    onCreateRoom = {},
+                    onScanInvitation = {},
+                    onShareInvitation = {},
+                    onStart = { startCount += 1 },
+                    onLeaveRoom = {},
+                    onTokTok = {},
+                    onBack = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("감시를 시작하지 않았습니다").assertIsDisplayed()
+        composeRule.onNodeWithText("돌봄 연결 시작").performClick()
+        assertEquals(1, startCount)
+    }
+
+    @Test
+    fun deniedPermissionDisplaysErrorMessageAndSettingsAction() {
+        var settingsCount = 0
+        composeRule.setContent {
+            STandTheme {
+                BoyisoScreen(
+                    state = BoyisoState(
+                        configuration = BoyisoConfiguration(
+                            role = BoyisoRole.SPEAKER,
+                            roomId = "room",
+                            roomKey = "12345678901234567890123456789012",
+                            deviceName = "침실폰",
+                        ),
+                        running = false,
+                        issueMessage = "마이크 권한을 허용해 주세요. 설정에서 켤 수 있습니다.",
+                    ),
+                    invitationUri = null,
+                    onUpdateConfiguration = {},
+                    onCreateRoom = {},
+                    onScanInvitation = {},
+                    onShareInvitation = {},
+                    onStart = {},
+                    onLeaveRoom = {},
+                    onTokTok = {},
+                    onOpenAppSettings = { settingsCount += 1 },
+                    onBack = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("돌봄 연결 필요").assertIsDisplayed()
+        composeRule.onNodeWithText("마이크 권한을 허용해 주세요. 설정에서 켤 수 있습니다.").assertIsDisplayed()
+        composeRule.onNodeWithText("돌봄 연결 시작").assertIsDisplayed()
+        composeRule.onNodeWithText("앱 설정에서 권한 허용").performClick()
+        assertEquals(1, settingsCount)
+    }
+
+    @Test
     fun cryingChildAlertNamesTheSpeakerDevice() {
         composeRule.setContent {
             STandTheme {

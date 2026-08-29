@@ -667,6 +667,22 @@
       ]
     },
     {
+      "id": "release.direct_update_download",
+      "route_state": "settings_update",
+      "element": "automatic and manual update download",
+      "dimension": "direct-distribution preference and secure download lifecycle",
+      "classification": "functional",
+      "source_ref": {"kind": "source", "value": "product-contract.yaml home.brand_update_check"},
+      "target_observation": "S.tand Mac exposes the Sparkle automatic-download preference; Android exposes default-on unmetered automatic download and manual check/download with progress, cancel, retry, SHA-256/package/signature verification and system installer handoff. Apple mobile remains TestFlight-only.",
+      "implementation_ref": "app/src/main/java/com/armsone/stand/update/GitHubAppUpdateService.kt",
+      "fixture": "release_direct_update_v1",
+      "fallback_capable": false,
+      "evidence": [],
+      "status": "implemented_source_only",
+      "attempts": [{"attempt": 1, "date": "2026-08-25", "action": "implemented direct-distribution source and tests", "result": "build, runtime and captures pending by shared-resource pause"}],
+      "reopen_history": []
+    },
+    {
       "id": "home.edit_mode.stationary_long_press_entry",
       "route_state": "home_portrait",
       "element": "edit_mode_gesture",

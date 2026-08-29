@@ -89,8 +89,8 @@ data class BoyisoState(
 
     val statusText: String
         get() = when {
-            !running -> "설정 필요"
             issueMessage != null -> issueMessage
+            !running -> if (configuration.hasRoom) "감시를 시작하지 않았습니다" else "설정 필요"
             configuration.role == BoyisoRole.SPEAKER && microphoneMonitoring -> "말할 준비됨"
             configuration.role == BoyisoRole.SPEAKER -> "마이크 대기"
             configuration.role == BoyisoRole.WALKIE -> "무전기 대기"
@@ -189,11 +189,16 @@ class BoyisoManager(context: Context) : AutoCloseable {
             .build()
     }
 
+    fun setIssueMessage(message: String?) {
+        _state.value = _state.value.copy(issueMessage = message)
+    }
+
     fun start() {
         val configuration = _state.value.configuration
         require(configuration.hasRoom) { "QR로 돌봄 공간을 만들거나 참여해 주세요." }
         require(configuration.deviceName.isNotBlank()) { "이 기기의 이름을 입력해 주세요." }
         saveConfiguration(configuration)
+        _state.value = _state.value.copy(issueMessage = null)
         val intent = Intent(applicationContext, MonitoringService::class.java)
             .setAction(MonitoringService.ACTION_START)
             .putExtra(MonitoringService.EXTRA_ROLE, configuration.role.wireValue)
@@ -230,6 +235,7 @@ class BoyisoManager(context: Context) : AutoCloseable {
             Intent(applicationContext, MonitoringService::class.java)
                 .setAction(MonitoringService.ACTION_STOP),
         )
+        _state.value = _state.value.copy(running = false)
     }
 
     fun leaveRoom() {

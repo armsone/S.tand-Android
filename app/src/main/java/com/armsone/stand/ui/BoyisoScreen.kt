@@ -45,7 +45,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -84,6 +83,7 @@ fun BoyisoScreen(
     onLeaveRoom: () -> Unit,
     onTokTok: () -> Unit,
     onWalkie: () -> Unit = {},
+    onOpenAppSettings: () -> Unit = {},
     onBack: () -> Unit,
 ) {
     var validationMessage by remember { mutableStateOf<String?>(null) }
@@ -96,9 +96,6 @@ fun BoyisoScreen(
     val configuration = LocalConfiguration.current
     val isTelevision = TvUiModePolicy.isTelevision(configuration)
 
-    LaunchedEffect(state.configuration.roomId, state.configuration.roomKey) {
-        if (state.configuration.hasRoom && !state.running) onStart()
-    }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -245,6 +242,18 @@ fun BoyisoScreen(
                     validationMessage?.let { message ->
                         Text(message, color = MaterialTheme.colorScheme.error)
                     }
+                    state.issueMessage?.let { message ->
+                        Text(message, color = MaterialTheme.colorScheme.error)
+                        OutlinedButton(
+                            onClick = onOpenAppSettings,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(56.dp)
+                                .standFocusable(shape = RoundedCornerShape(14.dp)),
+                        ) {
+                            Text("앱 설정에서 권한 허용", style = MaterialTheme.typography.bodyLarge)
+                        }
+                    }
                 }
             } else {
                 if (state.running) {
@@ -288,70 +297,158 @@ fun BoyisoScreen(
                             Text(" 톡톡 보내기", style = MaterialTheme.typography.titleLarge)
                         }
                     }
-                }
 
-                BoyisoCard {
-                    Text("공간에 연결됨", style = MaterialTheme.typography.headlineSmall)
-                    Text(
-                        when {
-                            state.devices.isNotEmpty() -> "다른 사람과 함께 연결되어 있습니다."
-                            state.hadConnectedDevice -> "연결이 끊어져 다시 찾고 있습니다."
-                            state.configuration.canInvite -> "사람을 기다리고 있습니다."
-                            else -> "공간에 들어왔습니다. 다른 사람을 찾고 있습니다."
-                        },
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                    Text(
-                        "내 이름: ${state.configuration.deviceName}",
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    if (nameEditorOpen) {
-                        OutlinedTextField(
-                            value = nameDraft,
-                            onValueChange = { nameDraft = it },
-                            label = { Text("내 이름") },
-                            placeholder = { Text("예: 엄마, 거실 태블릿") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth(),
+                    BoyisoCard {
+                        Text("공간에 연결됨", style = MaterialTheme.typography.headlineSmall)
+                        Text(
+                            when {
+                                state.devices.isNotEmpty() -> "다른 사람과 함께 연결되어 있습니다."
+                                state.hadConnectedDevice -> "연결이 끊어져 다시 찾고 있습니다."
+                                state.configuration.canInvite -> "사람을 기다리고 있습니다."
+                                else -> "공간에 들어왔습니다. 다른 사람을 찾고 있습니다."
+                            },
+                            style = MaterialTheme.typography.titleMedium,
                         )
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            OutlinedButton(
-                                onClick = {
-                                    nameDraft = state.configuration.deviceName
-                                    nameEditorOpen = false
-                                },
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .standFocusable(shape = RoundedCornerShape(14.dp)),
-                            ) { Text("취소") }
-                            Button(
-                                onClick = {
-                                    val newName = nameDraft.trim()
-                                    if (newName.isNotEmpty()) {
-                                        onUpdateConfiguration(state.configuration.copy(deviceName = newName))
+                        Text(
+                            "내 이름: ${state.configuration.deviceName}",
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        if (nameEditorOpen) {
+                            OutlinedTextField(
+                                value = nameDraft,
+                                onValueChange = { nameDraft = it },
+                                label = { Text("내 이름") },
+                                placeholder = { Text("예: 엄마, 거실 태블릿") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                OutlinedButton(
+                                    onClick = {
+                                        nameDraft = state.configuration.deviceName
                                         nameEditorOpen = false
-                                    }
-                                },
+                                    },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .standFocusable(shape = RoundedCornerShape(14.dp)),
+                                ) { Text("취소") }
+                                Button(
+                                    onClick = {
+                                        val newName = nameDraft.trim()
+                                        if (newName.isNotEmpty()) {
+                                            onUpdateConfiguration(state.configuration.copy(deviceName = newName))
+                                            nameEditorOpen = false
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .standFocusable(shape = RoundedCornerShape(14.dp)),
+                                ) { Text("저장") }
+                            }
+                        } else {
+                            OutlinedButton(
+                                onClick = { nameEditorOpen = true },
                                 modifier = Modifier
-                                    .weight(1f)
+                                    .fillMaxWidth()
                                     .standFocusable(shape = RoundedCornerShape(14.dp)),
-                            ) { Text("저장") }
+                            ) { Text("내 이름 수정") }
                         }
-                    } else {
-                        OutlinedButton(
-                            onClick = { nameEditorOpen = true },
+                    }
+
+                    BoyisoPeopleSection(state)
+                } else {
+                    BoyisoCard {
+                        Text(
+                            text = if (state.issueMessage != null) "돌봄 연결 필요" else "감시를 시작하지 않았습니다",
+                            style = MaterialTheme.typography.headlineSmall,
+                        )
+                        state.issueMessage?.let {
+                            Text(
+                                text = it,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        } ?: run {
+                            Text(
+                                text = "돌봄 연결을 시작하면 주변 기기와 소리를 감지합니다.",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Button(
+                            onClick = onStart,
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .height(64.dp)
                                 .standFocusable(shape = RoundedCornerShape(14.dp)),
-                        ) { Text("내 이름 수정") }
+                        ) {
+                            Text("돌봄 연결 시작", style = MaterialTheme.typography.titleMedium)
+                        }
+                        if (state.issueMessage != null) {
+                            OutlinedButton(
+                                onClick = onOpenAppSettings,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(56.dp)
+                                    .standFocusable(shape = RoundedCornerShape(14.dp)),
+                            ) {
+                                Text("앱 설정에서 권한 허용", style = MaterialTheme.typography.bodyLarge)
+                            }
+                        }
+                        Text(
+                            "내 이름: ${state.configuration.deviceName}",
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        if (nameEditorOpen) {
+                            OutlinedTextField(
+                                value = nameDraft,
+                                onValueChange = { nameDraft = it },
+                                label = { Text("내 이름") },
+                                placeholder = { Text("예: 엄마, 거실 태블릿") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                OutlinedButton(
+                                    onClick = {
+                                        nameDraft = state.configuration.deviceName
+                                        nameEditorOpen = false
+                                    },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .standFocusable(shape = RoundedCornerShape(14.dp)),
+                                ) { Text("취소") }
+                                Button(
+                                    onClick = {
+                                        val newName = nameDraft.trim()
+                                        if (newName.isNotEmpty()) {
+                                            onUpdateConfiguration(state.configuration.copy(deviceName = newName))
+                                            nameEditorOpen = false
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .standFocusable(shape = RoundedCornerShape(14.dp)),
+                                ) { Text("저장") }
+                            }
+                        } else {
+                            OutlinedButton(
+                                onClick = { nameEditorOpen = true },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .standFocusable(shape = RoundedCornerShape(14.dp)),
+                            ) { Text("내 이름 수정") }
+                        }
                     }
                 }
-
-                if (state.running) BoyisoPeopleSection(state)
 
                 invitationUri?.let { uri ->
                     BoyisoCard {

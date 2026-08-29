@@ -329,6 +329,17 @@ iOS 작업 트리의 `BoyisoModels.swift`, `BoyisoConnectivityService.swift`, `B
 
 배포 후보는 versionName `0.0.1`, versionCode `58`, 빌드 표기 `0.0.58`이다.
 
+## 2026-08-29 Android 2.3.5 보이소 v2 완성
+
+| 항목 | Android 대응 | 근거/검증 |
+|---|---|---|
+| 역할·참여자 | `볼 사람`·`말할 사람`·`무전기`를 선택하고 같은 source ID의 Wi‑Fi·Bluetooth·인터넷 경로를 한 사람으로 표시 | `BoyisoStateTest`, 프로토콜 계측 테스트 |
+| 무전기 호출 | 연결된 무전기만 호출하며 같은 기기의 연속 입력을 3초 동안 차단 | JVM 단위 테스트, protocol round-trip |
+| 선택적 인터넷 중계 | 빌드에 `BOYISO_RELAY_URL`이 있을 때만 `wss` 중계를 사용하고, QR 키에서 파생한 익명 채널과 종단간 암호문만 전달 | `BoyisoManager`, `server/src/server.js`, Node 구문 검사 |
+| 개인정보 보호 | 원음·녹음·공간 키·사건 본문을 서버로 평문 전송하지 않으며 기존 LAN·BLE 우선 연결을 유지 | 소스 역대조, 서버 운영 문서 |
+
+배포 후보는 versionName `2.3.5`, versionCode `346507`, 빌드 표기 `202608291507`이다.
+
 ## 2026-08-25 Android TV / Google TV 확장
 
 | 항목 | Android 대응 | 근거/검증 |

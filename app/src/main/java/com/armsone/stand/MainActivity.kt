@@ -141,18 +141,22 @@ class MainActivity : ComponentActivity() {
 
     private val boyisoPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
-    ) {
+    ) { results ->
         if (!pendingBoyisoStart) return@registerForActivityResult
         pendingBoyisoStart = false
-        val configuration = boyisoManager.state.value.configuration
-        if (
-            configuration.role == BoyisoRole.SPEAKER &&
-            !hasPermission(Manifest.permission.RECORD_AUDIO)
-        ) {
-            showToast("말할 사람에는 마이크 권한이 필요합니다.")
-        } else {
+        val denied = results.filterValues { granted -> !granted }.keys
+        val deniedRequired = denied - Manifest.permission.POST_NOTIFICATIONS
+        if (deniedRequired.isEmpty()) {
             startBoyiso()
+            return@registerForActivityResult
         }
+        val message = if (Manifest.permission.RECORD_AUDIO in deniedRequired) {
+            "마이크 권한을 허용해 주세요. 설정에서 켤 수 있습니다."
+        } else {
+            "주변 기기 연결 권한을 허용해 주세요. 설정에서 켤 수 있습니다."
+        }
+        boyisoManager.setIssueMessage(message)
+        showToast("권한이 없어 돌봄 연결을 시작할 수 없습니다.")
     }
 
     private var radioTransferServer: RadioTransferServer? = null
@@ -783,6 +787,7 @@ class MainActivity : ComponentActivity() {
                     onLeaveRoom = ::leaveBoyisoRoom,
                     onTokTok = boyisoManager::sendTokTok,
                     onWalkie = boyisoManager::sendWalkiePress,
+                    onOpenAppSettings = ::openAppSettings,
                     onBack = { destination = boyisoReturnDestination },
                 )
 
@@ -1455,9 +1460,12 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun requestBoyisoStart() {
+        if (boyisoManager.state.value.running || pendingBoyisoStart) return
         val configuration = boyisoManager.state.value.configuration
+        val isTelevision = TvUiModePolicy.isTelevision(resources.configuration)
         val missing = buildList {
             if (
+                !isTelevision &&
                 configuration.role == BoyisoRole.SPEAKER &&
                 !hasPermission(Manifest.permission.RECORD_AUDIO)
             ) {
@@ -1492,11 +1500,14 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun startBoyiso() {
+        if (boyisoManager.state.value.running) return
         val speaking = boyisoManager.state.value.configuration.role == BoyisoRole.SPEAKER
         standViewModel.setBoyisoSpeakerActive(speaking)
         runCatching(boyisoManager::start).onFailure { error ->
             standViewModel.setBoyisoSpeakerActive(false)
-            showToast(error.message ?: "보이소 연결을 시작하지 못했습니다.")
+            val message = error.message ?: "보이소 연결을 시작하지 못했습니다."
+            boyisoManager.setIssueMessage(message)
+            showToast(message)
         }
     }
 
