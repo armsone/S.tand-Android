@@ -431,3 +431,11 @@ iOS 작업 트리의 `BoyisoModels.swift`, `BoyisoConnectivityService.swift`, `B
 - 순서 영속화 및 정책:
   - `HomeMusicChannelPolicy.moving`을 추가하여 6개 카드 연속 재정렬을 수행하고 `StandViewModel.moveHomeMusicChannel`을 통해 기존 단일 저장소(`SettingsRepository`) 경로로 즉시 영속화.
 - 검증: `HomeMusicChannelPolicyTest`에 하향/상향 직접 드래그, 경계값, 슬롯 중심점/변위 계산 단위 테스트 추가.
+
+## 2026-08-29 Google TV 설정 화면 리모컨 포커스 색상 강조
+
+- Google TV 설정 화면에서 D-pad로 이동할 때 현재 선택된 버튼·카드·스위치 행에 테마 포인트색 배경과 2.5dp 포커스 링, 1.04배 확대를 함께 표시한다.
+- 음악 재생·수정·순서 이동, 테마, 설정 스위치, 링크, 다이얼로그 등 리모컨이 도달하는 설정 조작부에 같은 시각 규칙을 적용했다.
+- `settingsFocusable(isTelevision)` 분기로 설정 화면의 TV 환경에만 적용하며 홈 화면과 휴대전화·태블릿의 터치·드래그 동작은 유지한다.
+- 배포 후보: versionName `2.3.9`, versionCode `346850`, Build-Number `202608292050`.
+- 검증: `testDebugUnitTest`, `lintDebug`, `assembleDebug` 통과. 연결된 실제 Google TV가 없어 제조사 TV 실기기 리모컨 확인은 미실행 상태다.

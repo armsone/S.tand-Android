@@ -148,6 +148,7 @@ import com.armsone.stand.model.TvUiModePolicy
 import com.armsone.stand.platform.AmbientCameraState
 import com.armsone.stand.platform.InternetRadioState
 import com.armsone.stand.ui.components.flipTextSplitMask
+import com.armsone.stand.ui.components.settingsFocusable
 import com.armsone.stand.ui.components.standFocusable
 import com.armsone.stand.ui.components.standPanelSurface
 import com.armsone.stand.ui.theme.fontFamily
@@ -258,6 +259,10 @@ fun SettingsScreen(
                 actions = {
                 TextButton(
                     onClick = onBack,
+                    modifier = Modifier.settingsFocusable(
+                        isTelevision = isTelevision,
+                        shape = RoundedCornerShape(12.dp),
+                    ),
                 ) {
                     Text("완료", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
                 }
@@ -303,6 +308,7 @@ fun SettingsScreen(
                                 }
                             }
                         },
+                        isTelevision = isTelevision,
                     )
                 }
 
@@ -530,7 +536,12 @@ fun SettingsScreen(
                                                         }
                                                     }
                                                 },
-                                                modifier = Modifier.size(44.dp),
+                                                modifier = Modifier
+                                                    .size(44.dp)
+                                                    .settingsFocusable(
+                                                        isTelevision = isTelevision,
+                                                        shape = CircleShape,
+                                                    ),
                                             ) {
                                                 Icon(
                                                     when {
@@ -566,7 +577,11 @@ fun SettingsScreen(
                                                     },
                                                     modifier = Modifier
                                                         .size(44.dp)
-                                                        .background(Color.White.copy(alpha = 0.07f), CircleShape),
+                                                        .background(Color.White.copy(alpha = 0.07f), CircleShape)
+                                                        .settingsFocusable(
+                                                            isTelevision = isTelevision,
+                                                            shape = CircleShape,
+                                                        ),
                                                 ) {
                                                     Icon(
                                                         Icons.Default.Edit,
@@ -576,16 +591,27 @@ fun SettingsScreen(
                                                 }
                                             }
                                             if (isTelevision) {
-                                                Row {
+                                                Row(
+                                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                ) {
                                                     IconButton(
                                                         onClick = { performMove(slot, slot - 1) },
                                                         enabled = slot > 0,
+                                                        modifier = Modifier.settingsFocusable(
+                                                            isTelevision = isTelevision,
+                                                            shape = CircleShape,
+                                                        ),
                                                     ) {
                                                         Icon(Icons.Default.KeyboardArrowUp, contentDescription = "위로 이동")
                                                     }
                                                     IconButton(
                                                         onClick = { performMove(slot, slot + 1) },
                                                         enabled = slot < channels.lastIndex,
+                                                        modifier = Modifier.settingsFocusable(
+                                                            isTelevision = isTelevision,
+                                                            shape = CircleShape,
+                                                        ),
                                                     ) {
                                                         Icon(Icons.Default.KeyboardArrowDown, contentDescription = "아래로 이동")
                                                     }
@@ -660,6 +686,7 @@ fun SettingsScreen(
                                             name = radioDraftName,
                                             url = radioDraftURL,
                                             error = radioValidationMessage,
+                                            isTelevision = isTelevision,
                                             onNameChange = {
                                                 radioDraftName = it.take(30)
                                                 radioValidationMessage = null
@@ -691,6 +718,7 @@ fun SettingsScreen(
                                 name = radioDraftName,
                                 url = radioDraftURL,
                                 error = radioValidationMessage,
+                                isTelevision = isTelevision,
                                 onNameChange = {
                                     radioDraftName = it.take(30)
                                     radioValidationMessage = null
@@ -723,7 +751,12 @@ fun SettingsScreen(
                                     radioDraftURL = ""
                                     radioValidationMessage = null
                                 },
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .settingsFocusable(
+                                        isTelevision = isTelevision,
+                                        shape = RoundedCornerShape(12.dp),
+                                    ),
                             ) { Text(if (settings.internetRadioChannels.isEmpty()) "첫 채널 추가" else "채널 추가") }
                         }
                         Text(
@@ -735,7 +768,10 @@ fun SettingsScreen(
                             onClick = onManageInternetRadios,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .standFocusable(shape = RoundedCornerShape(12.dp)),
+                                .settingsFocusable(
+                                    isTelevision = isTelevision,
+                                    shape = RoundedCornerShape(12.dp),
+                                ),
                         ) {
                             Icon(Icons.Default.Radio, contentDescription = null)
                             Spacer(Modifier.width(8.dp))
@@ -773,10 +809,16 @@ fun SettingsScreen(
                             onThemeSelected = { theme ->
                                 onUpdate { it.copy(displayTheme = theme) }
                             },
+                            isTelevision = isTelevision,
                         )
                         TextButton(
                             onClick = onOpenClockFonts,
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .settingsFocusable(
+                                    isTelevision = isTelevision,
+                                    shape = RoundedCornerShape(12.dp),
+                                ),
                         ) {
                             Icon(Icons.Default.TextFields, contentDescription = null)
                             Text(" 시계 글꼴", modifier = Modifier.weight(1f), textAlign = TextAlign.Start)
@@ -816,6 +858,10 @@ fun SettingsScreen(
                                             onUpdate { it.copy(backgroundModeEnabled = option.first) }
                                         },
                                         shape = SegmentedButtonDefaults.itemShape(index, 2),
+                                        modifier = Modifier.settingsFocusable(
+                                            isTelevision = isTelevision,
+                                            shape = SegmentedButtonDefaults.itemShape(index, 2),
+                                        ),
                                     ) {
                                         Text(option.second)
                                     }
@@ -840,6 +886,7 @@ fun SettingsScreen(
                                 },
                                 checked = settings.torchEnabled,
                                 enabled = true,
+                                isTelevision = isTelevision,
                             ) { enabled -> onUpdate { it.copy(torchEnabled = enabled) } }
                             HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
                             LabeledSwitch(
@@ -847,6 +894,7 @@ fun SettingsScreen(
                                 detail = cameraAmbientDetail,
                                 checked = settings.cameraAmbientSensingEnabled,
                                 enabled = true,
+                                isTelevision = isTelevision,
                             ) { enabled -> onCameraAmbientSensingChanged(enabled) }
                             HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
                             LabeledSwitch(
@@ -857,6 +905,7 @@ fun SettingsScreen(
                                     else -> "마이크 권한 필요"
                                 },
                                 checked = settings.soundSensingEnabled && state.hasMicrophonePermission,
+                                isTelevision = isTelevision,
                             ) { enabled ->
                                 onUpdate { it.copy(soundSensingEnabled = enabled) }
                                 if (enabled && !state.hasMicrophonePermission) {
@@ -874,6 +923,7 @@ fun SettingsScreen(
                             },
                             checked = settings.weatherLocationEnabled &&
                                 state.hasApproximateLocationPermission,
+                            isTelevision = isTelevision,
                         ) { enabled ->
                             onUpdate { it.copy(weatherLocationEnabled = enabled) }
                             if (enabled && !state.hasApproximateLocationPermission) {
@@ -881,14 +931,27 @@ fun SettingsScreen(
                             }
                         }
                         if (!isTelevision && !state.hasCameraPermission && settings.cameraAmbientSensingEnabled) {
-                            TextButton(onClick = onRequestCameraPermission) {
+                            TextButton(
+                                onClick = onRequestCameraPermission,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .settingsFocusable(
+                                        isTelevision = isTelevision,
+                                        shape = RoundedCornerShape(12.dp),
+                                    ),
+                            ) {
                                 Text("카메라 권한 다시 요청")
                             }
                         }
                         if (missingPermissionCount > 0) {
                             TextButton(
                                 onClick = onOpenAppSettings,
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .settingsFocusable(
+                                        isTelevision = isTelevision,
+                                        shape = RoundedCornerShape(12.dp),
+                                    ),
                             ) {
                                 Text("시스템 앱 권한 설정 열기")
                             }
@@ -911,7 +974,12 @@ fun SettingsScreen(
                         )
                         TextButton(
                             onClick = onOpenBoyiso,
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .settingsFocusable(
+                                    isTelevision = isTelevision,
+                                    shape = RoundedCornerShape(12.dp),
+                                ),
                         ) {
                             Text("보이소 열기")
                         }
@@ -948,15 +1016,22 @@ fun SettingsScreen(
                             title = "다시 밝혀주기",
                             detail = "박수, 핑거스냅, 뒤척임과 기기 움직임에 반응",
                             checked = settings.multiStimulusWakeEnabled,
+                            isTelevision = isTelevision,
                         ) { enabled -> onUpdate { it.copy(multiStimulusWakeEnabled = enabled) } }
                         LabeledSwitch(
                             title = "코골이·잠꼬대 저장",
                             detail = "후보 소리가 날 때 필요한 구간만 기기에 저장",
                             checked = settings.recordingEnabled,
+                            isTelevision = isTelevision,
                         ) { enabled -> onUpdate { it.copy(recordingEnabled = enabled) } }
                         TextButton(
                             onClick = onOpenRecordings,
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .settingsFocusable(
+                                    isTelevision = isTelevision,
+                                    shape = RoundedCornerShape(12.dp),
+                                ),
                         ) {
                             Text(
                                 if (state.recordingCount == 0) {
@@ -1002,31 +1077,82 @@ fun SettingsScreen(
                             style = MaterialTheme.typography.bodySmall,
                         )
                         HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
-                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .then(
+                                    if (isTelevision) {
+                                        Modifier.clickable {
+                                            onAutomaticUpdateDownloadChanged(!automaticUpdateDownloadEnabled)
+                                        }
+                                    } else {
+                                        Modifier
+                                    },
+                                )
+                                .settingsFocusable(
+                                    isTelevision = isTelevision,
+                                    shape = RoundedCornerShape(12.dp),
+                                )
+                                .padding(
+                                    horizontal = if (isTelevision) 8.dp else 0.dp,
+                                    vertical = if (isTelevision) 6.dp else 0.dp,
+                                ),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
                             Column(Modifier.weight(1f)) {
                                 Text("업데이트 자동 다운로드")
-                                Text("데이터 요금이 없는 네트워크에서 받습니다.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(
+                                    "데이터 요금이 없는 네트워크에서 받습니다.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
                             }
-                            Switch(checked = automaticUpdateDownloadEnabled, onCheckedChange = onAutomaticUpdateDownloadChanged)
+                            Switch(
+                                checked = automaticUpdateDownloadEnabled,
+                                onCheckedChange = if (isTelevision) null else onAutomaticUpdateDownloadChanged,
+                            )
                         }
-                        TextButton(onClick = onCheckForUpdates, modifier = Modifier.fillMaxWidth()) { Text("업데이트 확인") }
+                        TextButton(
+                            onClick = onCheckForUpdates,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .settingsFocusable(
+                                    isTelevision = isTelevision,
+                                    shape = RoundedCornerShape(12.dp),
+                                ),
+                        ) { Text("업데이트 확인") }
                         TextButton(
                             onClick = { uriHandler.openUri("https://github.com/armsone") },
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .settingsFocusable(
+                                    isTelevision = isTelevision,
+                                    shape = RoundedCornerShape(12.dp),
+                                ),
                         ) {
                             Icon(Icons.Default.Public, contentDescription = null)
                             Text(" 만든 사람 GitHub · github.com/armsone")
                         }
                         TextButton(
                             onClick = { uriHandler.openUri("https://nasfinder.com") },
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .settingsFocusable(
+                                    isTelevision = isTelevision,
+                                    shape = RoundedCornerShape(12.dp),
+                                ),
                         ) {
                             Icon(Icons.Default.Public, contentDescription = null)
                             Text(" 공식 홈페이지 · nasfinder.com")
                         }
                         TextButton(
                             onClick = onOpenFontLicenses,
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .settingsFocusable(
+                                    isTelevision = isTelevision,
+                                    shape = RoundedCornerShape(12.dp),
+                                ),
                         ) {
                             Icon(Icons.Default.TextFields, contentDescription = null)
                             Text(" 내장 폰트 저작권", modifier = Modifier.weight(1f), textAlign = TextAlign.Start)
@@ -1035,13 +1161,23 @@ fun SettingsScreen(
                         }
                         TextButton(
                             onClick = { uriHandler.openUri("https://open-meteo.com/") },
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .settingsFocusable(
+                                    isTelevision = isTelevision,
+                                    shape = RoundedCornerShape(12.dp),
+                                ),
                         ) {
                             Text("날씨 데이터 · Open-Meteo")
                         }
                         TextButton(
                             onClick = { showResetConfirmation = true },
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .settingsFocusable(
+                                    isTelevision = isTelevision,
+                                    shape = RoundedCornerShape(12.dp),
+                                ),
                         ) {
                             Icon(Icons.Default.RestartAlt, contentDescription = null)
                             Text(" 추천 설정 복원")
@@ -1061,13 +1197,25 @@ fun SettingsScreen(
             title = { Text("추천 설정으로 되돌릴까요?") },
             text = { Text("저장한 라디오 채널을 포함해 앱 설정이 처음 모습으로 돌아갑니다.") },
             confirmButton = {
-                TextButton(onClick = {
-                    showResetConfirmation = false
-                    onRestoreRecommended()
-                }) { Text("추천 설정 복원") }
+                TextButton(
+                    onClick = {
+                        showResetConfirmation = false
+                        onRestoreRecommended()
+                    },
+                    modifier = Modifier.settingsFocusable(
+                        isTelevision = isTelevision,
+                        shape = RoundedCornerShape(12.dp),
+                    ),
+                ) { Text("추천 설정 복원") }
             },
             dismissButton = {
-                TextButton(onClick = { showResetConfirmation = false }) { Text("취소") }
+                TextButton(
+                    onClick = { showResetConfirmation = false },
+                    modifier = Modifier.settingsFocusable(
+                        isTelevision = isTelevision,
+                        shape = RoundedCornerShape(12.dp),
+                    ),
+                ) { Text("취소") }
             },
         )
     }
@@ -1088,10 +1236,20 @@ fun SettingsScreen(
                         editingRadioID = null
                         pendingRadioDeletionID = null
                     },
+                    modifier = Modifier.settingsFocusable(
+                        isTelevision = isTelevision,
+                        shape = RoundedCornerShape(12.dp),
+                    ),
                 ) { Text("채널 삭제") }
             },
             dismissButton = {
-                TextButton(onClick = { pendingRadioDeletionID = null }) { Text("취소") }
+                TextButton(
+                    onClick = { pendingRadioDeletionID = null },
+                    modifier = Modifier.settingsFocusable(
+                        isTelevision = isTelevision,
+                        shape = RoundedCornerShape(12.dp),
+                    ),
+                ) { Text("취소") }
             },
         )
     }
@@ -1099,13 +1257,19 @@ fun SettingsScreen(
 }
 
 @Composable
-private fun InternetRadioSettingsShortcut(onClick: () -> Unit) {
+private fun InternetRadioSettingsShortcut(
+    onClick: () -> Unit,
+    isTelevision: Boolean = false,
+) {
     Surface(
         onClick = onClick,
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 58.dp)
-            .standFocusable(shape = RoundedCornerShape(15.dp)),
+            .settingsFocusable(
+                isTelevision = isTelevision,
+                shape = RoundedCornerShape(15.dp),
+            ),
         color = Color.White.copy(alpha = 0.06f),
         shape = RoundedCornerShape(15.dp),
         border = BorderStroke(1.dp, Color.White.copy(alpha = 0.09f)),
@@ -1247,6 +1411,7 @@ private fun SettingsHero(
 private fun ThemePalettePicker(
     selectedTheme: StandDisplayTheme,
     onThemeSelected: (StandDisplayTheme) -> Unit,
+    isTelevision: Boolean = false,
 ) {
     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
         val spacing = 10.dp
@@ -1264,7 +1429,10 @@ private fun ThemePalettePicker(
                     onClick = { onThemeSelected(theme) },
                     modifier = Modifier
                         .width(tileWidth)
-                        .standFocusable(shape = RoundedCornerShape(14.dp))
+                        .settingsFocusable(
+                            isTelevision = isTelevision,
+                            shape = RoundedCornerShape(14.dp),
+                        )
                         .semantics(mergeDescendants = true) {
                             contentDescription = "${theme.title} 테마"
                             this.selected = selected
@@ -1368,6 +1536,7 @@ private fun InlineRadioEditor(
     name: String,
     url: String,
     error: String?,
+    isTelevision: Boolean = false,
     onNameChange: (String) -> Unit,
     onUrlChange: (String) -> Unit,
     onSave: () -> Unit,
@@ -1393,12 +1562,23 @@ private fun InlineRadioEditor(
                 fontWeight = FontWeight.SemiBold,
             )
             Spacer(Modifier.weight(1f))
-            TextButton(onClick = onClose) { Text("닫기") }
+            TextButton(
+                onClick = onClose,
+                modifier = Modifier.settingsFocusable(
+                    isTelevision = isTelevision,
+                    shape = RoundedCornerShape(12.dp),
+                ),
+            ) { Text("닫기") }
         }
         OutlinedTextField(
             value = name,
             onValueChange = onNameChange,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .settingsFocusable(
+                    isTelevision = isTelevision,
+                    shape = RoundedCornerShape(12.dp),
+                ),
             label = { Text("이름 (선택)") },
             singleLine = true,
         )
@@ -1406,7 +1586,12 @@ private fun InlineRadioEditor(
         OutlinedTextField(
             value = url,
             onValueChange = onUrlChange,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .settingsFocusable(
+                    isTelevision = isTelevision,
+                    shape = RoundedCornerShape(12.dp),
+                ),
             label = { Text("주소") },
             placeholder = { Text("https://… 또는 http://…") },
             singleLine = true,
@@ -1428,11 +1613,21 @@ private fun InlineRadioEditor(
                         onUrlChange(pasted.take(2_048))
                     }
                 },
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .settingsFocusable(
+                        isTelevision = isTelevision,
+                        shape = RoundedCornerShape(12.dp),
+                    ),
             ) { Text("붙여넣기") }
             TextButton(
                 onClick = onOpenBrowser,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .settingsFocusable(
+                        isTelevision = isTelevision,
+                        shape = RoundedCornerShape(12.dp),
+                    ),
             ) { Text("웹에서 찾기") }
         }
         Row(
@@ -1440,12 +1635,24 @@ private fun InlineRadioEditor(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             onDelete?.let { delete ->
-                TextButton(onClick = delete) { Text("삭제") }
+                TextButton(
+                    onClick = delete,
+                    modifier = Modifier.settingsFocusable(
+                        isTelevision = isTelevision,
+                        shape = RoundedCornerShape(12.dp),
+                    ),
+                ) { Text("삭제") }
             }
             Spacer(Modifier.weight(1f))
             Button(
                 onClick = onSave,
-                modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = 48.dp)
+                    .settingsFocusable(
+                        isTelevision = isTelevision,
+                        shape = RoundedCornerShape(12.dp),
+                    ),
             ) { Text("저장") }
         }
     }
@@ -1508,12 +1715,27 @@ private fun LabeledSwitch(
     detail: String,
     checked: Boolean,
     enabled: Boolean = true,
+    isTelevision: Boolean = false,
     onCheckedChange: (Boolean) -> Unit,
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .standFocusable(shape = RoundedCornerShape(12.dp))
+            .then(
+                if (isTelevision && enabled) {
+                    Modifier.clickable { onCheckedChange(!checked) }
+                } else {
+                    Modifier
+                },
+            )
+            .settingsFocusable(
+                isTelevision = isTelevision,
+                shape = RoundedCornerShape(12.dp),
+            )
+            .padding(
+                horizontal = if (isTelevision) 8.dp else 0.dp,
+                vertical = if (isTelevision) 6.dp else 0.dp,
+            )
             .semantics(mergeDescendants = true) {
                 contentDescription = "$title, $detail"
             },
@@ -1532,6 +1754,10 @@ private fun LabeledSwitch(
                 color = if (enabled) MaterialTheme.colorScheme.onSurfaceVariant else Color.White.copy(alpha = 0.28f),
             )
         }
-        Switch(checked = checked, onCheckedChange = onCheckedChange, enabled = enabled)
+        Switch(
+            checked = checked,
+            onCheckedChange = if (isTelevision) null else onCheckedChange,
+            enabled = enabled,
+        )
     }
 }
