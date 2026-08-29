@@ -72,4 +72,43 @@ class InternetRadioConfigurationTest {
         assertNull(RadioShareImportPolicy.validatedUrlOrNull("https://id:pw@radio.example/live"))
         assertNull(RadioShareImportPolicy.validatedUrlOrNull("설명 https://radio.example/live"))
     }
+
+    @Test fun sanitizesMalformedQueryBackslashesImmediatelyBeforeSeparator() {
+        val result1 = InternetRadioConfiguration(
+            "KBS 2FM",
+            "https://radio.bsod.kr/stream?stn=kbs%5C&ch=2fm",
+        ).normalizedOrNull()
+        assertEquals("https://radio.bsod.kr/stream?stn=kbs&ch=2fm", result1?.streamUrl)
+
+        val result2 = InternetRadioConfiguration(
+            "KBS 2FM",
+            "https://radio.bsod.kr/stream?stn=kbs\\&ch=2fm",
+        ).normalizedOrNull()
+        assertEquals("https://radio.bsod.kr/stream?stn=kbs&ch=2fm", result2?.streamUrl)
+
+        val result3 = InternetRadioConfiguration(
+            "KBS 2FM",
+            "https://radio.bsod.kr/stream?stn=kbs%5c&ch=2fm#live",
+        ).normalizedOrNull()
+        assertEquals("https://radio.bsod.kr/stream?stn=kbs&ch=2fm#live", result3?.streamUrl)
+    }
+
+    @Test fun preservesLegitimateQueryBackslashesNotImmediatelyBeforeSeparator() {
+        val preserved = InternetRadioConfiguration(
+            "Radio",
+            "https://radio.example/stream?token=abc%5Cdef&ch=2",
+        ).normalizedOrNull()
+        assertEquals("https://radio.example/stream?token=abc%5Cdef&ch=2", preserved?.streamUrl)
+
+        val trailingBackslash = InternetRadioConfiguration(
+            "Radio",
+            "https://radio.example/stream?token=abc%5C",
+        ).normalizedOrNull()
+        assertEquals("https://radio.example/stream?token=abc%5C", trailingBackslash?.streamUrl)
+
+        assertNull(InternetRadioConfiguration.validationMessage(
+            "KBS 2FM",
+            "https://radio.bsod.kr/stream?stn=kbs%5C&ch=2fm",
+        ))
+    }
 }

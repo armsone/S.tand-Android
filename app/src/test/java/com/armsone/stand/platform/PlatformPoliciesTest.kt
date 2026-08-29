@@ -1,8 +1,10 @@
 package com.armsone.stand.platform
 
+import androidx.media3.common.MimeTypes
 import com.armsone.stand.model.EnvironmentDisplayMode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -244,4 +246,89 @@ class PlatformPoliciesTest {
         assertEquals(0.5f, TorchStrengthPolicy.normalizedLevel(2, 4), 0.0001f)
         assertEquals(1f, TorchStrengthPolicy.normalizedLevel(8, 4), 0.0001f)
     }
+
+    @Test
+    fun streamResolutionMapsHlsMimeTypesToApplicationM3u8() {
+        assertEquals(
+            MimeTypes.APPLICATION_M3U8,
+            RadioStreamResolutionPolicy.inferMimeType(
+                url = "https://radio.bsod.kr/stream?stn=mbc&ch=fm4u",
+                contentTypeHeader = "application/vnd.apple.mpegurl",
+            ),
+        )
+        assertEquals(
+            MimeTypes.APPLICATION_M3U8,
+            RadioStreamResolutionPolicy.inferMimeType(
+                url = "https://radio.bsod.kr/stream?stn=kbs&ch=2fm",
+                contentTypeHeader = "application/x-mpegURL; charset=utf-8",
+            ),
+        )
+        assertEquals(
+            MimeTypes.APPLICATION_M3U8,
+            RadioStreamResolutionPolicy.inferMimeType(
+                url = "https://radio.bsod.kr/stream?stn=kbs&ch=2fm",
+                contentTypeHeader = "audio/x-mpegurl",
+            ),
+        )
+    }
+
+    @Test
+    fun streamResolutionInfersM3u8ExtensionFromUrlWhenContentTypeMissingOrGeneric() {
+        assertEquals(
+            MimeTypes.APPLICATION_M3U8,
+            RadioStreamResolutionPolicy.inferMimeType(
+                url = "https://stream.example/live/playlist.m3u8?token=xyz",
+                contentTypeHeader = null,
+            ),
+        )
+        assertEquals(
+            MimeTypes.APPLICATION_M3U8,
+            RadioStreamResolutionPolicy.inferMimeType(
+                url = "https://stream.example/live/playlist.m3u8",
+                contentTypeHeader = "application/octet-stream",
+            ),
+        )
+    }
+
+    @Test
+    fun streamResolutionMapsAudioMpegAndMp3Extension() {
+        assertEquals(
+            MimeTypes.AUDIO_MPEG,
+            RadioStreamResolutionPolicy.inferMimeType(
+                url = "https://ic.radiomonster.fm/tophits.ultra",
+                contentTypeHeader = "audio/mpeg",
+            ),
+        )
+        assertEquals(
+            MimeTypes.AUDIO_MPEG,
+            RadioStreamResolutionPolicy.inferMimeType(
+                url = "https://rocafmadrid.radioca.st/stream",
+                contentTypeHeader = "audio/mpeg; charset=utf-8",
+            ),
+        )
+        assertEquals(
+            MimeTypes.AUDIO_MPEG,
+            RadioStreamResolutionPolicy.inferMimeType(
+                url = "https://radio.example/stream.mp3",
+                contentTypeHeader = null,
+            ),
+        )
+    }
+
+    @Test
+    fun streamResolutionFallsBackToNullForGenericOrUnknownUrls() {
+        assertNull(
+            RadioStreamResolutionPolicy.inferMimeType(
+                url = "https://radio.example/stream",
+                contentTypeHeader = null,
+            ),
+        )
+        assertNull(
+            RadioStreamResolutionPolicy.inferMimeType(
+                url = "https://radio.example/stream",
+                contentTypeHeader = "application/octet-stream",
+            ),
+        )
+    }
+
 }

@@ -11,10 +11,10 @@ android {
         applicationId = "com.armsone.stand"
         minSdk = 26
         targetSdk = 37
-        versionCode = 345498
-        versionName = "2.3.3"
+        versionCode = 346162
+        versionName = "2.3.4"
 
-        buildConfigField("String", "BUILD_NUMBER", "\"202608282218\"")
+        buildConfigField("String", "BUILD_NUMBER", "\"202608290922\"")
         buildConfigField(
             "String",
             "BOYISO_RELAY_URL",
@@ -51,6 +51,8 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.7")
+    implementation("androidx.media3:media3-exoplayer:1.11.0")
+    implementation("androidx.media3:media3-exoplayer-hls:1.11.0")
     implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
     implementation("com.google.zxing:core:3.5.3")
     implementation("com.squareup.okhttp3:okhttp:5.3.0")

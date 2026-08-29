@@ -3,6 +3,22 @@ package com.armsone.stand.model
 import java.net.URI
 import java.util.UUID
 
+object InternetRadioUrlPolicy {
+    private val QueryBackslashBeforeSeparatorRegex = Regex("""(?i)(\\|%5c)(?=&)""")
+
+    fun sanitizeUrl(rawUrl: String): String {
+        val trimmed = rawUrl.trim()
+        val queryStartIndex = trimmed.indexOf('?').takeIf { it >= 0 } ?: return trimmed
+        val hashIndex = trimmed.indexOf('#', startIndex = queryStartIndex).takeIf { it >= 0 } ?: trimmed.length
+        val beforeQuery = trimmed.substring(0, queryStartIndex + 1)
+        val query = trimmed.substring(queryStartIndex + 1, hashIndex)
+        val afterQuery = trimmed.substring(hashIndex)
+
+        val sanitizedQuery = query.replace(QueryBackslashBeforeSeparatorRegex, "")
+        return "$beforeQuery$sanitizedQuery$afterQuery"
+    }
+}
+
 data class InternetRadioConfiguration(
     val displayName: String,
     val streamUrl: String,
@@ -16,7 +32,7 @@ data class InternetRadioConfiguration(
 
     fun normalizedOrNull(): InternetRadioConfiguration? {
         val name = displayName.trim().ifEmpty { "인터넷 라디오" }
-        val url = streamUrl.trim()
+        val url = InternetRadioUrlPolicy.sanitizeUrl(streamUrl)
         if (name.length > 30 || url.isEmpty() || url.length > 2_048) return null
         val uri = runCatching { URI(url) }.getOrNull() ?: return null
         val scheme = uri.scheme?.lowercase() ?: return null
@@ -29,7 +45,7 @@ data class InternetRadioConfiguration(
     companion object {
         fun validationMessage(displayName: String, streamUrl: String): String? {
             val name = displayName.trim()
-            val url = streamUrl.trim()
+            val url = InternetRadioUrlPolicy.sanitizeUrl(streamUrl)
             if (name.length > 30) return "라디오 이름이 너무 깁니다."
             if (url.isEmpty()) return "라디오 주소를 입력해 주세요."
             if (url.length > 2_048) return "라디오 주소가 너무 깁니다."
