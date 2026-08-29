@@ -51,6 +51,17 @@ class ScreenLayoutTest {
         assertFalse(landscape.radiosGrouped)
         assertEquals(listOf(1, 1, 1), landscape.weatherGroupIds)
         assertEquals(StandControlKind.DefaultOrder, landscape.controlOrder)
+
+        val television = StandScreenLayout.Television
+        assertEquals(PanelTransform(0f, -0.067452006f, 0.55f), television.weatherIcon)
+        assertEquals(television.weatherIcon, television.weatherTemperature)
+        assertEquals(television.weatherIcon, television.weatherCondition)
+        assertEquals(0.21553229f, television.clock.y, 0.0001f)
+        assertEquals(0f, television.clock.x, 0.0001f)
+        assertEquals(1.1122912f, television.clock.scale, 0.0001f)
+        assertFalse(television.radiosGrouped)
+        assertEquals(listOf(1, 1, 1), television.weatherGroupIds)
+        assertEquals(StandControlKind.DefaultOrder, television.controlOrder)
     }
 
     @Test

@@ -30,6 +30,8 @@ class TvUiModePolicyTest {
         assertFalse(TvUiModePolicy.supportsBoyiso(isTelevision = true))
         assertFalse(TvUiModePolicy.supportsSleepSounds(isTelevision = true))
         assertFalse(TvUiModePolicy.supportsModeCycling(isTelevision = true))
+        assertFalse(TvUiModePolicy.supportsBattery(isTelevision = true))
+        assertFalse(TvUiModePolicy.supportsMateMode(isTelevision = true))
 
         assertTrue(TvUiModePolicy.supportsTorch(isTelevision = false))
         assertTrue(TvUiModePolicy.supportsCamera(isTelevision = false))
@@ -39,6 +41,8 @@ class TvUiModePolicyTest {
         assertTrue(TvUiModePolicy.supportsBoyiso(isTelevision = false))
         assertTrue(TvUiModePolicy.supportsSleepSounds(isTelevision = false))
         assertTrue(TvUiModePolicy.supportsModeCycling(isTelevision = false))
+        assertTrue(TvUiModePolicy.supportsBattery(isTelevision = false))
+        assertTrue(TvUiModePolicy.supportsMateMode(isTelevision = false))
     }
 
     @Test
@@ -184,5 +188,41 @@ class TvUiModePolicyTest {
     fun testSafeMarginsMatchTvGuidelines() {
         assertEquals(48f, TvUiModePolicy.SAFE_MARGIN_HORIZONTAL_DP, 0.001f)
         assertEquals(24f, TvUiModePolicy.SAFE_MARGIN_VERTICAL_DP, 0.001f)
+    }
+
+    @Test
+    fun testTvWeatherEnlargementAndClockShift() {
+        val baseLayout = StandScreenLayout.Television
+        val baseScale = baseLayout.weatherIcon.scale
+        val addedHeightDp = TvClockAlignmentPolicy.calculateAddedWeatherHeightDp(
+            baseScale = baseScale,
+            scaleMultiplier = 1.5f,
+            baseCellHeightDp = 123.333f,
+        )
+        // 123.333 * 0.55 * 0.5 = 33.916575
+        assertEquals(33.916575f, addedHeightDp, 0.001f)
+
+        val canvasHeightDp = 540f
+        val oldClock = PanelTransform(x = 0f, y = 0.21553229f, scale = 1.1122912f)
+        val shiftedClock = TvClockAlignmentPolicy.calculateShiftedClockTransform(
+            clockTransform = oldClock,
+            canvasHeightDp = canvasHeightDp,
+            addedWeatherHeightDp = addedHeightDp,
+        )
+        val expectedAddedY = addedHeightDp / canvasHeightDp
+        assertEquals(0.21553229f + expectedAddedY, shiftedClock.y, 0.0001f)
+        assertEquals(0.27834076f, shiftedClock.y, 0.0001f)
+        assertEquals(oldClock.x, shiftedClock.x, 0.0001f)
+        assertEquals(oldClock.scale, shiftedClock.scale, 0.0001f)
+
+        val adjustedLayout = TvClockAlignmentPolicy.calculateTvDashboardLayout(
+            rawLayout = baseLayout,
+            canvasWidthDp = 960f,
+            canvasHeightDp = canvasHeightDp,
+        )
+        assertEquals(baseScale * 1.5f, adjustedLayout.weatherIcon.scale, 0.0001f)
+        assertEquals(adjustedLayout.weatherIcon, adjustedLayout.weatherTemperature)
+        assertEquals(adjustedLayout.weatherIcon, adjustedLayout.weatherCondition)
+        assertEquals(baseLayout.clock.y + expectedAddedY, adjustedLayout.clock.y, 0.0001f)
     }
 }

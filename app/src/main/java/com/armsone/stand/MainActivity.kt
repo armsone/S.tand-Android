@@ -628,12 +628,16 @@ class MainActivity : ComponentActivity() {
         LaunchedEffect(state.settings.orientationPreference) {
             applyOrientationPreference(state.settings.orientationPreference)
         }
-        STandTheme(displayTheme = state.settings.displayTheme) {
+        val isTelevision = TvUiModePolicy.isTelevision(resources.configuration)
+        STandTheme(
+            displayTheme = state.settings.displayTheme,
+            disablePressIndications = isTelevision,
+        ) {
             when (destination) {
                 AppDestination.HOME -> StandHomeScreen(
                     state = state,
                     showPermissionReview = showPermissionReviewOnThisLaunch,
-                    onScreenTap = standViewModel::onScreenTap,
+                    onScreenTap = if (isTelevision) ({}) else standViewModel::onScreenTap,
                     onToggleTheme = standViewModel::toggleTheme,
                     onOpenEditor = ::openScreenEditor,
                     onBrightnessAdjustmentStarted = standViewModel::beginBrightnessAdjustment,
@@ -643,7 +647,7 @@ class MainActivity : ComponentActivity() {
                     onSystemVolumeChanged = ::updateSystemMusicVolume,
                     onClockScaleChanged = standViewModel::updateClockScale,
                     onToggleTorch = standViewModel::toggleTorchEnabled,
-                    onCycleMode = standViewModel::cycleModePreference,
+                    onCycleMode = if (isTelevision) ({}) else standViewModel::cycleModePreference,
                     onToggleSession = {
                         if (state.isSessionActive) {
                             standViewModel.toggleNightSession()

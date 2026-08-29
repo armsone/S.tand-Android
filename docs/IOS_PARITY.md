@@ -374,3 +374,23 @@ iOS 작업 트리의 `BoyisoModels.swift`, `BoyisoConnectivityService.swift`, `B
   - `StandHomeScreen.kt`의 `HomeControl`에서 비설정 콤팩트 TV 카드 폭을 `84.dp`에서 `112.dp`로 확장하여 "테마 전환", "앱 밝기", "시계 크기" 한글 라벨이 잘림 없이 온전히 표시되도록 수정.
   - 설정 버튼(정사각형 `52.dp × 52.dp`), 콤팩트 TV 카드 높이(`52.dp`), 일반 TV 크기(`160.dp × 100.dp`), 휴대전화/태블릿 레이아웃(`98.dp × 66.dp`) 및 D-pad 포커스/리모컨 제어 동작은 기존과 동일하게 유지.
 - 검증: 소스 레벨 구현 확인 완료, 물리적 Google TV / Android TV 실기기 검증은 미실행(대기) 상태.
+
+## 2026-08-29 Google TV UI 정제 (배터리·매이트 모드 제거, 리모컨 포커스 개선, 날씨 확대 & 시계 하단 이동)
+
+- 배터리 UI 및 동작 제거:
+  - Google TV 상단 헤더 배터리 아이콘/퍼센트 표기, 캔버스 배터리 플로팅 패널, 배터리 보호 상태 배너를 TV 경험에서 완전히 은닉.
+  - TV에서는 `BatteryMonitor` 수집·시작과 저전력 보호 중단 로직을 비활성화하고, 휴대전화·태블릿에서만 기존 배터리 보호를 유지 (`TvUiModePolicy.supportsBattery(isTelevision)`).
+- 매이트 모드(Mate Mode) 제거 및 오브제 전용 고정:
+  - Google TV에서는 항상 `오브제 모드` 단일 모드로 작동하도록 고정하고, 시계 터치/클릭을 통한 오브제-매이트 토글 경로 차단.
+  - TV 시작 화면 문구에서 매이트/잠자리 언급을 제거하고 "음악·시간·날씨를 편안하게 비춥니다."로 통일 (`TvUiModePolicy.supportsMateMode(isTelevision)`).
+- 리모컨 포커스 및 선택 상태 검은 배경 제거:
+  - Google TV 전체 테마에서 Foundation 눌림 표시와 Material 3 리플을 비활성화해 리모컨 D-pad 선택 시 생기던 검은 배경 채움을 모든 버튼에서 제거.
+  - `Modifier.standFocusable()`의 고대비 테마 테두리(2.5dp)와 미세 확대(1.04배)를 통해 비-블랙 스타일의 명확한 포커스 어포던스를 제공.
+- 날씨 패널 1.5배 확대 및 시계 패널 하단 이동:
+  - Google TV 대시보드의 현재 저장 레이아웃에 `TvClockAlignmentPolicy`를 적용해 날씨 패널을 기존 대비 가로·세로 1.5배 확대(기본값 `scale = 0.55f * 1.5 = 0.825f`).
+  - 시계 패널 세로 위치(`clock.y`)를 날씨 패널의 증가 높이(`addedWeatherHeightDp = 33.916575dp`, 캔버스 높이 540dp 기준 `+0.06280847f`)만큼 정확히 하단으로 이동 (`0.21553229f` → `0.27834076f`).
+  - 초(seconds) 패널은 이동된 시계 패널 아래로 `TvClockAlignmentPolicy.calculateAlignedSecondsTransform`을 통해 자동 동기화 정렬.
+- 휴대전화 및 태블릿 호환성 보존:
+  - 모든 TV 전용 변경은 `isTelevision` 분기를 통해 안전하게 격리되어, 모바일 및 태블릿의 기존 배터리 표시, 매이트 모드 감지/전환, 화면 편집 및 기본 배치는 그대로 유지.
+- 배포 후보: versionName `2.3.6`, versionCode `346696`, Build-Number `202608291816`.
+- 검증: `TvUiModePolicyTest`, `ScreenLayoutTest` 단위 테스트 통과 및 소스 정합성 검증 완료. 실기기 검증은 대기 상태.

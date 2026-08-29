@@ -4,16 +4,16 @@ S.tand iOS 앱을 Android에 맞게 옮기는 Kotlin·Jetpack Compose 프로젝�
 
 ## 현재 기준
 
-- Android 앱 버전: `2.3.5`
-- 사용자용 빌드 표기: `202608291507`
-- Android `versionCode`: `346507`
+- Android 앱 버전: `2.3.6`
+- 사용자용 빌드 표기: `202608291816`
+- Android `versionCode`: `346696`
 - applicationId: `com.armsone.stand`
 - 최소 SDK: 26
 - 대상/컴파일 SDK: 37
 - UI: 단일 Activity + Jetpack Compose
 - Apple 읽기 전용 기준: 형제 저장소 `../S.tand`, 공통 버전 `2.3.0`
 
-`2.3.5`는 보이소에 볼 사람·말할 사람·무전기 역할과 3초 연속 호출 방지, Wi-Fi·Bluetooth·인터넷 연결 상태를 한 사람별로 모아 보여 주는 화면을 추가합니다. 원음과 녹음은 보내지 않고 종단간 암호화된 호출 사건만 선택적으로 중계합니다.
+`2.3.6`은 Google TV에서 배터리와 매이트 모드를 정리하고, 리모컨 버튼의 검은 눌림 배경을 없앴습니다. 날씨 패널은 1.5배로 키우고 시계 위치를 함께 조정해 멀리서도 더 편하게 볼 수 있습니다.
 
 전체 기능 차이와 검증 상태는 [iOS 동등성 문서](docs/IOS_PARITY.md)를 확인하세요. 권한·저장·외부
 전송 근거는 [Android 개인정보·Data Safety 문서](docs/ANDROID_DATA_SAFETY.md)에 기록합니다.

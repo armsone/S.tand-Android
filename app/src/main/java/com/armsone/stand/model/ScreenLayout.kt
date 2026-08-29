@@ -190,12 +190,10 @@ data class StandScreenLayout(
                     scale = 1.1122912f,
                 )
                 val secondsScale = 0.82054085f
-                val defaultCanvasWidth = 960f
-                val defaultCanvasHeight = 540f
                 val alignedSeconds = TvClockAlignmentPolicy.calculateAlignedSecondsTransform(
                     clockTransform = clockTransform,
-                    canvasWidthDp = defaultCanvasWidth,
-                    canvasHeightDp = defaultCanvasHeight,
+                    canvasWidthDp = 960f,
+                    canvasHeightDp = 540f,
                     isPortrait = false,
                     secondsScale = secondsScale,
                 )
@@ -548,6 +546,60 @@ object HomeEditorResetPolicy {
 
 object TvClockAlignmentPolicy {
     const val VERTICAL_SPACING_DP = 8f
+    const val BASE_WEATHER_CELL_HEIGHT_DP = 123.333f
+    const val WEATHER_SCALE_MULTIPLIER = 1.5f
+
+    fun calculateAddedWeatherHeightDp(
+        baseScale: Float = 0.55f,
+        scaleMultiplier: Float = WEATHER_SCALE_MULTIPLIER,
+        baseCellHeightDp: Float = BASE_WEATHER_CELL_HEIGHT_DP,
+    ): Float = baseCellHeightDp * baseScale * (scaleMultiplier - 1f)
+
+    fun calculateShiftedClockTransform(
+        clockTransform: PanelTransform,
+        canvasHeightDp: Float,
+        addedWeatherHeightDp: Float,
+    ): PanelTransform {
+        if (!canvasHeightDp.isFinite() || canvasHeightDp <= 0f) return clockTransform
+        val addedY = addedWeatherHeightDp / canvasHeightDp
+        return clockTransform.copy(y = clockTransform.y + addedY).normalized()
+    }
+
+    fun calculateTvDashboardLayout(
+        rawLayout: StandScreenLayout,
+        canvasWidthDp: Float,
+        canvasHeightDp: Float,
+        isPortrait: Boolean = false,
+    ): StandScreenLayout {
+        val baseScale = rawLayout.weatherIcon.scale
+        val tvWeatherScale = baseScale * WEATHER_SCALE_MULTIPLIER
+        val tvWeather = rawLayout.weatherIcon.copy(scale = tvWeatherScale)
+        val baseCellHeight = if (isPortrait) 94f else BASE_WEATHER_CELL_HEIGHT_DP
+        val addedWeatherHeightDp = calculateAddedWeatherHeightDp(
+            baseScale = baseScale,
+            scaleMultiplier = WEATHER_SCALE_MULTIPLIER,
+            baseCellHeightDp = baseCellHeight,
+        )
+        val tvClock = calculateShiftedClockTransform(
+            clockTransform = rawLayout.clock,
+            canvasHeightDp = canvasHeightDp,
+            addedWeatherHeightDp = addedWeatherHeightDp,
+        )
+        val alignedSeconds = calculateAlignedSecondsTransform(
+            clockTransform = tvClock,
+            canvasWidthDp = canvasWidthDp,
+            canvasHeightDp = canvasHeightDp,
+            isPortrait = isPortrait,
+            secondsScale = rawLayout.seconds.scale,
+        )
+        return rawLayout.copy(
+            clock = tvClock,
+            seconds = alignedSeconds,
+            weatherIcon = tvWeather,
+            weatherTemperature = tvWeather,
+            weatherCondition = tvWeather,
+        )
+    }
 
     fun calculateAlignedSecondsTransform(
         clockTransform: PanelTransform,

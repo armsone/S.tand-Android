@@ -38,6 +38,10 @@ object TvUiModePolicy {
 
     fun supportsModeCycling(isTelevision: Boolean): Boolean = !isTelevision
 
+    fun supportsBattery(isTelevision: Boolean): Boolean = !isTelevision
+
+    fun supportsMateMode(isTelevision: Boolean): Boolean = !isTelevision
+
     fun allowedControls(
         isTelevision: Boolean,
         requested: List<StandControlKind>,

@@ -34,6 +34,7 @@ import com.armsone.stand.model.StandModePreference
 import com.armsone.stand.model.StartleActivationPolicy
 import com.armsone.stand.model.SleepCareMonitoringPolicy
 import com.armsone.stand.model.StandAutomaticDimmingPolicy
+import com.armsone.stand.model.TvUiModePolicy
 import com.armsone.stand.platform.AmbientLightReading
 import com.armsone.stand.platform.AmbientCameraBrightnessService
 import com.armsone.stand.platform.AmbientCameraModePolicy
@@ -82,6 +83,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlin.math.max
 
 class StandViewModel(application: Application) : AndroidViewModel(application) {
+    private val isTelevision = TvUiModePolicy.isTelevision(application.resources.configuration)
     private val settingsRepository = SettingsRepository(application)
     private val recordingRepository = RecordingRepository(application)
     private val recordingSessionStore = RecordingSessionStore(recordingRepository.directory)
@@ -250,9 +252,11 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
             mutableUiState.update { it.copy(weather = weather, weatherMessage = message) }
         }.launchIn(viewModelScope)
 
-        batteryMonitor.state
-            .onEach(::onBatteryChanged)
-            .launchIn(viewModelScope)
+        if (TvUiModePolicy.supportsBattery(isTelevision)) {
+            batteryMonitor.state
+                .onEach(::onBatteryChanged)
+                .launchIn(viewModelScope)
+        }
 
         torchController.state
             .onEach { torchState ->
@@ -292,8 +296,10 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
             hasLocationPermission = hasLocationPermission,
             hasCameraPermission = hasCameraPermission,
         )
-        batteryMonitor.start()
-        onBatteryChanged(batteryMonitor.state.value)
+        if (TvUiModePolicy.supportsBattery(isTelevision)) {
+            batteryMonitor.start()
+            onBatteryChanged(batteryMonitor.state.value)
+        }
 
         if (!didAutomaticallyStart && mayAutomaticallyStart) {
             didAutomaticallyStart = true
@@ -372,7 +378,7 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
 
     fun startNightSession() {
         val battery = batteryMonitor.state.value
-        if (battery.shouldProtect) {
+        if (TvUiModePolicy.supportsBattery(isTelevision) && battery.shouldProtect) {
             batteryProtectionLatched = true
             mutableUiState.update {
                 it.copy(
@@ -1221,6 +1227,7 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun onBatteryChanged(battery: DeviceBatteryState) {
+        if (!TvUiModePolicy.supportsBattery(isTelevision)) return
         if (battery.shouldProtect) {
             pauseForLowBattery()
         } else if (BatteryProtectionPolicy.shouldClearProtection(

@@ -500,7 +500,7 @@ fun StandHomeScreen(
             )
         }
 
-        if (state.batteryProtectionActive) {
+        if (!isTelevision && state.batteryProtectionActive) {
             StatusBanner(
                 text = "배터리가 20% 이하라 보호를 위해 감지와 불빛을 중지했습니다.",
                 modifier = Modifier
@@ -697,7 +697,11 @@ private fun RegularStartContent(
                     fontWeight = FontWeight.Bold,
                 )
                 Text(
-                    text = "시간·날씨와 잠자리를 돌봅니다.",
+                    text = if (isTelevision) {
+                        "음악·시간·날씨를 편안하게 비춥니다."
+                    } else {
+                        "시간·날씨와 잠자리를 돌봅니다."
+                    },
                     color = Color.White.copy(alpha = 0.62f),
                     style = MaterialTheme.typography.bodyMedium,
                 )
@@ -1286,7 +1290,7 @@ private fun Header(
                 fontWeight = FontWeight.SemiBold,
             )
         }
-        if (state.batteryLevel != null || state.isCharging) {
+        if (!isTelevision && (state.batteryLevel != null || state.isCharging)) {
             Row(
                 modifier = Modifier.align(Alignment.CenterEnd),
                 verticalAlignment = Alignment.CenterVertically,
@@ -1332,14 +1336,12 @@ private fun DashboardCanvas(
         val canvasHeight = maxHeight
         val layout = remember(rawLayout, canvasWidth, canvasHeight, isTelevision, isPortrait) {
             if (isTelevision) {
-                val alignedSeconds = TvClockAlignmentPolicy.calculateAlignedSecondsTransform(
-                    clockTransform = rawLayout.clock,
+                TvClockAlignmentPolicy.calculateTvDashboardLayout(
+                    rawLayout = rawLayout,
                     canvasWidthDp = canvasWidth.value,
                     canvasHeightDp = canvasHeight.value,
                     isPortrait = isPortrait,
-                    secondsScale = rawLayout.seconds.scale,
                 )
-                rawLayout.copy(seconds = alignedSeconds)
             } else {
                 rawLayout
             }
@@ -1362,9 +1364,15 @@ private fun DashboardCanvas(
                 fixedNow = catalogNow,
                 modifier = Modifier
                     .align(Alignment.Center)
-                    .combinedClickable(
-                        onClick = onClockTap,
-                        onDoubleClick = onClockDoubleTap,
+                    .then(
+                        if (isTelevision) {
+                            Modifier
+                        } else {
+                            Modifier.combinedClickable(
+                                onClick = onClockTap,
+                                onDoubleClick = onClockDoubleTap,
+                            )
+                        },
                     )
                     .panelTransform(layout.clock, canvasWidth.value, canvasHeight.value),
             )
@@ -1421,7 +1429,10 @@ private fun DashboardCanvas(
                     .panelTransform(layout.date, canvasWidth.value, canvasHeight.value),
             )
 
-            if (state.isDisplayDark || state.experienceMode == StandExperienceMode.MATE) {
+            if (
+                !isTelevision &&
+                (state.isDisplayDark || state.experienceMode == StandExperienceMode.MATE)
+            ) {
                 Surface(
                     color = Color.Transparent,
                     shape = RoundedCornerShape(18.dp),
