@@ -1,5 +1,4 @@
 package com.armsone.stand.model
-
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
@@ -280,4 +279,104 @@ object RecordingSwipeDeletePolicy {
     }
 
     fun clampedReveal(translationX: Float): Float = translationX.coerceIn(-MAXIMUM_REVEAL, 0f)
+}
+
+/** Pure policy governing background transitions and background monitoring eligibility. */
+object StandBackgroundLifecyclePolicy {
+    fun targetModeOnBackground(
+        preference: StandModePreference,
+        current: EnvironmentDisplayMode,
+        isSessionActive: Boolean,
+        isTelevision: Boolean,
+    ): EnvironmentDisplayMode {
+        if (isTelevision) return EnvironmentDisplayMode.OBJECT
+        if (!isSessionActive) return current
+        return when (preference) {
+            StandModePreference.AUTOMATIC -> EnvironmentDisplayMode.MATE
+            StandModePreference.MATE -> EnvironmentDisplayMode.MATE
+            StandModePreference.OBJECT -> EnvironmentDisplayMode.OBJECT
+        }
+    }
+
+    fun isBackgroundMonitoringEligible(
+        settings: AppSettings,
+        isSessionActive: Boolean,
+        environmentMode: EnvironmentDisplayMode,
+        hasMicrophonePermission: Boolean,
+        soundSensingEnabled: Boolean = settings.soundSensingEnabled,
+        isMonitoringSuspendedForPlayback: Boolean = false,
+        isRadioActive: Boolean = false,
+        isExternalMusicActive: Boolean = false,
+        isBoyisoSpeakerActive: Boolean = false,
+        isBatteryProtectionActive: Boolean = false,
+        isTelevision: Boolean = false,
+    ): Boolean {
+        if (isTelevision || !isSessionActive || !settings.backgroundModeEnabled) return false
+        if (environmentMode != EnvironmentDisplayMode.MATE) return false
+        if (!settings.soundSensingEnabled || !soundSensingEnabled || !hasMicrophonePermission) return false
+        if (isMonitoringSuspendedForPlayback || isRadioActive || isExternalMusicActive ||
+            isBoyisoSpeakerActive || isBatteryProtectionActive) return false
+        return true
+    }
+}
+
+/** Truthful Korean presentation states for active Mate-mode sound monitoring. */
+enum class MateMonitoringStatus(val displayText: String) {
+    MONITORING("소리 감시 중"),
+    CALIBRATING("방 소리 익히는 중"),
+    RECORDING("소리 저장 중"),
+    PERMISSION_REQUIRED("마이크 권한 필요"),
+    INITIALIZATION_FAILED("감시를 시작하지 못했어요"),
+    SUSPENDED("감시 일시 중지"),
+}
+
+/** Pure derivation of monitoring presentation status from device truth. */
+object MateMonitoringStatusPolicy {
+    fun evaluate(
+        isSessionActive: Boolean,
+        environmentMode: EnvironmentDisplayMode,
+        isTelevision: Boolean,
+        hasMicrophonePermission: Boolean,
+        soundSensingEnabled: Boolean,
+        audioRunning: Boolean,
+        audioErrorMessage: String? = null,
+        isStarting: Boolean = false,
+        isWritingClip: Boolean = false,
+        noiseCalibrationProgress: Float = 1.0f,
+        isSuspendedForPlayback: Boolean = false,
+        isRadioActive: Boolean = false,
+        isExternalMusicActive: Boolean = false,
+        isBoyisoSpeakerActive: Boolean = false,
+        batteryProtectionActive: Boolean = false,
+    ): MateMonitoringStatus? {
+        if (!isSessionActive || environmentMode != EnvironmentDisplayMode.MATE || isTelevision) {
+            return null
+        }
+        if (!hasMicrophonePermission) {
+            return MateMonitoringStatus.PERMISSION_REQUIRED
+        }
+        if (audioErrorMessage != null) {
+            return MateMonitoringStatus.INITIALIZATION_FAILED
+        }
+        val isSuspended = !soundSensingEnabled ||
+            isSuspendedForPlayback ||
+            isRadioActive ||
+            isExternalMusicActive ||
+            isBoyisoSpeakerActive ||
+            batteryProtectionActive
+        if (isSuspended) {
+            return MateMonitoringStatus.SUSPENDED
+        }
+        if (audioRunning) {
+            return when {
+                isWritingClip -> MateMonitoringStatus.RECORDING
+                noiseCalibrationProgress < 1.0f -> MateMonitoringStatus.CALIBRATING
+                else -> MateMonitoringStatus.MONITORING
+            }
+        }
+        if (isStarting) {
+            return MateMonitoringStatus.CALIBRATING
+        }
+        return MateMonitoringStatus.INITIALIZATION_FAILED
+    }
 }

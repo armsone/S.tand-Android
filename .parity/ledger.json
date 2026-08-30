@@ -714,6 +714,39 @@
         }
       ],
       "reopen_history": []
+    },
+    {
+      "id": "mate_mode.overnight_reliability_and_status",
+      "route_state": "mate_mode",
+      "element": "overnight_monitoring",
+      "dimension": "background microphone service, automatic lock transition, continuous session and truthful status",
+      "classification": "functional",
+      "source_ref": {
+        "kind": "source",
+        "value": "product-contract.yaml mate_mode.overnight_reliability_and_status"
+      },
+      "target_observation": "Background Mate mode defaults to enabled with one-time migration, transitions automatic mode to Mate on background lock, preserves continuous session via MateMonitoringService with microphone foreground service type, presents truthful monitoring status on home and in notifications, and records session health metadata to distinguish genuine quiet nights from failed monitoring.",
+      "implementation_ref": "app/src/main/java/com/armsone/stand/audio/MateMonitoringService.kt",
+      "fixture": "mate_overnight_monitoring_v1",
+      "fallback_capable": false,
+      "evidence": [
+        {
+          "id": "mate-overnight-device-trace-20260830",
+          "type": "behavior_trace",
+          "path": ".parity/evidence/2026-08-30/mate-overnight-device-trace.md",
+          "sha256": "07aa7a1acbbb8455cb41d5c6f671294a174c15ebc68981cf0f1cb966e26463e4"
+        }
+      ],
+      "status": "matched",
+      "attempts": [
+        {
+          "attempt": 1,
+          "date": "2026-08-30",
+          "action": "Implemented overnight safe default, BackgroundMateMonitoringMigration, StandBackgroundLifecyclePolicy, MateMonitoringService foreground microphone service, continuous session across lifecycle, MateMonitoringStatusPolicy, and quiet night health evidence in RecordingSessionStore.",
+          "result": "JVM tests, assembleDebug and lintDebug passed. SM-F956N Fold and SM-F968N TriFold both kept MateMonitoringService foreground microphone service and RECORD_AUDIO app-op running after screen-off; Fold was confirmed Dozing."
+        }
+      ],
+      "reopen_history": []
     }
   ]
 }

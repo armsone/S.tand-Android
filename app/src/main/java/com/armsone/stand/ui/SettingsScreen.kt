@@ -869,9 +869,9 @@ fun SettingsScreen(
                             }
                             Text(
                                 if (settings.backgroundModeEnabled) {
-                                    "다른 앱을 보는 동안에도 매이트 모드 감지를 유지합니다."
+                                    "기본값입니다. 화면이 꺼지거나 다른 앱으로 전환해도 매이트 모드의 허용된 소리 감시를 유지합니다."
                                 } else {
-                                    "앱에서 나가면 감지와 재생을 모두 멈춥니다."
+                                    "앱을 벗어나거나 화면이 꺼지면 마이크와 소리 감시를 멈춥니다."
                                 },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,

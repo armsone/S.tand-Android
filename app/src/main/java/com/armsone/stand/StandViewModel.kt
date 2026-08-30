@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.armsone.stand.audio.AudioDetectorConfiguration
 import com.armsone.stand.audio.AudioMonitor
 import com.armsone.stand.audio.AudioMonitorState
+import com.armsone.stand.audio.MateMonitoringService
 import com.armsone.stand.data.SettingsRepository
 import com.armsone.stand.model.AmbientLightPolicy
 import com.armsone.stand.model.AppSettings
@@ -19,6 +20,8 @@ import com.armsone.stand.model.EnvironmentDisplayMode
 import com.armsone.stand.model.FaceDownLightingPolicy
 import com.armsone.stand.model.LampPhase
 import com.armsone.stand.model.LampTorchLightingPolicy
+import com.armsone.stand.model.MateMonitoringStatus
+import com.armsone.stand.model.MateMonitoringStatusPolicy
 import com.armsone.stand.model.InternetRadioConfiguration
 import com.armsone.stand.model.InternetRadioImportPolicy
 import com.armsone.stand.model.InternetRadioMutationPolicy
@@ -31,6 +34,7 @@ import com.armsone.stand.model.SimplifiedBrightnessModePolicy
 import com.armsone.stand.model.StandDisplayTheme
 import com.armsone.stand.model.StandExperienceMode
 import com.armsone.stand.model.StandModePreference
+import com.armsone.stand.model.StandBackgroundLifecyclePolicy
 import com.armsone.stand.model.StartleActivationPolicy
 import com.armsone.stand.model.SleepCareMonitoringPolicy
 import com.armsone.stand.model.StandAutomaticDimmingPolicy
@@ -55,6 +59,7 @@ import com.armsone.stand.recording.RecordingMergeService
 import com.armsone.stand.recording.RecordingRepository
 import com.armsone.stand.recording.RecordingSessionGroup
 import com.armsone.stand.recording.RecordingSessionStore
+import com.armsone.stand.recording.SessionMonitoringHealth
 import com.armsone.stand.ui.StandUiState
 import com.armsone.stand.ui.WeatherUiState
 import com.armsone.stand.weather.WeatherAvailability
@@ -130,6 +135,9 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
     private var pendingModeTarget: EnvironmentDisplayMode? = null
     private var activeRecordingSessionId: UUID? = null
     private var activeStartleEventId: UUID? = null
+    private var activeSessionMonitoringStartedAtMillis: Long? = null
+    private var activeSessionMonitoredDurationMillis: Long = 0L
+    private var activeSessionFailureReason: String? = null
     private var brightnessAdjustmentActive = false
     private var brightnessPreference = StandModePreference.AUTOMATIC
     private var suppressNextSettingsEnvironmentRefresh = false
@@ -208,6 +216,15 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
                 error = error ?: (state as? AudioMonitorState.Error)?.message,
             )
         }.onEach { audio ->
+            if (audio.error != null && activeRecordingSessionId != null) {
+                activeSessionFailureReason = audio.error
+            }
+            if (audio.running && activeRecordingSessionId != null && activeSessionMonitoringStartedAtMillis == null) {
+                activeSessionMonitoringStartedAtMillis = SystemClock.elapsedRealtime()
+            } else if (!audio.running && activeSessionMonitoringStartedAtMillis != null) {
+                activeSessionMonitoredDurationMillis += SystemClock.elapsedRealtime() - activeSessionMonitoringStartedAtMillis!!
+                activeSessionMonitoringStartedAtMillis = null
+            }
             mutableUiState.update { current ->
                 current.copy(
                     audioRunning = audio.running,
@@ -216,6 +233,7 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
                     audioMessage = audio.error ?: permissionAudioMessage(current),
                 )
             }
+            updateMonitoringStatus()
         }.launchIn(viewModelScope)
 
         combine(
@@ -229,6 +247,7 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
                         noiseCalibrationProgress = progress,
                     )
                 }
+                updateMonitoringStatus()
             }
             .launchIn(viewModelScope)
 
@@ -315,16 +334,24 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
         }
         weatherService.refreshIfNeeded(locationPermissionGranted)
         syncAmbientCameraSampling()
+        updateMonitoringStatus()
     }
 
-    fun onAppBackground() {
-        val keepRunning = mutableUiState.value.settings.backgroundModeEnabled &&
-            mutableUiState.value.isSessionActive
-        foreground.set(keepRunning)
-        if (keepRunning) return
-        internetRadioPlayer.stop()
-        endExternalMusicMode()
-        audioMonitor.stop()
+    fun onAppBackground(): Boolean {
+        val state = mutableUiState.value
+        val targetMode = StandBackgroundLifecyclePolicy.targetModeOnBackground(
+            preference = state.settings.modePreference,
+            current = state.environmentMode,
+            isSessionActive = state.isSessionActive,
+            isTelevision = isTelevision,
+        )
+        if (targetMode != state.environmentMode) {
+            applyEnvironmentMode(targetMode)
+        }
+
+        val eligible = isBackgroundMonitoringEligible()
+        foreground.set(eligible)
+
         lampJob?.cancel()
         brightnessTapJob?.cancel()
         brightnessEndpointLockJob?.cancel()
@@ -344,8 +371,42 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
         }
         sensorMonitor.stop()
         torchController.turnOff()
+
+        if (eligible) {
+            syncRecordingSessionForDisplayMode()
+            syncSleepCareMonitoring()
+            updateMonitoringStatus()
+            return true
+        }
+
+        internetRadioPlayer.stop()
+        endExternalMusicMode()
+        audioMonitor.stop()
         syncRecordingSessionForDisplayMode(forceClosed = true)
         syncSleepCareMonitoring()
+        updateMonitoringStatus()
+        return false
+    }
+
+    fun isBackgroundMonitoringEligible(): Boolean {
+        val state = mutableUiState.value
+        val radioState = internetRadioPlayer.state.value
+        val isRadioActive = radioState is InternetRadioState.Loading ||
+            radioState is InternetRadioState.Playing ||
+            radioState is InternetRadioState.Reconnecting
+        return StandBackgroundLifecyclePolicy.isBackgroundMonitoringEligible(
+            settings = state.settings,
+            isSessionActive = state.isSessionActive,
+            environmentMode = state.environmentMode,
+            hasMicrophonePermission = microphonePermissionGranted,
+            soundSensingEnabled = state.settings.soundSensingEnabled,
+            isMonitoringSuspendedForPlayback = monitoringPausedForPlayback,
+            isRadioActive = isRadioActive,
+            isExternalMusicActive = state.isExternalMusicModeActive,
+            isBoyisoSpeakerActive = boyisoSpeakerActive,
+            isBatteryProtectionActive = state.batteryProtectionActive,
+            isTelevision = isTelevision,
+        )
     }
 
     fun setPermissions(
@@ -356,6 +417,9 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
         microphonePermissionGranted = hasMicrophonePermission
         locationPermissionGranted = hasLocationPermission
         cameraPermissionGranted = hasCameraPermission
+        if (!hasMicrophonePermission && activeRecordingSessionId != null) {
+            activeSessionFailureReason = "마이크 권한이 필요합니다."
+        }
         mutableUiState.update { current ->
             current.copy(
                 audioMessage = permissionAudioMessage(current),
@@ -374,6 +438,7 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
             hasPermission = cameraPermissionGranted,
         )
         syncAmbientCameraSampling()
+        updateMonitoringStatus()
     }
 
     fun startNightSession() {
@@ -1591,7 +1656,19 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
                     !state.isExternalMusicModeActive &&
                     !state.batteryProtectionActive &&
                     microphonePermissionGranted
-                if (shouldMonitor) audioMonitor.start() else audioMonitor.stop()
+                if (shouldMonitor) {
+                    if (activeSessionMonitoringStartedAtMillis == null && activeRecordingSessionId != null) {
+                        activeSessionMonitoringStartedAtMillis = SystemClock.elapsedRealtime()
+                    }
+                    audioMonitor.start()
+                } else {
+                    if (activeSessionMonitoringStartedAtMillis != null) {
+                        activeSessionMonitoredDurationMillis += SystemClock.elapsedRealtime() - activeSessionMonitoringStartedAtMillis!!
+                        activeSessionMonitoringStartedAtMillis = null
+                    }
+                    audioMonitor.stop()
+                }
+                updateMonitoringStatus()
             }
         }
     }
@@ -1611,16 +1688,87 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
                 activeRecordingSessionId = runCatching {
                     recordingSessionStore.beginMateSession(at)
                 }.getOrNull()
+                activeSessionMonitoringStartedAtMillis = if (audioMonitor.state.value is AudioMonitorState.Monitoring) {
+                    SystemClock.elapsedRealtime()
+                } else {
+                    null
+                }
+                activeSessionMonitoredDurationMillis = 0L
+                activeSessionFailureReason = if (!microphonePermissionGranted) {
+                    "마이크 권한이 필요합니다."
+                } else {
+                    null
+                }
             }
         } else {
             finishStartleEvent(at)
             val sessionId = activeRecordingSessionId ?: return
+            val durationMillis = activeSessionMonitoredDurationMillis +
+                (activeSessionMonitoringStartedAtMillis?.let { SystemClock.elapsedRealtime() - it } ?: 0L)
+            val durationSeconds = durationMillis / 1000.0
+            val failureReason = activeSessionFailureReason ?: if (!microphonePermissionGranted) {
+                "마이크 권한이 필요합니다."
+            } else {
+                audioMonitor.errorMessage.value ?: (audioMonitor.state.value as? AudioMonitorState.Error)?.message
+            }
+            val health = when {
+                failureReason != null -> SessionMonitoringHealth.FAILED
+                durationSeconds >= 1.0 -> SessionMonitoringHealth.MONITORED
+                else -> SessionMonitoringHealth.UNMONITORED
+            }
             val ended = runCatching {
-                recordingSessionStore.endMateSession(sessionId, at)
+                recordingSessionStore.endMateSession(
+                    id = sessionId,
+                    at = at,
+                    health = health,
+                    monitoredDurationSeconds = durationSeconds,
+                    failureReason = failureReason,
+                )
             }.getOrDefault(false)
-            if (ended) activeRecordingSessionId = null
+            if (ended) {
+                activeRecordingSessionId = null
+                activeSessionMonitoringStartedAtMillis = null
+                activeSessionMonitoredDurationMillis = 0L
+                activeSessionFailureReason = null
+            }
         }
         refreshRecordingSessionGroups(recordingRepository.recordings.value)
+        updateMonitoringStatus()
+    }
+
+    private fun evaluateMonitoringStatus(state: StandUiState): MateMonitoringStatus? {
+        val radioState = internetRadioPlayer.state.value
+        val isRadioActive = radioState is InternetRadioState.Loading ||
+            radioState is InternetRadioState.Playing ||
+            radioState is InternetRadioState.Reconnecting
+        return MateMonitoringStatusPolicy.evaluate(
+            isSessionActive = state.isSessionActive,
+            environmentMode = state.environmentMode,
+            isTelevision = isTelevision,
+            hasMicrophonePermission = microphonePermissionGranted,
+            soundSensingEnabled = state.settings.soundSensingEnabled,
+            audioRunning = state.audioRunning,
+            audioErrorMessage = audioMonitor.errorMessage.value ?: (audioMonitor.state.value as? AudioMonitorState.Error)?.message,
+            isStarting = audioMonitor.state.value is AudioMonitorState.Starting,
+            isWritingClip = state.isWritingClip,
+            noiseCalibrationProgress = state.noiseCalibrationProgress,
+            isSuspendedForPlayback = monitoringPausedForPlayback,
+            isRadioActive = isRadioActive,
+            isExternalMusicActive = state.isExternalMusicModeActive,
+            isBoyisoSpeakerActive = boyisoSpeakerActive,
+            batteryProtectionActive = state.batteryProtectionActive,
+        )
+    }
+
+    private fun updateMonitoringStatus() {
+        val nextStatus = evaluateMonitoringStatus(mutableUiState.value)
+        val previous = mutableUiState.value.monitoringStatus
+        if (nextStatus != previous) {
+            mutableUiState.update { it.copy(monitoringStatus = nextStatus) }
+            if (!foreground.get() && nextStatus != null) {
+                MateMonitoringService.updateStatus(getApplication<Application>(), nextStatus.displayText)
+            }
+        }
     }
 
     private fun finishStartleEvent(at: Instant = Instant.now()) {

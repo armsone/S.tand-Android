@@ -1226,8 +1226,31 @@ private fun Header(
         modifier = Modifier.fillMaxWidth(),
     ) {
         if (!isTelevision) {
+            val modeTitle = when {
+                !state.isSessionActive -> "자동 기능 꺼짐"
+                state.experienceMode == StandExperienceMode.STARTLED ->
+                    StandExperienceMode.STARTLED.title
+                state.settings.modePreference == StandModePreference.OBJECT ->
+                    "오브제 모드 잠금"
+                state.settings.modePreference == StandModePreference.MATE ->
+                    "매이트 모드 잠금"
+                else -> state.experienceMode.title
+            }
+            val monitoringText = if (state.isSessionActive && state.environmentMode == EnvironmentDisplayMode.MATE) {
+                state.monitoringStatusText
+            } else {
+                null
+            }
             Row(
-                modifier = Modifier.align(Alignment.CenterStart),
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .semantics(mergeDescendants = true) {
+                        contentDescription = if (monitoringText != null) {
+                            "$modeTitle, $monitoringText"
+                        } else {
+                            modeTitle
+                        }
+                    },
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(5.dp),
             ) {
@@ -1245,21 +1268,23 @@ private fun Header(
                     tint = Color.White.copy(alpha = contentAlpha * 0.62f),
                     modifier = Modifier.size(14.dp),
                 )
-                Text(
-                    text = when {
-                        !state.isSessionActive -> "자동 기능 꺼짐"
-                        state.experienceMode == StandExperienceMode.STARTLED ->
-                            StandExperienceMode.STARTLED.title
-                        state.settings.modePreference == com.armsone.stand.model.StandModePreference.OBJECT ->
-                            "오브제 모드 잠금"
-                        state.settings.modePreference == StandModePreference.MATE ->
-                            "매이트 모드 잠금"
-                        else -> state.experienceMode.title
-                    },
-                    color = Color.White.copy(alpha = contentAlpha * 0.62f),
-                    style = MaterialTheme.typography.labelSmall,
-                    maxLines = 1,
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                    Text(
+                        text = modeTitle,
+                        color = Color.White.copy(alpha = contentAlpha * 0.62f),
+                        style = MaterialTheme.typography.labelSmall,
+                        maxLines = 1,
+                    )
+                    if (monitoringText != null) {
+                        Text(
+                            text = monitoringText,
+                            color = Color.White.copy(alpha = contentAlpha * 0.82f),
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                        )
+                    }
+                }
             }
         }
         Row(

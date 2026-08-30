@@ -15,6 +15,7 @@ import android.os.Handler
 import android.os.Looper
 import android.media.MediaPlayer
 import android.media.AudioManager
+import com.armsone.stand.audio.MateMonitoringService
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
@@ -233,6 +234,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
+        MateMonitoringService.stop(this)
         val isTelevision = TvUiModePolicy.isTelevision(resources.configuration)
         BoyisoManager.isAppVisible = true
         startObservingSystemBrightness()
@@ -267,7 +269,13 @@ class MainActivity : ComponentActivity() {
         stopRadioTransferReceiver()
         BoyisoManager.isAppVisible = false
         stopObservingSystemBrightness()
-        standViewModel.onAppBackground()
+        val backgroundRunning = standViewModel.onAppBackground()
+        if (backgroundRunning) {
+            val statusText = standViewModel.uiState.value.monitoringStatusText
+            MateMonitoringService.start(this, statusText)
+        } else {
+            MateMonitoringService.stop(this)
+        }
         restoreTransientWindowState()
         super.onStop()
     }

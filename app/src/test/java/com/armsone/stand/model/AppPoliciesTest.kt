@@ -100,6 +100,19 @@ class AppPoliciesTest {
     }
 
     @Test
+    fun backgroundMateMonitoringMigrationSetsDefaultTrueAndPreservesUserEdits() {
+        val previous = AppSettings.Recommended.copy(
+            backgroundModeEnabled = false,
+            clockFont = ClockFontChoice.KAKAO_BIG_SANS,
+        )
+
+        val migrated = BackgroundMateMonitoringMigration.apply(previous)
+
+        assertTrue(migrated.backgroundModeEnabled)
+        assertEquals(ClockFontChoice.KAKAO_BIG_SANS, migrated.clockFont)
+    }
+
+    @Test
     fun cameraAmbientSensingIsOptIn() {
         assertFalse(AppSettings.Recommended.cameraAmbientSensingEnabled)
     }

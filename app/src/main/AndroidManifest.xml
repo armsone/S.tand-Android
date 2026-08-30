@@ -158,6 +158,11 @@
             android:name=".boyiso.MonitoringService"
             android:exported="false"
             android:foregroundServiceType="connectedDevice|microphone" />
+
+        <service
+            android:name=".audio.MateMonitoringService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
     </application>
 
 </manifest>

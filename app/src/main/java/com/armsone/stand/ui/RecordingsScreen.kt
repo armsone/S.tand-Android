@@ -688,7 +688,13 @@ private fun SleepReportCard(
                         Text(
                             buildString {
                                 append(sessionTimeRange(session))
-                                append(" · 소리 ${insight.soundCount}개")
+                                if (session.clips.isNotEmpty()) {
+                                    append(" · 소리 ${insight.soundCount}개")
+                                } else if (session.isGenuineQuietNight) {
+                                    append(" · 조용한 밤 · 소리 0개")
+                                } else if (session.isFailedOrUnmonitored) {
+                                    append(" · 감시 미실행")
+                                }
                                 if (insight.movementCount > 0) append(" · 화들짝 ${insight.movementCount}회")
                             },
                             style = MaterialTheme.typography.labelMedium,
@@ -1026,6 +1032,10 @@ private fun RecordingSessionCard(
                                 if (session.clips.isNotEmpty()) {
                                     append(" · 소리 ${session.clips.size}개 · ")
                                     append(formatDuration(session.totalDurationSeconds))
+                                } else if (session.isGenuineQuietNight) {
+                                    append(" · 조용한 밤 · 소리 0개")
+                                } else if (session.isFailedOrUnmonitored) {
+                                    append(" · 감시 미실행")
                                 }
                                 if (session.startleEvents.isNotEmpty()) {
                                     append(" · 화들짝 ${session.startleEvents.size}회")
@@ -1057,23 +1067,42 @@ private fun RecordingSessionCard(
                     modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    session.clips.forEach { clip ->
-                        SwipeToDeleteRow(enabled = !isBusy, onDelete = { onSwipeDelete(clip) }) {
-                            RecordingRow(
-                                clip = clip,
-                                isActive = player.activeClip?.file?.absolutePath == clip.file.absolutePath,
-                                isPlaying = player.activeClip?.file?.absolutePath == clip.file.absolutePath &&
-                                    player.isPlaying,
-                                isPreparing = player.activeClip?.file?.absolutePath == clip.file.absolutePath &&
-                                    player.isPreparing,
-                                selectionMode = selectionMode,
-                                isSelected = clip.file.absolutePath in selectedPaths,
-                                enabled = !isBusy,
-                                onToggleSelection = { onToggleSelection(clip) },
-                                onPlay = { player.toggle(clip) },
-                                onShare = { onShare(clip) },
-                                onDelete = { onDelete(clip) },
+                    if (session.clips.isEmpty()) {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        ) {
+                            Text(
+                                text = when {
+                                    session.isGenuineQuietNight -> "감시는 정상적으로 진행됐고 저장할 소리가 없었어요"
+                                    session.isFailedOrUnmonitored -> session.failureReason ?: "소리 감시가 실행되지 않았습니다."
+                                    else -> "저장된 소리가 없습니다."
+                                },
+                                modifier = Modifier.padding(14.dp),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
+                        }
+                    } else {
+                        session.clips.forEach { clip ->
+                            SwipeToDeleteRow(enabled = !isBusy, onDelete = { onSwipeDelete(clip) }) {
+                                RecordingRow(
+                                    clip = clip,
+                                    isActive = player.activeClip?.file?.absolutePath == clip.file.absolutePath,
+                                    isPlaying = player.activeClip?.file?.absolutePath == clip.file.absolutePath &&
+                                        player.isPlaying,
+                                    isPreparing = player.activeClip?.file?.absolutePath == clip.file.absolutePath &&
+                                        player.isPreparing,
+                                    selectionMode = selectionMode,
+                                    isSelected = clip.file.absolutePath in selectedPaths,
+                                    enabled = !isBusy,
+                                    onToggleSelection = { onToggleSelection(clip) },
+                                    onPlay = { player.toggle(clip) },
+                                    onShare = { onShare(clip) },
+                                    onDelete = { onDelete(clip) },
+                                )
+                            }
                         }
                     }
                 }
@@ -2230,9 +2259,15 @@ private fun compactDuration(duration: Duration): String {
 private fun activityDescription(session: RecordingSessionGroup): String {
     val insight = session.insight
     val range = insight.busiestRange(session.startedAt)
-        ?: return "기록된 소리나 뒤척임이 없습니다."
-    return "가장 기록이 몰린 시간은 ${formatClockTime(range.first)}–${formatClockTime(range.second)}입니다 · " +
-        "시간당 ${String.format(Locale.KOREAN, "%.1f", insight.eventsPerHour)}회"
+    if (range != null) {
+        return "가장 기록이 몰린 시간은 ${formatClockTime(range.first)}–${formatClockTime(range.second)}입니다 · " +
+            "시간당 ${String.format(Locale.KOREAN, "%.1f", insight.eventsPerHour)}회"
+    }
+    return when {
+        session.isGenuineQuietNight -> "감시는 정상적으로 진행됐고 저장할 소리가 없었어요"
+        session.isFailedOrUnmonitored -> session.failureReason ?: "소리 감시가 실행되지 않았습니다."
+        else -> "기록된 소리나 뒤척임이 없습니다."
+    }
 }
 
 private fun sleepReportShareText(session: RecordingSessionGroup): String {

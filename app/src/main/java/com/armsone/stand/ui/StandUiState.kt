@@ -7,6 +7,7 @@ import com.armsone.stand.model.StandExperienceMode
 import com.armsone.stand.model.ExternalMusicPlaybackState
 import com.armsone.stand.model.ExternalMusicService
 import com.armsone.stand.platform.AmbientCameraState
+import com.armsone.stand.model.MateMonitoringStatus
 import com.armsone.stand.platform.InternetRadioState
 
 data class WeatherUiState(
@@ -56,7 +57,10 @@ data class StandUiState(
     val externalMusicService: ExternalMusicService? = null,
     val externalMusicPlaybackState: ExternalMusicPlaybackState = ExternalMusicPlaybackState.IDLE,
     val externalMusicMessage: String? = null,
+    val monitoringStatus: MateMonitoringStatus? = null,
 ) {
+    val monitoringStatusText: String?
+        get() = monitoringStatus?.displayText
     val isExternalMusicModeActive: Boolean
         get() = externalMusicService != null
     val isDisplayDark: Boolean

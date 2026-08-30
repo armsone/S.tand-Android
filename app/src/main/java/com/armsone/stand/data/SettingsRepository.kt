@@ -3,6 +3,7 @@ package com.armsone.stand.data
 import android.content.Context
 import androidx.core.content.edit
 import com.armsone.stand.model.AppSettings
+import com.armsone.stand.model.BackgroundMateMonitoringMigration
 import com.armsone.stand.model.ClockFontChoice
 import com.armsone.stand.model.ClockHourMode
 import com.armsone.stand.model.CurrentExperienceMigration
@@ -76,6 +77,15 @@ class SettingsRepository(context: Context) {
             preferences.edit { putBoolean(LATEST_LANDSCAPE_LAYOUT_MIGRATION_KEY, true) }
             current = migrated
         }
+        if (!booleanValue(BACKGROUND_MATE_MONITORING_MIGRATION_KEY, false)) {
+            val migrated = BackgroundMateMonitoringMigration.apply(current)
+            persist(
+                migrated,
+                preservedUnreadableStrings = unreadableStringPayloads(current, migrated),
+            )
+            preferences.edit { putBoolean(BACKGROUND_MATE_MONITORING_MIGRATION_KEY, true) }
+            current = migrated
+        }
         return current
     }
 
@@ -146,7 +156,7 @@ class SettingsRepository(context: Context) {
             "cameraAmbientSensingEnabled",
             false,
         ),
-        backgroundModeEnabled = booleanValue("backgroundModeEnabled", false),
+        backgroundModeEnabled = booleanValue("backgroundModeEnabled", true),
         soundSensingEnabled = booleanValue("soundSensingEnabled", true),
         weatherLocationEnabled = booleanValue("weatherLocationEnabled", true),
             internetRadio = radioSnapshot.selected,
@@ -289,5 +299,6 @@ class SettingsRepository(context: Context) {
         const val CURRENT_EXPERIENCE_MIGRATION_KEY = "currentExperienceDefaults.v1"
         const val LATEST_CONTROL_ORDER_MIGRATION_KEY = "latestControlOrder.v2"
         const val LATEST_LANDSCAPE_LAYOUT_MIGRATION_KEY = "landscapeLayoutDefault.v4"
+        const val BACKGROUND_MATE_MONITORING_MIGRATION_KEY = "settingsMigration.backgroundMateMonitoring.v1"
     }
 }

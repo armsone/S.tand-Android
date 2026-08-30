@@ -69,7 +69,7 @@ data class AppSettings(
     val modePreference: StandModePreference = StandModePreference.AUTOMATIC,
     val ambientSensingEnabled: Boolean = true,
     val cameraAmbientSensingEnabled: Boolean = false,
-    val backgroundModeEnabled: Boolean = false,
+    val backgroundModeEnabled: Boolean = true,
     val soundSensingEnabled: Boolean = true,
     val weatherLocationEnabled: Boolean = true,
     val internetRadio: InternetRadioConfiguration? = null,
@@ -173,6 +173,13 @@ object LatestControlOrderMigration {
 object LatestLandscapeLayoutMigration {
     fun apply(previous: AppSettings): AppSettings = previous.copy(
         landscapeLayout = StandScreenLayout.Landscape,
+    ).normalized()
+}
+
+/** Applies the overnight-safe default of background Mate monitoring once for existing installations. */
+object BackgroundMateMonitoringMigration {
+    fun apply(previous: AppSettings): AppSettings = previous.copy(
+        backgroundModeEnabled = true,
     ).normalized()
 }
 

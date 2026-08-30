@@ -254,6 +254,78 @@ class RecordingSessionStoreTest {
 
         assertEquals(id, session.id)
         assertTrue(session.startleEvents.isEmpty())
+        assertEquals(SessionMonitoringHealth.UNKNOWN, session.monitoringHealth)
+        assertEquals(0.0, session.monitoredDurationSeconds, 0.0)
+        assertEquals(null, session.failureReason)
+    }
+
+    @Test
+    fun versionTwoManifestLoadsWithStartleEventsAndDefaultHealth() = withDirectory { directory ->
+        val id = UUID.randomUUID()
+        val eventId = UUID.randomUUID()
+        File(directory, RecordingSessionStore.MANIFEST_FILE_NAME).writeText(
+            "S.TAND-RECORDING-SESSIONS\t2\nS\t$id\t1000\t2000\t\t$eventId:1010:1020\n",
+        )
+
+        val session = RecordingSessionStore(directory).sessions.single()
+
+        assertEquals(id, session.id)
+        assertEquals(1, session.startleEvents.size)
+        assertEquals(SessionMonitoringHealth.UNKNOWN, session.monitoringHealth)
+        assertEquals(0.0, session.monitoredDurationSeconds, 0.0)
+    }
+
+    @Test
+    fun versionThreeManifestEncodesAndDecodesHealthAndDurationAndFailure() = withDirectory { directory ->
+        val store = RecordingSessionStore(directory)
+        val start = instant("2026-08-10T00:00:00Z")
+        val sessionId = store.beginMateSession(start)
+        assertTrue(
+            store.endMateSession(
+                id = sessionId,
+                at = start.plusSeconds(3_600),
+                health = SessionMonitoringHealth.MONITORED,
+                monitoredDurationSeconds = 3590.5,
+                failureReason = null,
+            ),
+        )
+
+        val reloaded = RecordingSessionStore(directory)
+        val session = reloaded.sessions.single()
+        assertEquals(sessionId, session.id)
+        assertEquals(SessionMonitoringHealth.MONITORED, session.monitoringHealth)
+        assertEquals(3590.5, session.monitoredDurationSeconds, 0.001)
+        assertEquals(null, session.failureReason)
+
+        val groups = reloaded.groups(emptyList(), start.plusSeconds(7_200))
+        assertEquals(1, groups.size)
+        val group = groups.single()
+        assertTrue(group.isGenuineQuietNight)
+        assertFalse(group.isFailedOrUnmonitored)
+    }
+
+    @Test
+    fun failedMonitoringZeroClipSessionIsPreservedAndIdentified() = withDirectory { directory ->
+        val store = RecordingSessionStore(directory)
+        val start = instant("2026-08-10T00:00:00Z")
+        val sessionId = store.beginMateSession(start)
+        assertTrue(
+            store.endMateSession(
+                id = sessionId,
+                at = start.plusSeconds(100),
+                health = SessionMonitoringHealth.FAILED,
+                monitoredDurationSeconds = 0.0,
+                failureReason = "마이크 권한이 필요합니다.",
+            ),
+        )
+
+        val reloaded = RecordingSessionStore(directory)
+        val groups = reloaded.groups(emptyList(), start.plusSeconds(7_200))
+        assertEquals(1, groups.size)
+        val group = groups.single()
+        assertFalse(group.isGenuineQuietNight)
+        assertTrue(group.isFailedOrUnmonitored)
+        assertEquals("마이크 권한이 필요합니다.", group.failureReason)
     }
 
     private fun clip(

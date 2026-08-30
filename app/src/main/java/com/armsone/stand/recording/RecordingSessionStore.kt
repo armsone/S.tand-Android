@@ -13,12 +13,31 @@ import java.util.Base64
 import java.util.UUID
 import kotlin.math.max
 
+enum class SessionMonitoringHealth {
+    UNKNOWN,
+    MONITORED,
+    FAILED,
+    UNMONITORED;
+
+    companion object {
+        fun fromString(value: String?): SessionMonitoringHealth = when (value?.uppercase()) {
+            "MONITORED" -> MONITORED
+            "FAILED" -> FAILED
+            "UNMONITORED" -> UNMONITORED
+            else -> UNKNOWN
+        }
+    }
+}
+
 data class RecordingSessionMetadata(
     val id: UUID,
     val startedAt: Instant,
     val endedAt: Instant?,
     val clipFileNames: List<String>,
     val startleEvents: List<SleepStartleEvent> = emptyList(),
+    val monitoringHealth: SessionMonitoringHealth = SessionMonitoringHealth.UNKNOWN,
+    val monitoredDurationSeconds: Double = 0.0,
+    val failureReason: String? = null,
 )
 
 data class SleepStartleEvent(
@@ -34,12 +53,21 @@ data class RecordingSessionGroup(
     val clips: List<RecordingClip>,
     val isInferred: Boolean,
     val startleEvents: List<SleepStartleEvent> = emptyList(),
+    val monitoringHealth: SessionMonitoringHealth = SessionMonitoringHealth.UNKNOWN,
+    val monitoredDurationSeconds: Double = 0.0,
+    val failureReason: String? = null,
 ) {
     val totalDurationSeconds: Double
         get() = clips.sumOf { it.durationSeconds }
 
     val insight: SleepSessionInsight
         get() = SleepSessionInsight.from(this)
+
+    val isGenuineQuietNight: Boolean
+        get() = clips.isEmpty() && (monitoringHealth == SessionMonitoringHealth.MONITORED || monitoredDurationSeconds > 0.0) && failureReason == null
+
+    val isFailedOrUnmonitored: Boolean
+        get() = clips.isEmpty() && (monitoringHealth == SessionMonitoringHealth.FAILED || failureReason != null || (monitoringHealth == SessionMonitoringHealth.UNMONITORED && !isInferred))
 }
 
 data class SleepSessionInsight(
@@ -232,14 +260,32 @@ class RecordingSessionStore(
     }
 
     @Throws(IOException::class)
-    fun endMateSession(id: UUID?, at: Instant = now()): Boolean = synchronized(lock) {
+    fun endMateSession(
+        id: UUID?,
+        at: Instant = now(),
+        health: SessionMonitoringHealth = SessionMonitoringHealth.UNKNOWN,
+        monitoredDurationSeconds: Double = 0.0,
+        failureReason: String? = null,
+    ): Boolean = synchronized(lock) {
         val index = storedSessions.indexOfFirst { it.id == id }
         if (index < 0) return@synchronized false
         val session = storedSessions[index]
         val candidate = storedSessions.toMutableList().also { sessions ->
             val endedAt = maxInstant(session.startedAt, at)
+            val resolvedHealth = if (health != SessionMonitoringHealth.UNKNOWN) {
+                health
+            } else if (session.monitoringHealth != SessionMonitoringHealth.UNKNOWN) {
+                session.monitoringHealth
+            } else {
+                SessionMonitoringHealth.UNKNOWN
+            }
+            val resolvedDuration = maxOf(session.monitoredDurationSeconds, monitoredDurationSeconds)
+            val resolvedFailure = failureReason ?: session.failureReason
             sessions[index] = session.copy(
                 endedAt = endedAt,
+                monitoringHealth = resolvedHealth,
+                monitoredDurationSeconds = resolvedDuration,
+                failureReason = resolvedFailure,
                 startleEvents = session.startleEvents.map { event ->
                     if (event.endedAt == null) {
                         event.copy(endedAt = maxInstant(event.startedAt, endedAt))
@@ -247,6 +293,27 @@ class RecordingSessionStore(
                         event
                     }
                 },
+            )
+        }
+        commitLocked(candidate)
+        true
+    }
+
+    @Throws(IOException::class)
+    fun recordMonitoringEvidence(
+        id: UUID?,
+        health: SessionMonitoringHealth,
+        monitoredDurationSeconds: Double,
+        failureReason: String? = null,
+    ): Boolean = synchronized(lock) {
+        val index = storedSessions.indexOfFirst { it.id == id }
+        if (index < 0) return@synchronized false
+        val session = storedSessions[index]
+        val candidate = storedSessions.toMutableList().also { sessions ->
+            sessions[index] = session.copy(
+                monitoringHealth = health,
+                monitoredDurationSeconds = maxOf(session.monitoredDurationSeconds, monitoredDurationSeconds),
+                failureReason = failureReason ?: session.failureReason,
             )
         }
         commitLocked(candidate)
@@ -343,7 +410,12 @@ class RecordingSessionStore(
             val sessionClips = session.clipFileNames
                 .mapNotNull(clipsByName::get)
                 .sortedBy { it.createdAt }
-            if (sessionClips.isEmpty() && session.startleEvents.isEmpty()) return@mapNotNull null
+            val hasContentOrEvidence = sessionClips.isNotEmpty() ||
+                session.startleEvents.isNotEmpty() ||
+                session.monitoringHealth != SessionMonitoringHealth.UNKNOWN ||
+                session.failureReason != null ||
+                session.endedAt == null
+            if (!hasContentOrEvidence) return@mapNotNull null
             assignedNames += sessionClips.map { it.file.name }
             val lastClipEnd = sessionClips.maxOfOrNull { clip ->
                 clip.createdAt.plusMillis(
@@ -363,6 +435,9 @@ class RecordingSessionStore(
                 clips = sessionClips,
                 isInferred = false,
                 startleEvents = session.startleEvents,
+                monitoringHealth = session.monitoringHealth,
+                monitoredDurationSeconds = session.monitoredDurationSeconds,
+                failureReason = session.failureReason,
             )
         }
         val legacy = RecordingSessionPolicy.inferredGroups(
@@ -491,7 +566,8 @@ class RecordingSessionStore(
     companion object {
         const val MANIFEST_FILE_NAME = ".recording-sessions-v1"
         private const val MANIFEST_HEADER_V1 = "S.TAND-RECORDING-SESSIONS\t1"
-        private const val MANIFEST_HEADER = "S.TAND-RECORDING-SESSIONS\t2"
+        private const val MANIFEST_HEADER_V2 = "S.TAND-RECORDING-SESSIONS\t2"
+        private const val MANIFEST_HEADER = "S.TAND-RECORDING-SESSIONS\t3"
         private const val ASSOCIATION_TOLERANCE_SECONDS = 5L
         private val encoder = Base64.getUrlEncoder().withoutPadding()
         private val decoder = Base64.getUrlDecoder()
@@ -502,6 +578,9 @@ class RecordingSessionStore(
                 val names = session.clipFileNames.joinToString(",") { name ->
                     encoder.encodeToString(name.toByteArray(StandardCharsets.UTF_8))
                 }
+                val encodedFailureReason = session.failureReason?.let { reason ->
+                    encoder.encodeToString(reason.toByteArray(StandardCharsets.UTF_8))
+                }.orEmpty()
                 append("S\t")
                 append(session.id)
                 append('\t')
@@ -518,6 +597,12 @@ class RecordingSessionStore(
                         event.endedAt?.toEpochMilli()?.toString().orEmpty(),
                     ).joinToString(":")
                 })
+                append('\t')
+                append(session.monitoringHealth.name)
+                append('\t')
+                append(session.monitoredDurationSeconds)
+                append('\t')
+                append(encodedFailureReason)
                 append('\n')
             }
         }
@@ -525,11 +610,11 @@ class RecordingSessionStore(
         private fun decodeManifest(text: String): List<RecordingSessionMetadata> {
             val lines = text.lineSequence().toList()
             val header = lines.firstOrNull()
-            require(header == MANIFEST_HEADER || header == MANIFEST_HEADER_V1) {
+            require(header == MANIFEST_HEADER || header == MANIFEST_HEADER_V2 || header == MANIFEST_HEADER_V1) {
                 "Unknown session manifest"
             }
             return lines.drop(1).filter(String::isNotBlank).map { line ->
-                val fields = line.split('\t', limit = 6)
+                val fields = line.split('\t')
                 require(fields.size >= 5 && fields[0] == "S") { "Invalid session entry" }
                 val names = fields[4].takeIf(String::isNotEmpty)
                     ?.split(',')
@@ -537,26 +622,39 @@ class RecordingSessionStore(
                         String(decoder.decode(encoded), StandardCharsets.UTF_8)
                     }
                     .orEmpty()
+                val startleEvents = fields.getOrNull(5)
+                    ?.takeIf(String::isNotEmpty)
+                    ?.split(',')
+                    ?.map { encoded ->
+                        val event = encoded.split(':', limit = 3)
+                        require(event.size == 3) { "Invalid startle event" }
+                        SleepStartleEvent(
+                            id = UUID.fromString(event[0]),
+                            startedAt = Instant.ofEpochMilli(event[1].toLong()),
+                            endedAt = event[2].takeIf(String::isNotEmpty)
+                                ?.toLong()
+                                ?.let(Instant::ofEpochMilli),
+                        )
+                    }
+                    .orEmpty()
+                val health = fields.getOrNull(6)?.let(SessionMonitoringHealth::fromString) ?: SessionMonitoringHealth.UNKNOWN
+                val duration = fields.getOrNull(7)?.toDoubleOrNull() ?: 0.0
+                val failureReason = fields.getOrNull(8)?.takeIf(String::isNotEmpty)?.let { encoded ->
+                    try {
+                        String(decoder.decode(encoded), StandardCharsets.UTF_8)
+                    } catch (_: RuntimeException) {
+                        encoded
+                    }
+                }
                 RecordingSessionMetadata(
                     id = UUID.fromString(fields[1]),
                     startedAt = Instant.ofEpochMilli(fields[2].toLong()),
                     endedAt = fields[3].takeIf(String::isNotEmpty)?.toLong()?.let(Instant::ofEpochMilli),
                     clipFileNames = names.distinct(),
-                    startleEvents = fields.getOrNull(5)
-                        ?.takeIf(String::isNotEmpty)
-                        ?.split(',')
-                        ?.map { encoded ->
-                            val event = encoded.split(':', limit = 3)
-                            require(event.size == 3) { "Invalid startle event" }
-                            SleepStartleEvent(
-                                id = UUID.fromString(event[0]),
-                                startedAt = Instant.ofEpochMilli(event[1].toLong()),
-                                endedAt = event[2].takeIf(String::isNotEmpty)
-                                    ?.toLong()
-                                    ?.let(Instant::ofEpochMilli),
-                            )
-                        }
-                        .orEmpty(),
+                    startleEvents = startleEvents,
+                    monitoringHealth = health,
+                    monitoredDurationSeconds = duration,
+                    failureReason = failureReason,
                 )
             }
         }
@@ -567,6 +665,8 @@ class RecordingSessionStore(
         ): List<RecordingSessionMetadata> = sessions.filterNot { session ->
             session.clipFileNames.isEmpty() &&
                 session.startleEvents.isEmpty() &&
+                session.monitoringHealth == SessionMonitoringHealth.UNKNOWN &&
+                session.failureReason == null &&
                 session.endedAt != null &&
                 Duration.between(session.endedAt, referenceTime) >
                 RecordingSessionPolicy.mateModeResumeGap
