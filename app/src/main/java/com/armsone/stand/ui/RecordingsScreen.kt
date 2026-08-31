@@ -1,4 +1,7 @@
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@file:OptIn(
+    androidx.compose.material3.ExperimentalMaterial3Api::class,
+    androidx.compose.foundation.ExperimentalFoundationApi::class,
+)
 
 package com.armsone.stand.ui
 
@@ -12,6 +15,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,12 +25,14 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -101,15 +107,21 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.armsone.stand.model.RecordingSwipeDeletePolicy
 import com.armsone.stand.recording.RecordingClip
+import com.armsone.stand.recording.RecordingRepository
 import com.armsone.stand.recording.RecordingSessionGroup
 import com.armsone.stand.recording.RecordingSessionPolicy
 import com.armsone.stand.ui.components.standFocusable
+import java.io.File
+import java.nio.charset.StandardCharsets
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import java.util.UUID
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.max
@@ -147,15 +159,23 @@ fun RecordingsScreen(
     var pendingDelete by remember { mutableStateOf<RecordingClip?>(null) }
     var pendingDeleteSelected by remember { mutableStateOf(false) }
     var pendingDeleteAll by remember { mutableStateOf(false) }
+    var pendingDeleteSessions by remember { mutableStateOf<List<RecordingSessionGroup>?>(null) }
     var pendingMerge by remember { mutableStateOf<PendingMerge?>(null) }
+    var locallyDeletedSessionIds by rememberSaveable { mutableStateOf(emptySet<String>()) }
     var selectionMode by rememberSaveable { mutableStateOf(false) }
     var selectedPaths by rememberSaveable { mutableStateOf(emptyList<String>()) }
+    var sessionSelectionMode by rememberSaveable { mutableStateOf(false) }
+    var selectedSessionIds by rememberSaveable { mutableStateOf(emptySet<String>()) }
     var expandedSessionIds by rememberSaveable { mutableStateOf(emptyList<String>()) }
     var mergedExpanded by rememberSaveable { mutableStateOf(false) }
     var listActionsExpanded by remember { mutableStateOf(false) }
     var selectedPage by rememberSaveable { mutableStateOf(RecordingsPage.LastNight) }
     var playbackQueue by remember { mutableStateOf(emptyList<RecordingClip>()) }
     var playbackQueueIndex by remember { mutableIntStateOf(0) }
+
+    val visibleSessionGroups = remember(sessionGroups, locallyDeletedSessionIds) {
+        sessionGroups.filterNot { it.id in locallyDeletedSessionIds }
+    }
 
     val sortedRecordings = remember(recordings) {
         recordings.sortedWith(
@@ -175,13 +195,24 @@ fun RecordingsScreen(
     val todayOriginals = remember(originals, today, zoneId) {
         originals.filter { it.createdAt.atZone(zoneId).toLocalDate() == today }
     }
-    val groupedPaths = remember(sessionGroups) {
-        sessionGroups.flatMapTo(hashSetOf()) { group ->
+    val groupedPaths = remember(visibleSessionGroups) {
+        visibleSessionGroups.flatMapTo(hashSetOf()) { group ->
             group.clips.filterNot(RecordingClip::isMerged).map { it.file.absolutePath }
         }
     }
     val ungroupedOriginals = remember(originals, groupedPaths) {
         originals.filterNot { it.file.absolutePath in groupedPaths }
+    }
+
+    LaunchedEffect(visibleSessionGroups) {
+        if (expandedSessionIds.isEmpty() && visibleSessionGroups.isNotEmpty()) {
+            expandedSessionIds = listOf(visibleSessionGroups.first().id)
+        }
+        val existingIds = visibleSessionGroups.map { it.id }.toSet()
+        val retained = selectedSessionIds.filter { it in existingIds }.toSet()
+        if (retained != selectedSessionIds) {
+            selectedSessionIds = retained
+        }
     }
 
     player.onPlaybackFinished = {
@@ -252,72 +283,152 @@ fun RecordingsScreen(
             modifier = Modifier.fillMaxSize(),
             containerColor = Color.Transparent,
             topBar = {
-                TopAppBar(
-                    title = { Text("잠소리") },
-                    navigationIcon = {
-                        IconButton(
-                            onClick = {
-                                player.stop()
-                                onBack()
-                            },
-                            modifier = Modifier.standFocusable(shape = RoundedCornerShape(12.dp)),
-                        ) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "닫기")
-                        }
-                    },
-                    actions = {
-                        if (selectedPage == RecordingsPage.Sounds && sortedRecordings.isNotEmpty()) {
+                if (sessionSelectionMode && selectedPage == RecordingsPage.Sounds) {
+                    val selectedSessions = visibleSessionGroups.filter { it.id in selectedSessionIds }
+                    val eligibleClips = selectedSessions.flatMap { group ->
+                        group.clips.filterNot(RecordingClip::isMerged)
+                    }.sortedWith(
+                        compareBy<RecordingClip> { it.createdAt }.thenBy { it.file.name },
+                    )
+                    TopAppBar(
+                        windowInsets = WindowInsets.safeDrawing,
+                        title = {
+                            Text(
+                                text = if (selectedSessionIds.isEmpty()) {
+                                    "잠자리 선택"
+                                } else {
+                                    "${selectedSessionIds.size}개 선택됨"
+                                },
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        },
+                        navigationIcon = {
                             IconButton(
-                                onClick = { listActionsExpanded = true },
-                                enabled = !isBusy,
+                                onClick = {
+                                    sessionSelectionMode = false
+                                    selectedSessionIds = emptySet()
+                                },
                                 modifier = Modifier.standFocusable(shape = RoundedCornerShape(12.dp)),
                             ) {
-                                Icon(Icons.Default.MoreVert, contentDescription = "목록 작업")
+                                Icon(Icons.Default.Close, contentDescription = "선택 취소")
                             }
-                            DropdownMenu(
-                                expanded = listActionsExpanded,
-                                onDismissRequest = { listActionsExpanded = false },
+                        },
+                        actions = {
+                            val isAllSelected = visibleSessionGroups.isNotEmpty() &&
+                                visibleSessionGroups.all { it.id in selectedSessionIds }
+                            TextButton(
+                                onClick = {
+                                    selectedSessionIds = if (isAllSelected) {
+                                        emptySet()
+                                    } else {
+                                        visibleSessionGroups.map { it.id }.toSet()
+                                    }
+                                },
+                                enabled = visibleSessionGroups.isNotEmpty() && !isBusy,
+                                modifier = Modifier.standFocusable(shape = RoundedCornerShape(12.dp)),
                             ) {
-                                DropdownMenuItem(
-                                    text = { Text("전체 선택") },
-                                    onClick = {
-                                        listActionsExpanded = false
-                                        selectionMode = true
-                                        selectedPaths = originals.map { it.file.absolutePath }
-                                    },
-                                    enabled = originals.isNotEmpty(),
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("오늘 선택") },
-                                    onClick = {
-                                        listActionsExpanded = false
-                                        selectionMode = true
-                                        selectedPaths = todayOriginals.map { it.file.absolutePath }
-                                    },
-                                    enabled = todayOriginals.isNotEmpty(),
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("선택 모두 해제") },
-                                    onClick = {
-                                        listActionsExpanded = false
-                                        selectedPaths = emptyList()
-                                    },
-                                    enabled = selectedPaths.isNotEmpty(),
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("전체 삭제", color = MaterialTheme.colorScheme.error) },
-                                    onClick = {
-                                        listActionsExpanded = false
-                                        pendingDeleteAll = true
+                                Text(if (isAllSelected) "전체 해제" else "전체 선택")
+                            }
+                            TextButton(
+                                onClick = {
+                                    pendingMerge = PendingMerge.SessionSelection(eligibleClips)
+                                },
+                                enabled = eligibleClips.size >= 2 && !isBusy,
+                                modifier = Modifier.standFocusable(shape = RoundedCornerShape(12.dp)),
+                            ) {
+                                Text("합치기")
+                            }
+                            TextButton(
+                                onClick = {
+                                    pendingDeleteSessions = selectedSessions
+                                },
+                                enabled = selectedSessionIds.isNotEmpty() && !isBusy,
+                                modifier = Modifier.standFocusable(shape = RoundedCornerShape(12.dp)),
+                            ) {
+                                Text(
+                                    "지우기",
+                                    color = if (selectedSessionIds.isNotEmpty() && !isBusy) {
+                                        MaterialTheme.colorScheme.error
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
                                     },
                                 )
                             }
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surface,
-                    ),
-                )
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = MaterialTheme.colorScheme.surface,
+                        ),
+                    )
+                } else {
+                    TopAppBar(
+                        windowInsets = WindowInsets.safeDrawing,
+                        title = { Text("잠소리") },
+                        navigationIcon = {
+                            IconButton(
+                                onClick = {
+                                    player.stop()
+                                    onBack()
+                                },
+                                modifier = Modifier.standFocusable(shape = RoundedCornerShape(12.dp)),
+                            ) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "닫기")
+                            }
+                        },
+                        actions = {
+                            if (selectedPage == RecordingsPage.Sounds && sortedRecordings.isNotEmpty()) {
+                                IconButton(
+                                    onClick = { listActionsExpanded = true },
+                                    enabled = !isBusy,
+                                    modifier = Modifier.standFocusable(shape = RoundedCornerShape(12.dp)),
+                                ) {
+                                    Icon(Icons.Default.MoreVert, contentDescription = "목록 작업")
+                                }
+                                DropdownMenu(
+                                    expanded = listActionsExpanded,
+                                    onDismissRequest = { listActionsExpanded = false },
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text("전체 선택") },
+                                        onClick = {
+                                            listActionsExpanded = false
+                                            selectionMode = true
+                                            selectedPaths = originals.map { it.file.absolutePath }
+                                        },
+                                        enabled = originals.isNotEmpty(),
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("오늘 선택") },
+                                        onClick = {
+                                            listActionsExpanded = false
+                                            selectionMode = true
+                                            selectedPaths = todayOriginals.map { it.file.absolutePath }
+                                        },
+                                        enabled = todayOriginals.isNotEmpty(),
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("선택 모두 해제") },
+                                        onClick = {
+                                            listActionsExpanded = false
+                                            selectedPaths = emptyList()
+                                        },
+                                        enabled = selectedPaths.isNotEmpty(),
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("전체 삭제", color = MaterialTheme.colorScheme.error) },
+                                        onClick = {
+                                            listActionsExpanded = false
+                                            pendingDeleteAll = true
+                                        },
+                                    )
+                                }
+                            }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = MaterialTheme.colorScheme.surface,
+                        ),
+                    )
+                }
             },
             bottomBar = {
                 Column {
@@ -369,13 +480,19 @@ fun RecordingsScreen(
                         item(key = "page-picker", span = { GridItemSpan(maxLineSpan) }) {
                             RecordingsPagePicker(
                                 selectedPage = selectedPage,
-                                onSelected = { selectedPage = it },
+                                onSelected = { page ->
+                                    selectedPage = page
+                                    if (page != RecordingsPage.Sounds) {
+                                        sessionSelectionMode = false
+                                        selectedSessionIds = emptySet()
+                                    }
+                                },
                             )
                         }
 
                         if (selectedPage == RecordingsPage.LastNight) {
                             item(key = "last-night", span = { GridItemSpan(maxLineSpan) }) {
-                                val latestSession = sessionGroups.firstOrNull()
+                                val latestSession = visibleSessionGroups.firstOrNull()
                                 if (latestSession == null) {
                                     EmptySleepReport()
                                 } else {
@@ -385,7 +502,7 @@ fun RecordingsScreen(
                                         isPlayingQueue = playbackQueue.isNotEmpty() &&
                                             player.activeClip?.let { active ->
                                                 latestSession.clips.any { it.file == active.file }
-                                            } == true,
+                                             } == true,
                                         onPlayHighlights = {
                                             if (!isBusy && latestSession.clips.isNotEmpty()) {
                                                 playbackQueue = latestSession.clips.sortedBy { it.createdAt }
@@ -407,14 +524,14 @@ fun RecordingsScreen(
                                     )
                                 }
                             }
-                        } else if (sortedRecordings.isEmpty() && sessionGroups.isEmpty()) {
+                        } else if (sortedRecordings.isEmpty() && visibleSessionGroups.isEmpty()) {
                             item(key = "empty-sounds", span = { GridItemSpan(maxLineSpan) }) {
                                 EmptyRecordings(modifier = Modifier.fillMaxWidth().padding(vertical = 80.dp))
                             }
                         } else {
                             item(key = "summary", span = { GridItemSpan(maxLineSpan) }) {
                                 RecordingSummaryCard(
-                                    sessionCount = sessionGroups.size,
+                                    sessionCount = visibleSessionGroups.size,
                                     originals = originals,
                                 )
                             }
@@ -460,15 +577,18 @@ fun RecordingsScreen(
                         }
 
                         items(
-                            items = sessionGroups,
+                            items = visibleSessionGroups,
                             key = { group -> "session-${group.id}" },
                         ) { group ->
                             val expanded = group.id in expandedSessionIds
+                            val isSessionSelected = group.id in selectedSessionIds
                             RecordingSessionCard(
                                 session = group,
                                 isExpanded = expanded,
+                                isSessionSelected = isSessionSelected,
+                                sessionSelectionMode = sessionSelectionMode,
                                 selectedPaths = selectedPaths.toSet(),
-                                selectionMode = selectionMode,
+                                clipSelectionMode = selectionMode,
                                 isBusy = isBusy,
                                 player = player,
                                 onToggleExpanded = {
@@ -478,12 +598,31 @@ fun RecordingsScreen(
                                         expandedSessionIds + group.id
                                     }
                                 },
-                                onToggleSelection = { clip ->
+                                onToggleSessionSelection = {
+                                    selectedSessionIds = if (isSessionSelected) {
+                                        selectedSessionIds - group.id
+                                    } else {
+                                        selectedSessionIds + group.id
+                                    }
+                                },
+                                onLongClickSession = {
+                                    if (!sessionSelectionMode) {
+                                        sessionSelectionMode = true
+                                        selectedSessionIds = setOf(group.id)
+                                    } else {
+                                        selectedSessionIds = if (isSessionSelected) {
+                                            selectedSessionIds - group.id
+                                        } else {
+                                            selectedSessionIds + group.id
+                                        }
+                                    }
+                                },
+                                onToggleClipSelection = { clip ->
                                     selectedPaths = selectedPaths.toggled(clip.file.absolutePath)
                                 },
                                 onShare = onShare,
-                                onDelete = { pendingDelete = it },
-                                onSwipeDelete = performSwipeDelete,
+                                onDeleteClip = { pendingDelete = it },
+                                onSwipeDeleteClip = performSwipeDelete,
                             )
                         }
 
@@ -542,6 +681,90 @@ fun RecordingsScreen(
         )
     }
 
+    pendingDeleteSessions?.let { targetSessions ->
+        val allClips = targetSessions.flatMap { it.clips }
+        ConfirmActionDialog(
+            title = if (targetSessions.size == 1) {
+                "이 잠자리 기록을 삭제할까요?"
+            } else {
+                "선택한 잠자리 ${targetSessions.size}개를 삭제할까요?"
+            },
+            message = buildString {
+                if (targetSessions.size == 1) {
+                    append(sessionTitle(targetSessions.first()))
+                    append("\n")
+                }
+                if (allClips.isNotEmpty()) {
+                    append("녹음 ${allClips.size}개와 잠자리 기록이 모두 삭제됩니다.\n삭제한 기록은 복구할 수 없습니다.")
+                } else {
+                    append("잠자리 기록이 삭제됩니다.\n삭제한 기록은 복구할 수 없습니다.")
+                }
+            },
+            confirmLabel = "잠자리 삭제",
+            onDismiss = { pendingDeleteSessions = null },
+            onConfirm = {
+                pendingDeleteSessions = null
+                if (!isBusy && targetSessions.isNotEmpty()) {
+                    val sessionFilePaths = allClips.map { it.file.absolutePath }.toSet()
+                    if (player.activeClip?.file?.absolutePath in sessionFilePaths) {
+                        player.stop()
+                    }
+                    selectedPaths = selectedPaths.filterNot { it in sessionFilePaths }
+                    val targetSessionIds = targetSessions.map { it.id }.toSet()
+                    expandedSessionIds = expandedSessionIds - targetSessionIds
+                    locallyDeletedSessionIds = locallyDeletedSessionIds + targetSessionIds
+                    sessionSelectionMode = false
+                    selectedSessionIds = emptySet()
+
+                    if (allClips.isNotEmpty()) {
+                        onDeleteSelected(allClips)
+                    }
+
+                    val manifestFile = File(
+                        context.applicationContext.filesDir,
+                        "${RecordingRepository.DIRECTORY_NAME}/${RecordingRepository.SESSION_MANIFEST_NAME}",
+                    )
+                    val rawIdsToDelete = targetSessionIds.filter { it.startsWith("session-") }
+                        .map { it.removePrefix("session-") }
+                        .toSet()
+                    if (manifestFile.isFile && rawIdsToDelete.isNotEmpty()) {
+                        runCatching {
+                            val lines = manifestFile.readLines(StandardCharsets.UTF_8)
+                            val filtered = lines.filterNot { line ->
+                                val fields = line.split('\t')
+                                fields.size >= 2 && fields[0] == "S" && fields[1] in rawIdsToDelete
+                            }
+                            if (filtered.size != lines.size) {
+                                val tempFile = File(
+                                    manifestFile.parentFile,
+                                    ".${manifestFile.name}.${UUID.randomUUID()}.tmp",
+                                )
+                                tempFile.writeText(
+                                    filtered.joinToString("\n") + if (filtered.isNotEmpty()) "\n" else "",
+                                    StandardCharsets.UTF_8,
+                                )
+                                try {
+                                    Files.move(
+                                        tempFile.toPath(),
+                                        manifestFile.toPath(),
+                                        StandardCopyOption.ATOMIC_MOVE,
+                                        StandardCopyOption.REPLACE_EXISTING,
+                                    )
+                                } catch (_: Exception) {
+                                    Files.move(
+                                        tempFile.toPath(),
+                                        manifestFile.toPath(),
+                                        StandardCopyOption.REPLACE_EXISTING,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+        )
+    }
+
     if (pendingDeleteSelected) {
         ConfirmActionDialog(
             title = "선택한 녹음 ${selectedClips.size}개를 삭제할까요?",
@@ -563,7 +786,7 @@ fun RecordingsScreen(
     if (pendingDeleteAll) {
         ConfirmActionDialog(
             title = "저장된 잠소리를 모두 삭제할까요?",
-            message = "삭제한 녹음은 복구할 수 없습니다.",
+            message = "삭제한 녹음과 잠자리 기록은 복구할 수 없습니다.",
             confirmLabel = "모두 삭제",
             onDismiss = { pendingDeleteAll = false },
             onConfirm = {
@@ -572,6 +795,14 @@ fun RecordingsScreen(
                     player.stop()
                     selectedPaths = emptyList()
                     expandedSessionIds = emptyList()
+                    locallyDeletedSessionIds = locallyDeletedSessionIds + sessionGroups.map { it.id }.toSet()
+                    val manifestFile = File(
+                        context.applicationContext.filesDir,
+                        "${RecordingRepository.DIRECTORY_NAME}/${RecordingRepository.SESSION_MANIFEST_NAME}",
+                    )
+                    if (manifestFile.exists()) {
+                        runCatching { manifestFile.delete() }
+                    }
                     onDeleteAll()
                 }
             },
@@ -579,7 +810,12 @@ fun RecordingsScreen(
     }
 
     pendingMerge?.let { target ->
-        val count = if (target == PendingMerge.Today) todayOriginals.size else selectedClips.size
+        val targetClips = when (target) {
+            PendingMerge.Today -> todayOriginals
+            PendingMerge.Selected -> selectedClips
+            is PendingMerge.SessionSelection -> target.clips
+        }
+        val count = targetClips.size
         MergeSourcesDialog(
             count = count,
             onDismiss = { pendingMerge = null },
@@ -587,12 +823,18 @@ fun RecordingsScreen(
                 pendingMerge = null
                 if (!isBusy && count >= 2) {
                     player.stop()
-                    if (target == PendingMerge.Today) {
-                        onMergeToday(deleteSources)
-                    } else {
-                        val clips = selectedClips
-                        selectedPaths = emptyList()
-                        onMergeSelected(clips, deleteSources)
+                    when (target) {
+                        PendingMerge.Today -> onMergeToday(deleteSources)
+                        PendingMerge.Selected -> {
+                            val clips = selectedClips
+                            selectedPaths = emptyList()
+                            onMergeSelected(clips, deleteSources)
+                        }
+                        is PendingMerge.SessionSelection -> {
+                            sessionSelectionMode = false
+                            selectedSessionIds = emptySet()
+                            onMergeSelected(targetClips, deleteSources)
+                        }
                     }
                 }
             },
@@ -969,40 +1211,83 @@ private fun SelectionToolsCard(
 private fun RecordingSessionCard(
     session: RecordingSessionGroup,
     isExpanded: Boolean,
+    isSessionSelected: Boolean,
+    sessionSelectionMode: Boolean,
     selectedPaths: Set<String>,
-    selectionMode: Boolean,
+    clipSelectionMode: Boolean,
     isBusy: Boolean,
     player: RecordingPlaybackController,
     onToggleExpanded: () -> Unit,
-    onToggleSelection: (RecordingClip) -> Unit,
+    onToggleSessionSelection: () -> Unit,
+    onLongClickSession: () -> Unit,
+    onToggleClipSelection: (RecordingClip) -> Unit,
     onShare: (RecordingClip) -> Unit,
-    onDelete: (RecordingClip) -> Unit,
-    onSwipeDelete: (RecordingClip) -> Unit,
+    onDeleteClip: (RecordingClip) -> Unit,
+    onSwipeDeleteClip: (RecordingClip) -> Unit,
 ) {
-    val selectedCount = session.clips.count { !it.isMerged && it.file.absolutePath in selectedPaths }
+    val selectedClipCount = session.clips.count { !it.isMerged && it.file.absolutePath in selectedPaths }
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .animateContentSize(),
         shape = RoundedCornerShape(22.dp),
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.24f)),
-        shadowElevation = 3.dp,
+        color = if (sessionSelectionMode && isSessionSelected) {
+            MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
+        } else {
+            MaterialTheme.colorScheme.surface
+        },
+        border = BorderStroke(
+            if (sessionSelectionMode && isSessionSelected) 2.dp else 1.dp,
+            if (sessionSelectionMode && isSessionSelected) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.primary.copy(alpha = 0.24f)
+            },
+        ),
+        shadowElevation = if (sessionSelectionMode && isSessionSelected) 6.dp else 3.dp,
     ) {
         Column {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .standFocusable(shape = RoundedCornerShape(22.dp))
-                    .clickable(onClick = onToggleExpanded)
+                    .combinedClickable(
+                        enabled = !isBusy,
+                        onClick = {
+                            if (sessionSelectionMode) {
+                                onToggleSessionSelection()
+                            } else {
+                                onToggleExpanded()
+                            }
+                        },
+                        onLongClick = onLongClickSession,
+                    )
                     .semantics(mergeDescendants = true) {
                         contentDescription = sessionAccessibilityLabel(session)
-                        stateDescription = if (isExpanded) "녹음 목록 펼쳐짐" else "녹음 목록 접힘"
+                        stateDescription = if (sessionSelectionMode) {
+                            if (isSessionSelected) "잠자리 선택됨" else "잠자리 선택 안 됨"
+                        } else {
+                            if (isExpanded) "녹음 목록 펼쳐짐" else "녹음 목록 접힘"
+                        }
                     }
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (sessionSelectionMode) {
+                        Icon(
+                            if (isSessionSelected) Icons.Default.CheckBox else Icons.Default.CheckBoxOutlineBlank,
+                            contentDescription = if (isSessionSelected) "잠자리 선택 해제" else "잠자리 선택",
+                            tint = if (isSessionSelected) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                            modifier = Modifier
+                                .size(28.dp)
+                                .padding(end = 6.dp),
+                        )
+                    }
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -1045,19 +1330,21 @@ private fun RecordingSessionCard(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    if (selectedCount > 0) {
+                    if (!sessionSelectionMode && selectedClipCount > 0) {
                         Text(
-                            "${selectedCount} 선택",
+                            "${selectedClipCount} 선택",
                             color = MaterialTheme.colorScheme.primary,
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                         )
                     }
-                    Icon(
-                        Icons.Default.ExpandMore,
-                        contentDescription = if (isExpanded) "녹음 목록 접기" else "녹음 목록 펼치기",
-                        modifier = Modifier.rotate(if (isExpanded) 180f else 0f),
-                    )
+                    if (!sessionSelectionMode) {
+                        Icon(
+                            Icons.Default.ExpandMore,
+                            contentDescription = if (isExpanded) "녹음 목록 접기" else "녹음 목록 펼치기",
+                            modifier = Modifier.rotate(if (isExpanded) 180f else 0f),
+                        )
+                    }
                 }
                 SessionTimeline(session)
             }
@@ -1086,7 +1373,7 @@ private fun RecordingSessionCard(
                         }
                     } else {
                         session.clips.forEach { clip ->
-                            SwipeToDeleteRow(enabled = !isBusy, onDelete = { onSwipeDelete(clip) }) {
+                            SwipeToDeleteRow(enabled = !isBusy, onDelete = { onSwipeDeleteClip(clip) }) {
                                 RecordingRow(
                                     clip = clip,
                                     isActive = player.activeClip?.file?.absolutePath == clip.file.absolutePath,
@@ -1094,13 +1381,13 @@ private fun RecordingSessionCard(
                                         player.isPlaying,
                                     isPreparing = player.activeClip?.file?.absolutePath == clip.file.absolutePath &&
                                         player.isPreparing,
-                                    selectionMode = selectionMode,
+                                    selectionMode = clipSelectionMode,
                                     isSelected = clip.file.absolutePath in selectedPaths,
                                     enabled = !isBusy,
-                                    onToggleSelection = { onToggleSelection(clip) },
+                                    onToggleSelection = { onToggleClipSelection(clip) },
                                     onPlay = { player.toggle(clip) },
                                     onShare = { onShare(clip) },
-                                    onDelete = { onDelete(clip) },
+                                    onDelete = { onDeleteClip(clip) },
                                 )
                             }
                         }
@@ -2187,6 +2474,7 @@ private class RecordingPlaybackController(
 private sealed interface PendingMerge {
     data object Selected : PendingMerge
     data object Today : PendingMerge
+    data class SessionSelection(val clips: List<RecordingClip>) : PendingMerge
 }
 
 private fun List<String>.toggled(value: String): List<String> =

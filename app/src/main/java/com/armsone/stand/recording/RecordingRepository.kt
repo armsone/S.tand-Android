@@ -119,7 +119,7 @@ class RecordingRepository internal constructor(
         true
     }
 
-    /** Deletes all completed recordings and any abandoned candidate data. */
+    /** Deletes all completed recordings, persistent session metadata, and any abandoned candidate data. */
     fun deleteAll(): Boolean = synchronized(ioLock) {
         var succeeded = true
         directory.listFiles()
@@ -129,6 +129,10 @@ class RecordingRepository internal constructor(
                 if (!file.delete() && file.exists()) succeeded = false
             }
         removeStalePendingFilesLocked()
+        val manifest = File(directory, SESSION_MANIFEST_NAME)
+        if (manifest.exists() && !manifest.delete() && manifest.exists()) {
+            succeeded = false
+        }
 
         if (!succeeded) {
             _lastError.value = "일부 녹음 파일을 삭제할 수 없습니다."
@@ -137,6 +141,31 @@ class RecordingRepository internal constructor(
         }
         reloadLocked()
         succeeded
+    }
+
+    /** Removes persistent metadata for the given session ID from the manifest file. */
+    fun deleteSessionMetadata(sessionId: String): Boolean = synchronized(ioLock) {
+        val manifest = File(directory, SESSION_MANIFEST_NAME)
+        if (!manifest.isFile) return@synchronized true
+        return try {
+            val rawId = sessionId.removePrefix("session-")
+            val lines = manifest.readLines(StandardCharsets.UTF_8)
+            val filtered = lines.filterNot { line ->
+                val fields = line.split('\t')
+                fields.size >= 2 && fields[0] == "S" && fields[1] == rawId
+            }
+            if (filtered.size != lines.size) {
+                val tempFile = File(directory, ".${manifest.name}.${UUID.randomUUID()}.tmp")
+                tempFile.writeText(
+                    filtered.joinToString("\n") + if (filtered.isNotEmpty()) "\n" else "",
+                    StandardCharsets.UTF_8,
+                )
+                moveReplacing(tempFile, manifest)
+            }
+            true
+        } catch (_: Exception) {
+            false
+        }
     }
 
     @Throws(IOException::class)
@@ -256,6 +285,7 @@ class RecordingRepository internal constructor(
 
     companion object {
         const val DIRECTORY_NAME = "recordings"
+        const val SESSION_MANIFEST_NAME = ".recording-sessions-v1"
         private const val PENDING_DIRECTORY_NAME = ".pending"
         private const val EMBEDDED_SAMPLE_MARKER_NAME = ".embedded-snore-samples-v1"
         private const val EMBEDDED_SAMPLE_NONCE = "embedded-snore"
