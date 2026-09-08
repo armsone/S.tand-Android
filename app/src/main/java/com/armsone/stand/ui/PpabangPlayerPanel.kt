@@ -1,0 +1,705 @@
+package com.armsone.stand.ui
+
+import android.view.ViewConfiguration
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.lerp
+import android.view.MotionEvent
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.input.pointer.pointerInteropFilter
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
+import android.annotation.SuppressLint
+import android.content.Context
+import android.graphics.Bitmap
+import android.net.http.SslError
+import android.view.ViewGroup
+import android.webkit.ClientCertRequest
+import android.webkit.GeolocationPermissions
+import android.webkit.HttpAuthHandler
+import android.webkit.JavascriptInterface
+import android.webkit.PermissionRequest
+import android.webkit.RenderProcessGoneDetail
+import android.webkit.SslErrorHandler
+import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
+import android.webkit.WebResourceRequest
+import android.webkit.WebSettings
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.LibraryMusic
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.armsone.stand.model.PpabangCategory
+import com.armsone.stand.model.PpabangPlaybackState
+import com.armsone.stand.model.PpabangPolicy
+import com.armsone.stand.ui.components.standFocusable
+import com.armsone.stand.ui.components.standPanelSurface
+import kotlinx.coroutines.flow.SharedFlow
+
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+fun PpabangFloatingPlayer(
+    anchorFrame: Rect,
+    state: StandUiState,
+    isTelevision: Boolean,
+    isPortrait: Boolean,
+    commandFlow: SharedFlow<PpabangCommand>,
+    onPlay: () -> Unit,
+    onStop: () -> Unit,
+    onNext: () -> Unit,
+    onSelectCategory: (PpabangCategory) -> Unit,
+    onClose: () -> Unit,
+    onPlaybackStateChanged: (PpabangPlaybackState, String?) -> Unit,
+    modifier: Modifier = Modifier,
+    onFrameChanged: (Rect) -> Unit = {},
+) {
+    val context = LocalContext.current
+    val preferences = remember(context) { context.getSharedPreferences("ppabang_player_ui", Context.MODE_PRIVATE) }
+    var backgroundPercent by remember { mutableStateOf(preferences.getInt("background_percent", 100).coerceIn(10, 100)) }
+    fun advanceBackground() {
+        backgroundPercent = listOf(10, 35, 60, 85, 100).firstOrNull { it > backgroundPercent } ?: 10
+        preferences.edit().putInt("background_percent", backgroundPercent).apply()
+    }
+    var containerOrigin by remember { mutableStateOf(Offset.Zero) }
+    BoxWithConstraints(modifier.onGloballyPositioned { containerOrigin = it.boundsInWindow().topLeft }) {
+        val density = LocalDensity.current
+        val width = 272.dp
+        val maxX = with(density) { (maxWidth - width).toPx().coerceAtLeast(0f) }
+        val maxY = with(density) { (maxHeight - 216.dp).toPx().coerceAtLeast(0f) }
+        var position by remember { mutableStateOf<Offset?>(null) }
+        val savedX = remember { preferences.getFloat("position_x", -1f) }
+        val savedY = remember { preferences.getFloat("position_y", -1f) }
+        val initialPosition = if (savedX >= 0f && savedY >= 0f) {
+            Offset(savedX * maxX, savedY * maxY)
+        } else if (anchorFrame != Rect.Zero) {
+            Offset(anchorFrame.left, anchorFrame.bottom + with(density) { 8.dp.toPx() }) - containerOrigin
+        } else Offset(0f, with(density) { 88.dp.toPx() })
+        val base = position ?: initialPosition
+        val actual = Offset(base.x.coerceIn(0f, maxX), base.y.coerceIn(0f, maxY))
+        val currentPosition by rememberUpdatedState(actual)
+        var dragStart by remember { mutableStateOf(Offset.Zero) }
+        var dragOrigin by remember { mutableStateOf(Offset.Zero) }
+        var dragMoved by remember { mutableStateOf(false) }
+        val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
+        DisposableEffect(Unit) { onDispose { onFrameChanged(Rect.Zero) } }
+        PpabangInlinePlayer(
+            state, isTelevision, isPortrait, commandFlow, onPlay, onStop, onNext,
+            onSelectCategory, onClose, onPlaybackStateChanged,
+            modifier = Modifier.offset { IntOffset(actual.x.roundToInt(), actual.y.roundToInt()) }
+                .width(width).onGloballyPositioned { onFrameChanged(it.boundsInWindow()) },
+            backgroundOpacity = backgroundPercent / 100f,
+            dragHandle = {
+                Box(
+                    Modifier.size(48.dp, 32.dp)
+                         .semantics {
+                            contentDescription = "플레이어 이동, 배경 진하기 ${backgroundPercent}퍼센트"
+                            role = Role.Button
+                            onClick(label = "배경 진하기 변경") { advanceBackground(); true }
+                        }
+                        .pointerInteropFilter { event ->
+                            when (event.actionMasked) {
+                                MotionEvent.ACTION_DOWN -> {
+                                    dragStart = Offset(event.rawX, event.rawY)
+                                    dragOrigin = currentPosition
+                                    dragMoved = false
+                                }
+                                MotionEvent.ACTION_MOVE -> {
+                                    val delta = Offset(event.rawX, event.rawY) - dragStart
+                                    if (delta.getDistance() > touchSlop) dragMoved = true
+                                    if (dragMoved) position = Offset(
+                                        (dragOrigin.x + delta.x).coerceIn(0f, maxX),
+                                        (dragOrigin.y + delta.y).coerceIn(0f, maxY),
+                                    )
+                                }
+                                MotionEvent.ACTION_UP -> {
+                                    if (!dragMoved) advanceBackground()
+                                    else position?.let { finalPosition ->
+                                        preferences.edit()
+                                            .putFloat("position_x", if (maxX > 0f) finalPosition.x / maxX else 0f)
+                                            .putFloat("position_y", if (maxY > 0f) finalPosition.y / maxY else 0f)
+                                            .apply()
+                                    }
+                                }
+                            }
+                            true
+                        }, contentAlignment = Alignment.Center,
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("✥", color = Color.White, fontSize = 12.sp, lineHeight = 13.sp)
+                        Text("${backgroundPercent}%", color = Color.White, fontSize = 8.sp, lineHeight = 9.sp)
+                    }
+                }
+            },
+        )
+    }
+}
+
+private class PpabangBridge(
+    private val onState: (Int) -> Unit,
+    private val onCover: (String) -> Unit,
+) {
+    @JavascriptInterface
+    fun onPlayerState(state: Int) {
+        onState(state)
+    }
+
+    @JavascriptInterface
+    fun onCoverStatus(status: String) {
+        onCover(status)
+    }
+}
+
+/**
+ * Inline visible video player for Ppabang, adjacent to clock/home music area.
+ * Keeps YouTube iframe fully visible (>= 200x200 logical/CSS pixels, usable official controls).
+ * Supports phone, tablet, and TV D-pad.
+ */
+@SuppressLint("SetJavaScriptEnabled")
+@Composable
+fun PpabangInlinePlayer(
+    state: StandUiState,
+    isTelevision: Boolean,
+    isPortrait: Boolean,
+    commandFlow: SharedFlow<PpabangCommand>,
+    onPlay: () -> Unit,
+    onStop: () -> Unit,
+    onNext: () -> Unit,
+    onSelectCategory: (PpabangCategory) -> Unit,
+    onClose: () -> Unit,
+    onPlaybackStateChanged: (PpabangPlaybackState, String?) -> Unit,
+    modifier: Modifier = Modifier,
+    dragHandle: @Composable () -> Unit = {},
+    backgroundOpacity: Float = 1f,
+) {
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var webViewRef by remember { mutableStateOf<WebView?>(null) }
+    var loadedCategory by remember { mutableStateOf<PpabangCategory?>(null) }
+    val currentState by rememberUpdatedState(state)
+    val reportState by rememberUpdatedState(onPlaybackStateChanged)
+    var documentStopped by remember { mutableStateOf(false) }
+    var pendingCommand by remember { mutableStateOf<PpabangCommand?>(PpabangCommand.PLAY) }
+    var pageGeneration by remember { mutableStateOf(0) }
+
+    fun isTrustedPage(view: WebView): Boolean {
+        val uri = android.net.Uri.parse(view.url ?: return false)
+        return uri.scheme == "https" && uri.host == PpabangPolicy.HOST
+    }
+
+    fun stopDocument() {
+        documentStopped = true
+        pendingCommand = null
+        pageGeneration += 1
+        webViewRef?.let { view ->
+            view.stopLoading()
+            view.loadUrl("about:blank")
+        }
+        reportState(PpabangPlaybackState.STOPPED, null)
+    }
+
+    fun executeJs(js: String) {
+        webViewRef?.post {
+            webViewRef?.takeIf { isTrustedPage(it) && !documentStopped }
+                ?.evaluateJavascript(js, null)
+        }
+    }
+
+    fun deliverPendingCommand(view: WebView, generation: Int, attempt: Int = 0) {
+        if (webViewRef !== view || documentStopped || generation != pageGeneration || !isTrustedPage(view)) return
+        val command = pendingCommand ?: return
+        val script = if (command == PpabangCommand.NEXT) PpabangPolicy.JS_NEXT_COMMAND else PpabangPolicy.JS_PLAY_COMMAND
+        view.evaluateJavascript(
+            "(function(){if(!document.querySelector('#queueList button') || !document.querySelector('iframe#player')) return false; " +
+                script + "; return true;})()",
+        ) { ready ->
+            if (webViewRef !== view || documentStopped || generation != pageGeneration) return@evaluateJavascript
+            if (ready == "true") {
+                pendingCommand = null
+            } else if (attempt < 60) {
+                view.postDelayed({ deliverPendingCommand(view, generation, attempt + 1) }, 500)
+            } else {
+                pendingCommand = null
+                reportState(PpabangPlaybackState.FAILED, "재생 준비가 지연됩니다. 재생 버튼을 다시 눌러 주세요.")
+            }
+        }
+    }
+
+    LaunchedEffect(commandFlow) {
+        commandFlow.collect { command ->
+            when (command) {
+                PpabangCommand.PLAY -> {
+                    if (documentStopped) {
+                        documentStopped = false
+                        pendingCommand = PpabangCommand.PLAY
+                        webViewRef?.loadUrl(currentState.ppabangCategory.url)
+                    } else {
+                        pendingCommand = PpabangCommand.PLAY
+                        webViewRef?.let { deliverPendingCommand(it, pageGeneration) }
+                    }
+                }
+                PpabangCommand.STOP -> {
+                    stopDocument()
+                }
+                PpabangCommand.NEXT -> {
+                    if (documentStopped) {
+                        documentStopped = false
+                        pendingCommand = PpabangCommand.NEXT
+                        webViewRef?.loadUrl(currentState.ppabangCategory.url)
+                    } else {
+                        pendingCommand = PpabangCommand.NEXT
+                        webViewRef?.let { deliverPendingCommand(it, pageGeneration) }
+                    }
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(state.ppabangCategory) {
+        val target = state.ppabangCategory
+        if (loadedCategory != target) {
+            loadedCategory = target
+            documentStopped = false
+            pendingCommand = PpabangCommand.PLAY
+            webViewRef?.let { wv ->
+                onPlaybackStateChanged(PpabangPlaybackState.LOADING, null)
+                wv.loadUrl(target.url)
+            }
+        }
+    }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> {
+                    webViewRef?.onResume()
+                }
+                Lifecycle.Event.ON_PAUSE,
+                Lifecycle.Event.ON_STOP -> {
+                    stopDocument()
+                    webViewRef?.onPause()
+                }
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    Surface(
+        modifier = modifier.width(272.dp).height(216.dp),
+        color = lerp(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.primary, 0.30f).copy(alpha = backgroundOpacity),
+        shape = RoundedCornerShape(12.dp),
+        shadowElevation = 4.dp,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.6f * backgroundOpacity)),
+    ) {
+        Row(Modifier.padding(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Box(
+                modifier = Modifier
+                    .size(200.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color.Transparent)
+                    .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(12.dp)),
+                contentAlignment = Alignment.Center,
+            ) {
+                AndroidView(
+                    factory = { context ->
+                        WebView(context).apply {
+                            setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                            layoutParams = ViewGroup.LayoutParams(
+                                ViewGroup.LayoutParams.MATCH_PARENT,
+                                ViewGroup.LayoutParams.MATCH_PARENT,
+                            )
+                            settings.apply {
+                                javaScriptEnabled = true
+                                domStorageEnabled = true
+                                mediaPlaybackRequiresUserGesture = false
+                                allowFileAccess = false
+                                allowContentAccess = false
+                                mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+                                cacheMode = WebSettings.LOAD_DEFAULT
+                                setGeolocationEnabled(false)
+                                safeBrowsingEnabled = true
+                            }
+                            isLongClickable = false
+                            setOnLongClickListener { true }
+
+                            addJavascriptInterface(
+                                PpabangBridge(
+                                    onState = { playerState ->
+                                        post {
+                                        if (webViewRef !== this || !isTrustedPage(this) || documentStopped ||
+                                            !lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return@post
+                                        val newState = when (playerState) {
+                                            1 -> PpabangPlaybackState.PLAYING
+                                            2 -> PpabangPlaybackState.PAUSED
+                                            3 -> PpabangPlaybackState.LOADING
+                                            else -> null
+                                        }
+                                        if (newState != null) {
+                                            reportState(newState, null)
+                                        }
+                                        }
+                                    },
+                                    onCover = { coverStatus ->
+                                        post {
+                                        if (webViewRef !== this || !isTrustedPage(this) || documentStopped) return@post
+                                        when (coverStatus) {
+                                            "BLOCKED" -> onPlaybackStateChanged(
+                                                PpabangPlaybackState.AUTOPLAY_BLOCKED,
+                                                "화면을 터치하여 재생을 시작하세요",
+                                            )
+                                            "EMPTY" -> onPlaybackStateChanged(
+                                                PpabangPlaybackState.FAILED,
+                                                "재생 가능한 영상이 없습니다",
+                                            )
+                                            "START_COVER" -> {
+                                                if (currentState.ppabangPlaybackState != PpabangPlaybackState.PLAYING) {
+                                                    reportState(PpabangPlaybackState.IDLE, null)
+                                                }
+                                            }
+                                        }
+                                        }
+                                    },
+                                ),
+                                PpabangPolicy.JS_BRIDGE_NAME,
+                            )
+
+                            webViewClient = object : WebViewClient() {
+                                override fun shouldOverrideUrlLoading(
+                                    view: WebView,
+                                    request: WebResourceRequest,
+                                ): Boolean {
+                                    if (!request.isForMainFrame) return false
+                                    val allowed = request.url.scheme == "https" && request.url.host == PpabangPolicy.HOST
+                                    if (!allowed) stopDocument()
+                                    return !allowed
+                                }
+
+                                override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
+                                    pageGeneration += 1
+                                    if (!documentStopped) reportState(PpabangPlaybackState.LOADING, null)
+                                }
+
+                                override fun onPageFinished(view: WebView, url: String?) {
+                                    if (isTrustedPage(view) && !documentStopped) {
+                                        val generation = pageGeneration
+                                        view.evaluateJavascript(PpabangPolicy.INJECTED_SETUP_JS) {
+                                            deliverPendingCommand(view, generation)
+                                        }
+                                    }
+                                }
+
+                                override fun onReceivedError(
+                                    view: WebView,
+                                    request: WebResourceRequest,
+                                    error: WebResourceError,
+                                ) {
+                                    if (request.isForMainFrame) {
+                                        documentStopped = true
+                                        pendingCommand = null
+                                        onPlaybackStateChanged(
+                                            PpabangPlaybackState.FAILED,
+                                            "페이지를 불러오지 못했습니다",
+                                        )
+                                    }
+                                }
+
+                                override fun onReceivedSslError(
+                                    view: WebView,
+                                    handler: SslErrorHandler,
+                                    error: SslError,
+                                ) {
+                                    handler.cancel()
+                                    onPlaybackStateChanged(
+                                        PpabangPlaybackState.FAILED,
+                                        "안전한 연결을 확인할 수 없습니다",
+                                    )
+                                }
+
+                                override fun onReceivedHttpAuthRequest(
+                                    view: WebView,
+                                    handler: HttpAuthHandler,
+                                    host: String,
+                                    realm: String,
+                                ) {
+                                    handler.cancel()
+                                }
+
+                                override fun onReceivedClientCertRequest(
+                                    view: WebView,
+                                    request: ClientCertRequest,
+                                ) {
+                                    request.cancel()
+                                }
+
+                                override fun onRenderProcessGone(
+                                    view: WebView,
+                                    detail: RenderProcessGoneDetail,
+                                ): Boolean {
+                                    if (webViewRef === view) webViewRef = null
+                                    onPlaybackStateChanged(
+                                        PpabangPlaybackState.FAILED,
+                                        "웹 뷰가 재설정되었습니다",
+                                    )
+                                    return true
+                                }
+                            }
+
+                            webChromeClient = object : WebChromeClient() {
+                                override fun onPermissionRequest(request: PermissionRequest) {
+                                    request.deny()
+                                }
+
+                                override fun onGeolocationPermissionsShowPrompt(
+                                    origin: String,
+                                    callback: GeolocationPermissions.Callback,
+                                ) {
+                                    callback.invoke(origin, false, false)
+                                }
+                            }
+
+                            webViewRef = this
+                            loadedCategory = state.ppabangCategory
+                            loadUrl(state.ppabangCategory.url)
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                    onRelease = { releasedView ->
+                        if (webViewRef === releasedView) webViewRef = null
+                        releasedView.removeJavascriptInterface(PpabangPolicy.JS_BRIDGE_NAME)
+                        releasedView.stopLoading()
+                        releasedView.loadUrl("about:blank")
+                        releasedView.onPause()
+                        releasedView.removeAllViews()
+                        releasedView.destroy()
+                    },
+                )
+
+            }
+            Column(
+                Modifier.width(48.dp).height(200.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                dragHandle()
+                CompactPpabangButton("정지", onStop, backgroundOpacity = backgroundOpacity)
+                CompactPpabangButton("다음", onNext, state.ppabangPlaybackState != PpabangPlaybackState.LOADING, backgroundOpacity)
+                FilledTonalButton(
+                    onClick = onClose, modifier = Modifier.size(48.dp),
+                    contentPadding = PaddingValues(0.dp), shape = RoundedCornerShape(9.dp),
+                    colors = ButtonDefaults.filledTonalButtonColors(
+                        containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f * backgroundOpacity),
+                        contentColor = MaterialTheme.colorScheme.onSurface,
+                    ),
+                ) { Icon(Icons.Default.Close, "플레이어 닫기 및 정지", modifier = Modifier.size(21.dp)) }
+            }
+        }
+    }
+
+
+}
+
+/**
+ * Accessible dialog listing all nine categories with TV D-pad focusability.
+ */
+@Composable
+private fun CompactPpabangButton(title: String, onClick: () -> Unit, enabled: Boolean = true, backgroundOpacity: Float = 1f) {
+    FilledTonalButton(
+        onClick = onClick, enabled = enabled,
+        modifier = Modifier.size(48.dp),
+        colors = ButtonDefaults.filledTonalButtonColors(
+            containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f * backgroundOpacity),
+            contentColor = MaterialTheme.colorScheme.onSurface,
+        ),
+        contentPadding = PaddingValues(0.dp),
+        shape = RoundedCornerShape(7.dp),
+    ) { Text(title, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1) }
+}
+
+@Composable
+fun PpabangCategoryDialog(
+    currentCategory: PpabangCategory,
+    onSelect: (PpabangCategory) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Surface(
+            modifier = Modifier
+                .widthIn(min = 280.dp, max = 360.dp)
+                .padding(16.dp),
+            shape = RoundedCornerShape(18.dp),
+            color = Color(0xFF1E1E22),
+            shadowElevation = 8.dp,
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(18.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "빠방 카테고리 선택",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                    )
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier
+                            .size(28.dp)
+                            .standFocusable(shape = CircleShape)
+                            .semantics {
+                                role = Role.Button
+                                contentDescription = "닫기"
+                            },
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = null,
+                            tint = Color.White.copy(alpha = 0.7f),
+                        )
+                    }
+                }
+
+                Text(
+                    text = "원하는 음악 영상 채널을 선택하세요 (총 9개 채널)",
+                    fontSize = 12.sp,
+                    color = Color.White.copy(alpha = 0.6f),
+                )
+
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.heightIn(max = 380.dp),
+                ) {
+                    items(PpabangCategory.entries) { category ->
+                        val isSelected = category == currentCategory
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable { onSelect(category) }
+                                .standFocusable(shape = RoundedCornerShape(12.dp))
+                                .semantics {
+                                    role = Role.Button
+                                    contentDescription = "${category.title} 채널 ${if (isSelected) "선택됨" else "선택"}"
+                                },
+                            color = if (isSelected) Color(0xFFFF5722).copy(alpha = 0.25f) else Color.White.copy(alpha = 0.05f),
+                            shape = RoundedCornerShape(12.dp),
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = category.title,
+                                    color = if (isSelected) Color.White else Color.White.copy(alpha = 0.85f),
+                                    fontSize = 14.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                )
+                                if (isSelected) {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = null,
+                                        tint = Color(0xFFFF7043),
+                                        modifier = Modifier.size(18.dp),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+enum class PpabangCommand {
+    PLAY,
+    STOP,
+    NEXT,
+}

@@ -78,6 +78,7 @@ data class AppSettings(
     val homeMusicChannels: List<HomeMusicChannelSelection> = listOf(
         HomeMusicChannelSelection.Spotify,
         HomeMusicChannelSelection.YouTubeMusic,
+        HomeMusicChannelSelection.Ppabang,
     ),
 ) {
     fun normalized(): AppSettings {

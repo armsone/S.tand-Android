@@ -6,6 +6,8 @@ import com.armsone.stand.model.LampPhase
 import com.armsone.stand.model.StandExperienceMode
 import com.armsone.stand.model.ExternalMusicPlaybackState
 import com.armsone.stand.model.ExternalMusicService
+import com.armsone.stand.model.PpabangCategory
+import com.armsone.stand.model.PpabangPlaybackState
 import com.armsone.stand.platform.AmbientCameraState
 import com.armsone.stand.model.MateMonitoringStatus
 import com.armsone.stand.platform.InternetRadioState
@@ -57,12 +59,18 @@ data class StandUiState(
     val externalMusicService: ExternalMusicService? = null,
     val externalMusicPlaybackState: ExternalMusicPlaybackState = ExternalMusicPlaybackState.IDLE,
     val externalMusicMessage: String? = null,
+    val ppabangCategory: PpabangCategory = PpabangCategory.DEFAULT,
+    val ppabangPlaybackState: PpabangPlaybackState = PpabangPlaybackState.IDLE,
+    val isPpabangPlayerVisible: Boolean = false,
+    val ppabangMessage: String? = null,
     val monitoringStatus: MateMonitoringStatus? = null,
 ) {
     val monitoringStatusText: String?
         get() = monitoringStatus?.displayText
     val isExternalMusicModeActive: Boolean
         get() = externalMusicService != null
+    val isPpabangActive: Boolean
+        get() = isPpabangPlayerVisible || ppabangPlaybackState == PpabangPlaybackState.PLAYING || ppabangPlaybackState == PpabangPlaybackState.LOADING
     val isDisplayDark: Boolean
         get() = isSessionActive && lampPhase == LampPhase.OFF && !controlsVisible
 

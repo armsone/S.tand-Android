@@ -29,6 +29,8 @@ import com.armsone.stand.model.ExternalMusicPlaybackState
 import com.armsone.stand.model.ExternalMusicService
 import com.armsone.stand.model.HomeMusicChannelPolicy
 import com.armsone.stand.model.HomeMusicChannelSelection
+import com.armsone.stand.model.PpabangCategory
+import com.armsone.stand.model.PpabangPlaybackState
 import com.armsone.stand.model.OrientationPreference
 import com.armsone.stand.model.SimplifiedBrightnessModePolicy
 import com.armsone.stand.model.StandDisplayTheme
@@ -60,6 +62,7 @@ import com.armsone.stand.recording.RecordingRepository
 import com.armsone.stand.recording.RecordingSessionGroup
 import com.armsone.stand.recording.RecordingSessionStore
 import com.armsone.stand.recording.SessionMonitoringHealth
+import com.armsone.stand.ui.PpabangCommand
 import com.armsone.stand.ui.StandUiState
 import com.armsone.stand.ui.WeatherUiState
 import com.armsone.stand.weather.WeatherAvailability
@@ -107,9 +110,14 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
     )
 
     private val mutableUiState = MutableStateFlow(
-        StandUiState(settings = settingsRepository.settings.value),
+        StandUiState(
+            settings = settingsRepository.settings.value,
+            ppabangCategory = settingsRepository.getSelectedPpabangCategory(),
+        ),
     )
     val uiState: StateFlow<StandUiState> = mutableUiState.asStateFlow()
+    private val mutablePpabangCommands = MutableSharedFlow<PpabangCommand>(extraBufferCapacity = 8)
+    val ppabangCommands: SharedFlow<PpabangCommand> = mutablePpabangCommands.asSharedFlow()
     private val mutableLocalMovementEvents = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val localMovementEvents: SharedFlow<Unit> = mutableLocalMovementEvents.asSharedFlow()
     val recordings: StateFlow<List<RecordingClip>> = recordingRepository.recordings
@@ -649,6 +657,7 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
             InternetRadioState.Idle,
             is InternetRadioState.Failed,
             -> {
+                stopPpabang(clearVisibility = true)
                 endExternalMusicMode()
                 selectInternetRadio(channelID)
                 internetRadioPlayer.play(channel)
@@ -666,6 +675,7 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
                 if (activeID == channelID) {
                     internetRadioPlayer.stop()
                 } else {
+                    stopPpabang(clearVisibility = true)
                     endExternalMusicMode()
                     selectInternetRadio(channelID)
                     internetRadioPlayer.play(channel)
@@ -675,6 +685,7 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun beginExternalMusicMode(service: ExternalMusicService) {
+        stopPpabang(clearVisibility = true)
         internetRadioPlayer.stop()
         mutableUiState.update { current ->
             current.copy(
@@ -705,6 +716,77 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
                 externalMusicService = null,
                 externalMusicPlaybackState = ExternalMusicPlaybackState.IDLE,
                 externalMusicMessage = null,
+            )
+        }
+        syncSleepCareMonitoring()
+    }
+
+    fun startPpabang(category: PpabangCategory = mutableUiState.value.ppabangCategory) {
+        val resumesCurrentPlayer = mutableUiState.value.isPpabangPlayerVisible &&
+            mutableUiState.value.ppabangCategory == category
+        internetRadioPlayer.stop()
+        endExternalMusicMode()
+        selectPpabangCategory(category)
+        mutableUiState.update { current ->
+            current.copy(
+                isPpabangPlayerVisible = true,
+                ppabangCategory = category,
+                ppabangPlaybackState = PpabangPlaybackState.LOADING,
+                ppabangMessage = null,
+            )
+        }
+        if (resumesCurrentPlayer) mutablePpabangCommands.tryEmit(PpabangCommand.PLAY)
+        audioMonitor.stop()
+        syncSleepCareMonitoring()
+    }
+
+    fun selectPpabangCategory(category: PpabangCategory) {
+        settingsRepository.setSelectedPpabangCategory(category)
+        mutableUiState.update { it.copy(ppabangCategory = category) }
+    }
+
+    fun cyclePpabangCategory() {
+        val next = PpabangCategory.next(mutableUiState.value.ppabangCategory)
+        selectPpabangCategory(next)
+        if (mutableUiState.value.isPpabangPlayerVisible) {
+            startPpabang(next)
+        }
+    }
+
+    fun playPpabang() {
+        internetRadioPlayer.stop()
+        endExternalMusicMode()
+        if (!mutableUiState.value.isPpabangPlayerVisible) {
+            startPpabang()
+        } else {
+            mutablePpabangCommands.tryEmit(PpabangCommand.PLAY)
+        }
+    }
+
+    fun stopPpabang(clearVisibility: Boolean = false) {
+        mutablePpabangCommands.tryEmit(PpabangCommand.STOP)
+        mutableUiState.update { current ->
+            current.copy(
+                ppabangPlaybackState = PpabangPlaybackState.STOPPED,
+                isPpabangPlayerVisible = if (clearVisibility) false else current.isPpabangPlayerVisible,
+            )
+        }
+        syncSleepCareMonitoring()
+    }
+
+    fun nextPpabang() {
+        mutablePpabangCommands.tryEmit(PpabangCommand.NEXT)
+    }
+
+    fun closePpabangPlayer() {
+        stopPpabang(clearVisibility = true)
+    }
+
+    fun onPpabangStateChanged(state: PpabangPlaybackState, message: String? = null) {
+        mutableUiState.update { current ->
+            current.copy(
+                ppabangPlaybackState = state,
+                ppabangMessage = message,
             )
         }
         syncSleepCareMonitoring()
@@ -1654,6 +1736,7 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
                     internetRadioPlayer.state.value !is InternetRadioState.Playing &&
                     internetRadioPlayer.state.value !is InternetRadioState.Reconnecting &&
                     !state.isExternalMusicModeActive &&
+                    !state.isPpabangActive &&
                     !state.batteryProtectionActive &&
                     microphonePermissionGranted
                 if (shouldMonitor) {

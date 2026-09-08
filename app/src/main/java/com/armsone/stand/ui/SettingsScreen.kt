@@ -162,6 +162,7 @@ private fun musicSelectionTitle(
 ): String = when (selection.kind) {
     HomeMusicChannelKind.SPOTIFY -> ExternalMusicService.SPOTIFY.displayName
     HomeMusicChannelKind.YOUTUBE_MUSIC -> ExternalMusicService.YOUTUBE_MUSIC.displayName
+    HomeMusicChannelKind.PPABANG -> "빠방"
     HomeMusicChannelKind.INTERNET_RADIO -> settings.internetRadioChannels
         .firstOrNull { it.id == selection.radioID }
         ?.displayName
@@ -380,8 +381,11 @@ fun SettingsScreen(
                                 val service = when (selection.kind) {
                                     HomeMusicChannelKind.SPOTIFY -> ExternalMusicService.SPOTIFY
                                     HomeMusicChannelKind.YOUTUBE_MUSIC -> ExternalMusicService.YOUTUBE_MUSIC
-                                    HomeMusicChannelKind.INTERNET_RADIO -> null
+                                    HomeMusicChannelKind.INTERNET_RADIO,
+                                    HomeMusicChannelKind.PPABANG -> null
                                 }
+                                val isPpabang = selection.kind == HomeMusicChannelKind.PPABANG
+                                val ppabangActive = isPpabang && state.isPpabangActive
                                 val radioActive = channel != null && when (val radioState = state.internetRadioState) {
                                     is InternetRadioState.Loading -> radioState.channelID == channel.id
                                     is InternetRadioState.Playing -> radioState.channelID == channel.id
@@ -389,8 +393,10 @@ fun SettingsScreen(
                                     else -> false
                                 }
                                 val serviceActive = service != null && state.externalMusicService == service
-                                val active = radioActive || serviceActive
+                                val active = radioActive || serviceActive || ppabangActive
                                 val status = when {
+                                    isPpabang && ppabangActive -> "재생 중 · ${state.ppabangCategory.title}"
+                                    isPpabang -> "9개 음악 영상 채널 · ${state.ppabangCategory.title}"
                                     service != null && serviceActive -> "음악 듣기 모드 · 앱 다시 열기"
                                     service != null -> "로그인하고 음악 앱 열기"
                                     channel == null -> "등록을 기다림"
@@ -522,9 +528,10 @@ fun SettingsScreen(
                                             verticalAlignment = Alignment.CenterVertically,
                                             horizontalArrangement = Arrangement.spacedBy(4.dp),
                                         ) {
-                                            IconButton(
+                                             IconButton(
                                                 onClick = {
                                                     when {
+                                                        isPpabang -> Unit
                                                         service != null -> onOpenExternalMusic(service)
                                                         channel != null -> onToggleInternetRadio(channel.id)
                                                         else -> {
@@ -545,11 +552,14 @@ fun SettingsScreen(
                                             ) {
                                                 Icon(
                                                     when {
+                                                        isPpabang && ppabangActive -> Icons.Default.PauseCircle
+                                                        isPpabang -> Icons.Default.PlayArrow
                                                         radioActive -> Icons.Default.PauseCircle
                                                         service == ExternalMusicService.SPOTIFY -> Icons.Default.MusicNote
                                                         else -> Icons.Default.PlayArrow
                                                     },
                                                     contentDescription = when {
+                                                        isPpabang -> "빠방 음악 채널"
                                                         service != null -> "${service.displayName} 열기"
                                                         channel != null -> "${channel.displayName} 재생"
                                                         else -> "인터넷 라디오 등록"

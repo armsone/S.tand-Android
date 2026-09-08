@@ -18,14 +18,16 @@ enum class HomeMusicChannelKind {
     SPOTIFY,
     YOUTUBE_MUSIC,
     INTERNET_RADIO,
+    PPABANG,
 }
 
 /**
  * Android's Spotify/YouTube Music equivalents of iOS's Apple Music/Apple Music
- * Classical channels, plus [AppSettings.MAXIMUM_INTERNET_RADIO_CHANNEL_COUNT]
- * stable internet-radio slots. [radioSlot] identifies a fixed home-card position
- * (0-based) independent of which radio configuration currently fills it, mirroring
- * the iOS `HomeMusicChannelSelection.radioSlot` source token.
+ * Classical channels, plus Ppabang shorts music channel, plus
+ * [AppSettings.MAXIMUM_INTERNET_RADIO_CHANNEL_COUNT] stable internet-radio slots.
+ * [radioSlot] identifies a fixed home-card position (0-based) independent of which
+ * radio configuration currently fills it, mirroring the iOS
+ * `HomeMusicChannelSelection.radioSlot` source token.
  */
 data class HomeMusicChannelSelection(
     val kind: HomeMusicChannelKind,
@@ -36,6 +38,7 @@ data class HomeMusicChannelSelection(
         get() = when (kind) {
             HomeMusicChannelKind.SPOTIFY -> "spotify"
             HomeMusicChannelKind.YOUTUBE_MUSIC -> "youtube_music"
+            HomeMusicChannelKind.PPABANG -> "ppabang"
             HomeMusicChannelKind.INTERNET_RADIO ->
                 "radio:${radioSlot?.toString() ?: "legacy"}:${radioID.orEmpty()}"
         }
@@ -45,6 +48,7 @@ data class HomeMusicChannelSelection(
     companion object {
         val Spotify = HomeMusicChannelSelection(HomeMusicChannelKind.SPOTIFY)
         val YouTubeMusic = HomeMusicChannelSelection(HomeMusicChannelKind.YOUTUBE_MUSIC)
+        val Ppabang = HomeMusicChannelSelection(HomeMusicChannelKind.PPABANG)
 
         fun radio(id: String, slot: Int? = null) =
             HomeMusicChannelSelection(HomeMusicChannelKind.INTERNET_RADIO, id, slot)
@@ -58,6 +62,7 @@ data class HomeMusicChannelSelection(
             return when {
                 value == "spotify" -> Spotify
                 value == "youtube_music" || value == "apple_music" -> YouTubeMusic
+                value == "ppabang" -> Ppabang
                 value.startsWith("radio:") -> {
                     val rest = value.removePrefix("radio:")
                     val separatorIndex = rest.indexOf(':')
@@ -85,7 +90,7 @@ data class HomeMusicChannelSelection(
  * empty placeholders), mirroring iOS's `normalizedHomeMusicChannels`.
  */
 object HomeMusicChannelPolicy {
-    val CARD_COUNT: Int get() = 2 + AppSettings.MAXIMUM_INTERNET_RADIO_CHANNEL_COUNT
+    val CARD_COUNT: Int get() = 3 + AppSettings.MAXIMUM_INTERNET_RADIO_CHANNEL_COUNT
 
     fun normalized(
         requested: List<HomeMusicChannelSelection>,
@@ -105,6 +110,7 @@ object HomeMusicChannelPolicy {
         val usedSlots = mutableSetOf<Int>()
         var hasSpotify = false
         var hasYouTubeMusic = false
+        var hasPpabang = false
         val result = mutableListOf<HomeMusicChannelSelection>()
 
         for (candidate in requested) {
@@ -116,6 +122,10 @@ object HomeMusicChannelPolicy {
                 HomeMusicChannelKind.YOUTUBE_MUSIC -> if (!hasYouTubeMusic) {
                     result += HomeMusicChannelSelection.YouTubeMusic
                     hasYouTubeMusic = true
+                }
+                HomeMusicChannelKind.PPABANG -> if (!hasPpabang) {
+                    result += HomeMusicChannelSelection.Ppabang
+                    hasPpabang = true
                 }
                 HomeMusicChannelKind.INTERNET_RADIO -> {
                     val slot = normalizedRadioSlot(candidate.radioSlot, usedSlots, slotCount)
@@ -142,6 +152,7 @@ object HomeMusicChannelPolicy {
 
         if (!hasSpotify) result += HomeMusicChannelSelection.Spotify
         if (!hasYouTubeMusic) result += HomeMusicChannelSelection.YouTubeMusic
+        if (!hasPpabang) result += HomeMusicChannelSelection.Ppabang
 
         for (slot in 0 until slotCount) {
             if (slot in usedSlots) continue
@@ -185,7 +196,7 @@ object HomeMusicChannelPolicy {
         if (slot !in normalized.indices || !isValid(selection, radioChannels)) return normalized
         val otherIndex = normalized.indexOfFirst { candidate ->
             when (selection.kind) {
-                HomeMusicChannelKind.SPOTIFY, HomeMusicChannelKind.YOUTUBE_MUSIC ->
+                HomeMusicChannelKind.SPOTIFY, HomeMusicChannelKind.YOUTUBE_MUSIC, HomeMusicChannelKind.PPABANG ->
                     candidate.kind == selection.kind
                 HomeMusicChannelKind.INTERNET_RADIO ->
                     candidate.kind == HomeMusicChannelKind.INTERNET_RADIO && if (selection.radioID != null) {
@@ -266,7 +277,7 @@ object HomeMusicChannelPolicy {
         selection: HomeMusicChannelSelection,
         radioChannels: List<InternetRadioConfiguration>,
     ): Boolean = when (selection.kind) {
-        HomeMusicChannelKind.SPOTIFY, HomeMusicChannelKind.YOUTUBE_MUSIC -> true
+        HomeMusicChannelKind.SPOTIFY, HomeMusicChannelKind.YOUTUBE_MUSIC, HomeMusicChannelKind.PPABANG -> true
         HomeMusicChannelKind.INTERNET_RADIO -> selection.radioID == null ||
             radioChannels.any { it.id == selection.radioID }
     }

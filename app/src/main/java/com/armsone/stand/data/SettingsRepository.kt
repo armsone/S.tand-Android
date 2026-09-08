@@ -15,6 +15,7 @@ import com.armsone.stand.model.HomeMusicChannelPolicy
 import com.armsone.stand.model.HomeMusicChannelSelection
 import com.armsone.stand.model.ScreenLayoutCodec
 import com.armsone.stand.model.StandScreenLayout
+import com.armsone.stand.model.PpabangCategory
 import com.armsone.stand.model.StandDisplayTheme
 import com.armsone.stand.model.StandModePreference
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -46,6 +47,15 @@ class SettingsRepository(context: Context) {
         val recommended = AppSettings.Recommended
         persist(recommended)
         mutableSettings.value = recommended
+    }
+
+    fun getSelectedPpabangCategory(): PpabangCategory =
+        PpabangCategory.fromId(stringValue(PPABANG_SELECTED_CATEGORY_KEY))
+
+    fun setSelectedPpabangCategory(category: PpabangCategory) {
+        preferences.edit {
+            putString(PPABANG_SELECTED_CATEGORY_KEY, category.id)
+        }
     }
 
     private fun loadAndMigrate(): AppSettings {
@@ -293,6 +303,7 @@ class SettingsRepository(context: Context) {
         const val RADIO_NAME_PREFIX = "internetRadioName."
         const val RADIO_URL_PREFIX = "internetRadioUrl."
         const val SELECTED_RADIO_ID_KEY = "selectedInternetRadioId"
+        const val PPABANG_SELECTED_CATEGORY_KEY = "ppabangSelectedCategory"
         val HOME_MUSIC_CHANNEL_KEYS: List<String> = (0 until HomeMusicChannelPolicy.CARD_COUNT)
             .map { index -> "homeMusicChannel.$index" }
         const val LEGACY_RADIO_ID = "legacy-primary-radio"

@@ -261,11 +261,12 @@ class MainActivity : ComponentActivity() {
             standViewModel.setModePreference(StandModePreference.OBJECT)
         }
 
-        applySessionWindowState(state.isSessionActive || state.isExternalMusicModeActive)
+        applySessionWindowState(state.isSessionActive || state.isExternalMusicModeActive || state.isPpabangActive)
         applyOrientationPreference(state.settings.orientationPreference)
     }
 
     override fun onStop() {
+        standViewModel.stopPpabang()
         stopRadioTransferReceiver()
         BoyisoManager.isAppVisible = false
         stopObservingSystemBrightness()
@@ -630,8 +631,13 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        LaunchedEffect(state.isSessionActive, state.isExternalMusicModeActive) {
-            applySessionWindowState(state.isSessionActive || state.isExternalMusicModeActive)
+        LaunchedEffect(state.isSessionActive, state.isExternalMusicModeActive, state.isPpabangActive) {
+            applySessionWindowState(state.isSessionActive || state.isExternalMusicModeActive || state.isPpabangActive)
+        }
+        LaunchedEffect(destination) {
+            if (destination != AppDestination.HOME) {
+                standViewModel.stopPpabang()
+            }
         }
         LaunchedEffect(state.settings.orientationPreference) {
             applyOrientationPreference(state.settings.orientationPreference)
@@ -691,6 +697,15 @@ class MainActivity : ComponentActivity() {
                     onToggleRadio = standViewModel::toggleInternetRadio,
                     onOpenExternalMusic = ::openExternalMusic,
                     onEndExternalMusic = standViewModel::endExternalMusicMode,
+                    ppabangCommandFlow = standViewModel.ppabangCommands,
+                    onPlayPpabang = standViewModel::playPpabang,
+                    onStopPpabang = { standViewModel.stopPpabang(clearVisibility = false) },
+                    onNextPpabang = standViewModel::nextPpabang,
+                    onStartPpabang = standViewModel::startPpabang,
+                    onSelectPpabangCategory = standViewModel::selectPpabangCategory,
+                    onCyclePpabangCategory = standViewModel::cyclePpabangCategory,
+                    onClosePpabang = standViewModel::closePpabangPlayer,
+                    onPpabangStateChanged = standViewModel::onPpabangStateChanged,
                     onEditRadio = { channelID ->
                         radioEditorChannelID = channelID
                         secondaryReturnDestination = AppDestination.HOME
