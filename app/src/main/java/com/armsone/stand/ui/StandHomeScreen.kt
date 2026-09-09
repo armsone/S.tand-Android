@@ -2478,19 +2478,25 @@ private fun HomeControls(
         animationSpec = tween(durationMillis = 200),
         label = "tv-bottom-controls-alpha",
     )
+    val isPortraitPpabangGroup = isPortrait && !isTelevision && trailingContent != null
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .graphicsLayer { alpha = bottomControlsAlpha },
         verticalAlignment = Alignment.Bottom,
-        horizontalArrangement = Arrangement.spacedBy(7.dp, Alignment.End),
+        horizontalArrangement = Arrangement.spacedBy(
+            7.dp,
+            if (isPortraitPpabangGroup) Alignment.CenterHorizontally else Alignment.End,
+        ),
     ) {
     FlowRow(
-        modifier = Modifier.weight(1f),
-        maxItemsInEachRow = if (isTelevision) 8 else if (isPortrait) 1 else if (isExpanded) 7 else 4,
+        modifier = if (isPortraitPpabangGroup) Modifier.width(98.dp) else Modifier.weight(1f),
+        maxItemsInEachRow = if (isTelevision) 8 else if (isPortraitPpabangGroup) 1 else if (isPortrait) 3 else if (isExpanded) 7 else 4,
         horizontalArrangement = Arrangement.spacedBy(
             if (isTelevision) 5.dp else 7.dp,
-            if (isPortrait && !isTelevision) Alignment.End else Alignment.CenterHorizontally,
+            if (isPortraitPpabangGroup) Alignment.CenterHorizontally
+            else if (isPortrait && !isTelevision) Alignment.CenterHorizontally
+            else Alignment.CenterHorizontally,
         ),
         verticalArrangement = Arrangement.spacedBy(7.dp),
     ) {
