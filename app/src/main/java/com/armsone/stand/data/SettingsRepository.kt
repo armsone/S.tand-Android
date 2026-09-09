@@ -151,7 +151,7 @@ class SettingsRepository(context: Context) {
         brightnessModeThreshold = floatValue("brightnessModeThreshold", 0.4f),
         holdDurationSeconds = floatValue("holdDurationSeconds", 5f),
         fadeDurationSeconds = floatValue("fadeDurationSeconds", 30f),
-        automaticDimmingEnabled = booleanValue("automaticDimmingEnabled", false),
+        automaticDimmingEnabled = booleanValue("automaticDimmingEnabled", true),
         soundThresholdDB = floatValue("soundThresholdDB", -36f),
         recordingEnabled = booleanValue("recordingEnabled", true),
         orientationPreference = enumValue(

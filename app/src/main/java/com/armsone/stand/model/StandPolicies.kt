@@ -24,6 +24,7 @@ object SimplifiedBrightnessModePolicy {
     const val ENDPOINT_LOCK_DELAY_MILLIS = 1_000L
     const val OBJECT_LOCK_RELEASE_LEVEL = 0.95f
     const val MATE_LOCK_RELEASE_LEVEL = 0.05f
+    const val DARK_SAMPLE_REDUCTION_STEP = 0.05f
 
     fun clamped(level: Float): Float = when {
         !level.isFinite() -> 0f
@@ -72,6 +73,51 @@ object SimplifiedBrightnessModePolicy {
 
     fun tapLevel(from: EnvironmentDisplayMode): Float =
         if (from == EnvironmentDisplayMode.OBJECT) MATE_TAP_LEVEL else OBJECT_TAP_LEVEL
+
+    fun targetLampIntensityForMode(
+        mode: EnvironmentDisplayMode,
+        isAutomatic: Boolean,
+        displayBrightness: Float,
+        configuredLampIntensity: Float,
+    ): Float = when (mode) {
+        EnvironmentDisplayMode.MATE -> {
+            if (isAutomatic) clamped(displayBrightness) else clamped(configuredLampIntensity)
+        }
+        EnvironmentDisplayMode.OBJECT -> {
+            if (isAutomatic) clamped(displayBrightness) else clamped(configuredLampIntensity)
+        }
+    }
+
+    fun isEligibleForDarkProgressiveReduction(
+        isSessionActive: Boolean,
+        modePreference: StandModePreference,
+        environmentMode: EnvironmentDisplayMode,
+        isAdjustingBrightness: Boolean,
+        isFaceDown: Boolean,
+        isTelevision: Boolean = false,
+    ): Boolean = isSessionActive &&
+        !isTelevision &&
+        !isAdjustingBrightness &&
+        !isFaceDown &&
+        modePreference == StandModePreference.AUTOMATIC &&
+        environmentMode == EnvironmentDisplayMode.MATE
+
+    fun reducedDarkLampIntensity(
+        currentIntensity: Float,
+        step: Float = DARK_SAMPLE_REDUCTION_STEP,
+    ): Float {
+        val clampedCurrent = clamped(currentIntensity)
+        if (clampedCurrent <= 0f) return 0f
+        val bounded = if (clampedCurrent > MATE_TAP_LEVEL) MATE_TAP_LEVEL else clampedCurrent
+        val next = bounded - step
+        if (next <= 0f) return 0f
+        return ((next * 100f).roundToInt() / 100f).coerceIn(0f, MATE_TAP_LEVEL)
+    }
+
+    fun reducedDarkBrightness(
+        currentBrightness: Float,
+        step: Float = DARK_SAMPLE_REDUCTION_STEP,
+    ): Float = reducedDarkLampIntensity(currentBrightness, step)
 }
 
 object AppBrightnessSystemSyncPolicy {
@@ -82,6 +128,17 @@ object AppBrightnessSystemSyncPolicy {
     ): Boolean = !isAdjustingBrightness &&
         modePreference == StandModePreference.AUTOMATIC &&
         !isFaceDown
+
+    fun targetLampIntensityOnSystemBrightnessChange(
+        isSessionActive: Boolean,
+        environmentMode: EnvironmentDisplayMode,
+        currentLampIntensity: Float,
+        newSystemBrightness: Float,
+    ): Float = when {
+        !isSessionActive -> 0f
+        environmentMode == EnvironmentDisplayMode.MATE -> currentLampIntensity
+        else -> SimplifiedBrightnessModePolicy.clamped(newSystemBrightness)
+    }
 }
 
 object HoldDurationAdjustment {
@@ -143,7 +200,7 @@ object SleepCareMonitoringPolicy {
 }
 
 object StartleActivationPolicy {
-    const val DELAY_MILLIS = 120_000L
+    const val DELAY_MILLIS = 60_000L
 
     fun canActivate(
         mateModeEnteredAtMillis: Long?,
@@ -170,7 +227,7 @@ object SleepMovementLightingPolicy {
         environmentMode: EnvironmentDisplayMode,
     ): Double {
         if (environmentMode != EnvironmentDisplayMode.MATE || !roomIsDark) return 0.0
-        return if (torchEnabled) 1.0 else 0.1
+        return if (torchEnabled) 0.15 else 0.0
     }
 }
 

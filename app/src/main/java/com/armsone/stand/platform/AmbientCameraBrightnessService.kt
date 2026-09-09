@@ -102,6 +102,39 @@ object AmbientCameraModePolicy {
             (reading?.value ?: Float.POSITIVE_INFINITY) <= AmbientCameraPolicy.DarkThreshold
 }
 
+object AmbientRoomDarknessPolicy {
+    fun isRoomDark(
+        hasLightSensor: Boolean,
+        normalizedAmbientLight: Float?,
+        ambientSensingEnabled: Boolean,
+        brightnessModeThreshold: Float,
+        cameraAmbientSensingEnabled: Boolean,
+        cameraReading: AmbientCameraReading?,
+        nowNanos: Long,
+        environmentMode: EnvironmentDisplayMode,
+        displayBrightness: Float = 0f,
+    ): Boolean {
+        if (hasLightSensor) {
+            if (!ambientSensingEnabled) {
+                return environmentMode == EnvironmentDisplayMode.MATE ||
+                    displayBrightness < brightnessModeThreshold
+            }
+            val normalized = normalizedAmbientLight ?: displayBrightness
+            return normalized < brightnessModeThreshold
+        }
+
+        if (cameraAmbientSensingEnabled &&
+            AmbientCameraPolicy.isFresh(cameraReading, nowNanos)
+        ) {
+            return (cameraReading?.value ?: Float.POSITIVE_INFINITY) <= AmbientCameraPolicy.DarkThreshold
+        }
+
+        val normalized = normalizedAmbientLight ?: displayBrightness
+        return environmentMode == EnvironmentDisplayMode.MATE ||
+            normalized < brightnessModeThreshold
+    }
+}
+
 /**
  * Opens one camera only for a short Y-plane luminance measurement. No image is encoded, saved,
  * uploaded, or exposed to callers.

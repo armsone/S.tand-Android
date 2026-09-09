@@ -704,6 +704,7 @@ class MainActivity : ComponentActivity() {
                     onStartPpabang = standViewModel::startPpabang,
                     onSelectPpabangCategory = standViewModel::selectPpabangCategory,
                     onCyclePpabangCategory = standViewModel::cyclePpabangCategory,
+                    onRefreshPpabangCategories = standViewModel::refreshPpabangCategories,
                     onClosePpabang = standViewModel::closePpabangPlayer,
                     onPpabangStateChanged = standViewModel::onPpabangStateChanged,
                     onEditRadio = { channelID ->
@@ -841,6 +842,7 @@ class MainActivity : ComponentActivity() {
                         onMergeToday = standViewModel::mergeToday,
                         onDeleteSelected = standViewModel::deleteRecordings,
                         onDeleteAll = standViewModel::deleteAllRecordings,
+                        onDeleteSessions = standViewModel::deleteRecordingSessions,
                     )
                 }
 

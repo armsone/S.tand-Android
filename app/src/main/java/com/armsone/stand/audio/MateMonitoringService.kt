@@ -153,7 +153,7 @@ class MateMonitoringService : Service() {
         const val ACTION_UPDATE_STATUS = "com.armsone.stand.audio.UPDATE_STATUS"
         const val EXTRA_STATUS_TEXT = "status_text"
 
-        const val DEFAULT_STATUS_TEXT = "소리 감시 중"
+        const val DEFAULT_STATUS_TEXT = "방 소리 익히는 중"
 
         fun start(context: Context, statusText: String? = null) {
             val intent = Intent(context, MateMonitoringService::class.java).apply {

@@ -64,7 +64,10 @@ data class RecordingSessionGroup(
         get() = SleepSessionInsight.from(this)
 
     val isGenuineQuietNight: Boolean
-        get() = clips.isEmpty() && (monitoringHealth == SessionMonitoringHealth.MONITORED || monitoredDurationSeconds > 0.0) && failureReason == null
+        get() = clips.isEmpty() &&
+            startleEvents.isEmpty() &&
+            (monitoringHealth == SessionMonitoringHealth.MONITORED || monitoredDurationSeconds > 0.0) &&
+            failureReason == null
 
     val isFailedOrUnmonitored: Boolean
         get() = clips.isEmpty() && (monitoringHealth == SessionMonitoringHealth.FAILED || failureReason != null || (monitoringHealth == SessionMonitoringHealth.UNMONITORED && !isInferred))
@@ -463,6 +466,30 @@ class RecordingSessionStore(
         true
     }
 
+    /** 지정한 세션 메타데이터를 저장소 메모리와 manifest에서 완전히 제거합니다. */
+    @Throws(IOException::class)
+    fun deleteSessions(sessionIds: Collection<UUID>): Boolean = synchronized(lock) {
+        if (sessionIds.isEmpty()) return@synchronized false
+        val idSet = sessionIds.toSet()
+        val candidate = storedSessions.filterNot { it.id in idSet }
+        if (candidate.size == storedSessions.size) return@synchronized false
+        commitLocked(candidate)
+        true
+    }
+
+    /** 모든 세션 메타데이터를 저장소 메모리와 manifest에서 완전히 비웁니다. */
+    @Throws(IOException::class)
+    fun deleteAllSessions(): Boolean = synchronized(lock) {
+        if (storedSessions.isEmpty() && !manifestFile.exists()) return@synchronized false
+        if (manifestFile.exists() && !manifestFile.delete()) {
+            commitLocked(emptyList())
+        } else {
+            storedSessions = emptyList()
+            lastPersistenceError = null
+        }
+        true
+    }
+
     private fun recoverOpenSessionsLocked() {
         val recovered = storedSessions.map { session ->
             if (session.endedAt == null) {
@@ -565,6 +592,15 @@ class RecordingSessionStore(
 
     companion object {
         const val MANIFEST_FILE_NAME = ".recording-sessions-v1"
+
+        fun sessionIdFromGroupId(groupId: String): UUID? {
+            if (!groupId.startsWith("session-")) return null
+            return try {
+                UUID.fromString(groupId.removePrefix("session-"))
+            } catch (_: IllegalArgumentException) {
+                null
+            }
+        }
         private const val MANIFEST_HEADER_V1 = "S.TAND-RECORDING-SESSIONS\t1"
         private const val MANIFEST_HEADER_V2 = "S.TAND-RECORDING-SESSIONS\t2"
         private const val MANIFEST_HEADER = "S.TAND-RECORDING-SESSIONS\t3"

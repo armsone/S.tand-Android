@@ -144,9 +144,19 @@ class AudioMonitor(
             return
         }
 
-        synchronized(lifecycleLock) {
-            if (workerThread?.isAlive == true) return
+        val threadToJoin = synchronized(lifecycleLock) {
+            if (workerThread?.isAlive == true && !stopRequested && _state.value is AudioMonitorState.Monitoring) {
+                return
+            }
+            stopRequested = true
+            workerThread
+        }
 
+        if (threadToJoin != null && threadToJoin !== Thread.currentThread()) {
+            runCatching { threadToJoin.join(STOP_JOIN_TIMEOUT_MILLIS) }
+        }
+
+        synchronized(lifecycleLock) {
             stopRequested = false
             resetProcessingState()
             _errorMessage.value = null
@@ -215,16 +225,38 @@ class AudioMonitor(
                 .setSampleRate(sampleRate)
                 .setChannelMask(AudioFormat.CHANNEL_IN_MONO)
                 .build()
-            val record = AudioRecord.Builder()
-                .setAudioSource(MediaRecorder.AudioSource.VOICE_RECOGNITION)
-                .setAudioFormat(format)
-                .setBufferSizeInBytes(audioBufferBytes)
-                .build()
-            localRecord = record
+            val sourcesToTry = intArrayOf(
+                MediaRecorder.AudioSource.VOICE_RECOGNITION,
+                MediaRecorder.AudioSource.MIC,
+                MediaRecorder.AudioSource.DEFAULT,
+            )
+            var initializedRecord: AudioRecord? = null
+            for (source in sourcesToTry) {
+                val candidateRecord = runCatching {
+                    AudioRecord.Builder()
+                        .setAudioSource(source)
+                        .setAudioFormat(format)
+                        .setBufferSizeInBytes(audioBufferBytes)
+                        .build()
+                }.getOrNull() ?: runCatching {
+                    @Suppress("DEPRECATION")
+                    AudioRecord(
+                        source,
+                        sampleRate,
+                        AudioFormat.CHANNEL_IN_MONO,
+                        AudioFormat.ENCODING_PCM_16BIT,
+                        audioBufferBytes,
+                    )
+                }.getOrNull()
 
-            if (record.state != AudioRecord.STATE_INITIALIZED) {
-                throw AudioMonitorException("마이크 입력을 초기화할 수 없습니다.")
+                if (candidateRecord != null && candidateRecord.state == AudioRecord.STATE_INITIALIZED) {
+                    initializedRecord = candidateRecord
+                    break
+                }
+                runCatching { candidateRecord?.release() }
             }
+            val record = initializedRecord ?: throw AudioMonitorException("마이크 입력을 초기화할 수 없습니다.")
+            localRecord = record
 
             synchronized(lifecycleLock) {
                 if (stopRequested) return
@@ -303,25 +335,23 @@ class AudioMonitor(
         )
         val effectiveClapPeakThresholdDB = AdaptiveSoundThresholdPolicy.clapPeakThreshold(
             noiseFloorDB = adaptiveState.noiseFloorDB,
-            userThresholdDB = requested.soundThresholdDB,
-            configuredPeakThresholdDB = requested.clapPeakThresholdDB,
         )
         detector.configuration = requestedConfiguration.copy(
             soundThresholdDB = effectiveSoundThresholdDB,
             clapPeakThresholdDB = effectiveClapPeakThresholdDB,
         )
-        val detection = if (AudioCalibrationPolicy.canReact(adaptiveState)) {
-            detector.analyze(
-                rmsDB = analysis.rmsDB,
-                peakDB = analysis.peakDB,
-                bufferDuration = analysis.features.duration,
-                now = nowNanos / NANOS_PER_SECOND,
-            )
+        val canReactToRoomSound = AudioCalibrationPolicy.canReact(adaptiveState)
+        val measuredDetection = detector.analyze(
+            rmsDB = analysis.rmsDB,
+            peakDB = analysis.peakDB,
+            bufferDuration = analysis.features.duration,
+            now = nowNanos / NANOS_PER_SECOND,
+        )
+        val detection = if (canReactToRoomSound) {
+            measuredDetection
         } else {
-            detector.reset()
-            classifier.reset()
             AudioDetection(
-                clapDetected = false,
+                clapDetected = measuredDetection.clapDetected,
                 soundBegan = false,
                 isAboveSoundThreshold = false,
             )

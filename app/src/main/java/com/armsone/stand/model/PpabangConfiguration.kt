@@ -1,34 +1,69 @@
 package com.armsone.stand.model
 
+import java.net.HttpURLConnection
+import java.net.URL
+import org.json.JSONObject
+
 /**
- * Ppabang (빠방) nine verified categories:
- * golfVertical=세로 골프, golfHorizontal=가로 골프, camping=캠핑, girlgroup=아이돌 뮤비,
- * legends=경연, ballad=가요톱텐, ccm=CCM, lounge=라운지, bedroom=베드룸.
+ * Ppabang (빠방) category metadata. The available list is owned by the server so
+ * additions and removals do not require an Android or Google TV app update.
  */
-enum class PpabangCategory(
-    val id: String,
-    val title: String,
-) {
-    GOLF_VERTICAL("golfVertical", "세로 골프"),
-    GOLF_HORIZONTAL("golfHorizontal", "가로 골프"),
-    CAMPING("camping", "캠핑"),
-    GIRLGROUP("girlgroup", "아이돌 뮤비"),
-    LEGENDS("legends", "경연"),
-    BALLAD("ballad", "가요톱텐"),
-    CCM("ccm", "CCM"),
-    LOUNGE("lounge", "라운지"),
-    BEDROOM("bedroom", "베드룸");
+data class PpabangCategory(val id: String) {
+    val title: String
+        get() = when (id) {
+            "golfVertical" -> "세로 골프"
+            "golfHorizontal" -> "가로 골프"
+            "camping" -> "캠핑"
+            "girlgroup" -> "아이돌 뮤비"
+            "legends" -> "경연"
+            "ballad" -> "가요톱텐"
+            "game" -> "게임"
+            "mukbang" -> "먹방"
+            "travel" -> "여행"
+            "ccm" -> "CCM"
+            "lounge" -> "라운지"
+            "bedroom" -> "베드룸"
+            else -> id.replace('-', ' ').replace('_', ' ')
+        }
 
     val url: String get() = "${PpabangPolicy.BASE_URL}?category=$id&standSession=${System.currentTimeMillis()}"
 
     companion object {
-        val DEFAULT = CCM
+        val DEFAULT = PpabangCategory("ccm")
+        val fallbackCategories = listOf(
+            "golfVertical", "golfHorizontal", "camping", "girlgroup", "legends", "ballad",
+            "ccm", "lounge", "bedroom",
+        ).map(::PpabangCategory)
 
         fun fromId(id: String?): PpabangCategory =
-            entries.firstOrNull { it.id == id } ?: DEFAULT
+            id?.takeIf(String::isNotBlank)?.let(::PpabangCategory) ?: DEFAULT
 
-        fun next(current: PpabangCategory): PpabangCategory =
-            entries[(current.ordinal + 1) % entries.size]
+        fun next(current: PpabangCategory, categories: List<PpabangCategory>): PpabangCategory {
+            val available = categories.ifEmpty { fallbackCategories }
+            val index = available.indexOf(current)
+            return available[Math.floorMod(index + 1, available.size)]
+        }
+    }
+}
+
+object PpabangCatalog {
+    /** Returns only categories that currently have playable videos. */
+    fun fetchCategories(): List<PpabangCategory> {
+        val connection = (URL("${PpabangPolicy.BASE_URL}api/catalog/status").openConnection() as HttpURLConnection)
+        return try {
+            connection.connectTimeout = 5_000
+            connection.readTimeout = 5_000
+            if (connection.responseCode !in 200..299) return emptyList()
+            val categories = JSONObject(connection.inputStream.bufferedReader().use { it.readText() })
+                .optJSONObject("categories") ?: return emptyList()
+            categories.keys().asSequence()
+                .filter { id -> (categories.optJSONObject(id)?.optInt("count", 0) ?: 0) > 0 }
+                .map(::PpabangCategory)
+                .sortedBy { it.title }
+                .toList()
+        } finally {
+            connection.disconnect()
+        }
     }
 }
 

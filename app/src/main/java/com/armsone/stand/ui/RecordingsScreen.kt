@@ -107,21 +107,16 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.armsone.stand.model.RecordingSwipeDeletePolicy
 import com.armsone.stand.recording.RecordingClip
-import com.armsone.stand.recording.RecordingRepository
 import com.armsone.stand.recording.RecordingSessionGroup
 import com.armsone.stand.recording.RecordingSessionPolicy
 import com.armsone.stand.ui.components.standFocusable
 import java.io.File
-import java.nio.charset.StandardCharsets
-import java.nio.file.Files
-import java.nio.file.StandardCopyOption
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
-import java.util.UUID
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.max
@@ -147,6 +142,7 @@ fun RecordingsScreen(
     onMergeToday: (Boolean) -> Unit,
     onDeleteSelected: (List<RecordingClip>) -> Unit,
     onDeleteAll: () -> Unit,
+    onDeleteSessions: (List<RecordingSessionGroup>) -> Unit = {},
     onPlaybackStateChanged: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
@@ -161,7 +157,6 @@ fun RecordingsScreen(
     var pendingDeleteAll by remember { mutableStateOf(false) }
     var pendingDeleteSessions by remember { mutableStateOf<List<RecordingSessionGroup>?>(null) }
     var pendingMerge by remember { mutableStateOf<PendingMerge?>(null) }
-    var locallyDeletedSessionIds by rememberSaveable { mutableStateOf(emptySet<String>()) }
     var selectionMode by rememberSaveable { mutableStateOf(false) }
     var selectedPaths by rememberSaveable { mutableStateOf(emptyList<String>()) }
     var sessionSelectionMode by rememberSaveable { mutableStateOf(false) }
@@ -173,9 +168,7 @@ fun RecordingsScreen(
     var playbackQueue by remember { mutableStateOf(emptyList<RecordingClip>()) }
     var playbackQueueIndex by remember { mutableIntStateOf(0) }
 
-    val visibleSessionGroups = remember(sessionGroups, locallyDeletedSessionIds) {
-        sessionGroups.filterNot { it.id in locallyDeletedSessionIds }
-    }
+    val visibleSessionGroups = sessionGroups
 
     val sortedRecordings = remember(recordings) {
         recordings.sortedWith(
@@ -712,54 +705,10 @@ fun RecordingsScreen(
                     selectedPaths = selectedPaths.filterNot { it in sessionFilePaths }
                     val targetSessionIds = targetSessions.map { it.id }.toSet()
                     expandedSessionIds = expandedSessionIds - targetSessionIds
-                    locallyDeletedSessionIds = locallyDeletedSessionIds + targetSessionIds
                     sessionSelectionMode = false
                     selectedSessionIds = emptySet()
 
-                    if (allClips.isNotEmpty()) {
-                        onDeleteSelected(allClips)
-                    }
-
-                    val manifestFile = File(
-                        context.applicationContext.filesDir,
-                        "${RecordingRepository.DIRECTORY_NAME}/${RecordingRepository.SESSION_MANIFEST_NAME}",
-                    )
-                    val rawIdsToDelete = targetSessionIds.filter { it.startsWith("session-") }
-                        .map { it.removePrefix("session-") }
-                        .toSet()
-                    if (manifestFile.isFile && rawIdsToDelete.isNotEmpty()) {
-                        runCatching {
-                            val lines = manifestFile.readLines(StandardCharsets.UTF_8)
-                            val filtered = lines.filterNot { line ->
-                                val fields = line.split('\t')
-                                fields.size >= 2 && fields[0] == "S" && fields[1] in rawIdsToDelete
-                            }
-                            if (filtered.size != lines.size) {
-                                val tempFile = File(
-                                    manifestFile.parentFile,
-                                    ".${manifestFile.name}.${UUID.randomUUID()}.tmp",
-                                )
-                                tempFile.writeText(
-                                    filtered.joinToString("\n") + if (filtered.isNotEmpty()) "\n" else "",
-                                    StandardCharsets.UTF_8,
-                                )
-                                try {
-                                    Files.move(
-                                        tempFile.toPath(),
-                                        manifestFile.toPath(),
-                                        StandardCopyOption.ATOMIC_MOVE,
-                                        StandardCopyOption.REPLACE_EXISTING,
-                                    )
-                                } catch (_: Exception) {
-                                    Files.move(
-                                        tempFile.toPath(),
-                                        manifestFile.toPath(),
-                                        StandardCopyOption.REPLACE_EXISTING,
-                                    )
-                                }
-                            }
-                        }
-                    }
+                    onDeleteSessions(targetSessions)
                 }
             },
         )
@@ -795,14 +744,8 @@ fun RecordingsScreen(
                     player.stop()
                     selectedPaths = emptyList()
                     expandedSessionIds = emptyList()
-                    locallyDeletedSessionIds = locallyDeletedSessionIds + sessionGroups.map { it.id }.toSet()
-                    val manifestFile = File(
-                        context.applicationContext.filesDir,
-                        "${RecordingRepository.DIRECTORY_NAME}/${RecordingRepository.SESSION_MANIFEST_NAME}",
-                    )
-                    if (manifestFile.exists()) {
-                        runCatching { manifestFile.delete() }
-                    }
+                    sessionSelectionMode = false
+                    selectedSessionIds = emptySet()
                     onDeleteAll()
                 }
             },
@@ -1362,9 +1305,9 @@ private fun RecordingSessionCard(
                         ) {
                             Text(
                                 text = when {
-                                    session.isGenuineQuietNight -> "감시는 정상적으로 진행됐고 저장할 소리가 없었어요"
+                                    session.isGenuineQuietNight -> "감시는 정상적으로 진행됐고 현재 저장된 소리가 없어요"
                                     session.isFailedOrUnmonitored -> session.failureReason ?: "소리 감시가 실행되지 않았습니다."
-                                    else -> "저장된 소리가 없습니다."
+                                    else -> "현재 저장된 소리가 없어요"
                                 },
                                 modifier = Modifier.padding(14.dp),
                                 style = MaterialTheme.typography.bodyMedium,
@@ -2552,7 +2495,7 @@ private fun activityDescription(session: RecordingSessionGroup): String {
             "시간당 ${String.format(Locale.KOREAN, "%.1f", insight.eventsPerHour)}회"
     }
     return when {
-        session.isGenuineQuietNight -> "감시는 정상적으로 진행됐고 저장할 소리가 없었어요"
+        session.isGenuineQuietNight -> "감시는 정상적으로 진행됐고 현재 저장된 소리가 없어요"
         session.isFailedOrUnmonitored -> session.failureReason ?: "소리 감시가 실행되지 않았습니다."
         else -> "기록된 소리나 뒤척임이 없습니다."
     }

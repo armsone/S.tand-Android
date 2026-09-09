@@ -53,12 +53,9 @@ object AdaptiveSoundThresholdPolicy {
 
     fun clapPeakThreshold(
         noiseFloorDB: Float?,
-        userThresholdDB: Float = QuietestThresholdDB,
-        configuredPeakThresholdDB: Float = -18f,
     ): Float {
-        val adaptivePeak = (soundThreshold(noiseFloorDB, userThresholdDB) + 12f)
-            .coerceIn(-45f, -8f)
-        return max(adaptivePeak, configuredPeakThresholdDB.coerceIn(-45f, -8f))
+        return ((noiseFloorDB ?: -50f) + 30f)
+            .coerceIn(-70f, -8f)
     }
 }
 
@@ -70,7 +67,6 @@ class AdaptiveNoiseFloorTracker {
     private var totalObservedDuration = 0.0
     private var currentBucketDuration = 0.0
     private val currentBucketSamples = mutableListOf<Float>()
-    private val calibrationBuckets = mutableListOf<Float>()
     private val adaptationBuckets = ArrayDeque<Float>()
     private var noiseFloorDB: Float? = null
 
@@ -98,7 +94,6 @@ class AdaptiveNoiseFloorTracker {
         totalObservedDuration = 0.0
         currentBucketDuration = 0.0
         currentBucketSamples.clear()
-        calibrationBuckets.clear()
         adaptationBuckets.clear()
         noiseFloorDB = null
     }
@@ -108,11 +103,6 @@ class AdaptiveNoiseFloorTracker {
         val bucketFloor = percentile(currentBucketSamples, 0.35)
         currentBucketDuration = 0.0
         currentBucketSamples.clear()
-        if (totalObservedDuration <= AdaptiveSoundThresholdPolicy.CalibrationDurationSeconds) {
-            calibrationBuckets += bucketFloor
-            noiseFloorDB = percentile(calibrationBuckets, 0.5)
-            return
-        }
         adaptationBuckets.addLast(bucketFloor)
         while (adaptationBuckets.size > AdaptationWindowCount) adaptationBuckets.removeFirst()
         val candidate = percentile(adaptationBuckets.toList(), 0.5)
@@ -120,7 +110,7 @@ class AdaptiveNoiseFloorTracker {
         if (current == null) {
             noiseFloorDB = candidate
         } else {
-            val rate = if (candidate > current) 0.12f else 0.22f
+            val rate = if (candidate > current) 0.18f else 0.28f
             noiseFloorDB = current + (candidate - current) * rate
         }
     }
@@ -134,7 +124,7 @@ class AdaptiveNoiseFloorTracker {
 
     private companion object {
         const val BucketDurationSeconds = 1.0
-        const val AdaptationWindowCount = 8
+        const val AdaptationWindowCount = 12
     }
 }
 
@@ -171,7 +161,9 @@ object SleepSoundRecordingPolicy {
 
 object SleepSoundWakePolicy {
     fun shouldWake(classification: SleepSoundClassification): Boolean =
-        classification.kind == SleepSoundKind.MOVEMENT && classification.confidence >= 0.55
+        classification.kind == SleepSoundKind.MOVEMENT &&
+            classification.confidence >= 0.65 &&
+            classification.duration <= 1.2
 }
 
 class SleepSoundClassifier(
@@ -312,6 +304,7 @@ class AudioEventDetector(
     private var loudDuration = 0.0
     private var lastClapTime = Double.NEGATIVE_INFINITY
     private var soundIsActive = false
+    private var hasPreviousSample = false
 
     fun analyze(
         rmsDB: Float,
@@ -330,18 +323,22 @@ class AudioEventDetector(
             soundIsActive = true
         }
 
-        val roseQuickly = rmsDB - previousRMSDB >= configuration.clapRiseDB ||
-            peakDB - previousPeakDB >= configuration.clapPeakRiseDB
+        val roseQuickly = hasPreviousSample &&
+            (rmsDB - previousRMSDB >= configuration.clapRiseDB ||
+                peakDB - previousPeakDB >= configuration.clapPeakRiseDB)
         val isSharpTransient = peakDB >= configuration.clapPeakThresholdDB
+        val hasAudibleBody = rmsDB >= configuration.clapPeakThresholdDB - 14f
         val isOutsideRefractoryWindow =
             now - lastClapTime >= configuration.clapRefractoryInterval
-        val clapDetected = roseQuickly && isSharpTransient && isOutsideRefractoryWindow
+        val clapDetected = roseQuickly && isSharpTransient && hasAudibleBody &&
+            isOutsideRefractoryWindow
 
         if (clapDetected) {
             lastClapTime = now
         }
         previousRMSDB = rmsDB
         previousPeakDB = peakDB
+        hasPreviousSample = true
 
         return AudioDetection(
             clapDetected = clapDetected,
@@ -356,6 +353,7 @@ class AudioEventDetector(
         loudDuration = 0.0
         lastClapTime = Double.NEGATIVE_INFINITY
         soundIsActive = false
+        hasPreviousSample = false
     }
 }
 

@@ -85,6 +85,9 @@ import kotlin.math.roundToInt
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.Role
@@ -128,17 +131,17 @@ fun PpabangFloatingPlayer(
 ) {
     BoxWithConstraints(modifier) {
         val density = LocalDensity.current
-        val width = 216.dp
+        val width = if (isTelevision) 160.dp else 216.dp
         val maxX = with(density) { (maxWidth - width).toPx().coerceAtLeast(0f) }
-        val maxY = with(density) { (maxHeight - 216.dp).toPx().coerceAtLeast(0f) }
+        val maxY = with(density) { (maxHeight - width).toPx().coerceAtLeast(0f) }
         DisposableEffect(Unit) { onDispose { onFrameChanged(Rect.Zero) } }
         PpabangInlinePlayer(
             state, isTelevision, isPortrait, commandFlow, onPlay, onStop, onNext,
             onSelectCategory, onClose, onPlaybackStateChanged,
             modifier = Modifier.offset {
                 IntOffset(
-                    (if (isTelevision) maxX / 2 else maxX).roundToInt(),
-                    (if (isTelevision) maxY / 2 else maxY).roundToInt(),
+                    (if (isTelevision) 0f else maxX).roundToInt(),
+                    maxY.roundToInt(),
                 )
             }
                 .width(width).onGloballyPositioned { onFrameChanged(it.boundsInWindow()) },
@@ -163,7 +166,7 @@ private class PpabangBridge(
 
 /**
  * Inline visible video player for Ppabang, adjacent to clock/home music area.
- * Keeps YouTube iframe fully visible (>= 200x200 logical/CSS pixels, usable official controls).
+ * Keeps phone/tablet YouTube controls usable; TV uses a smaller display-only preview.
  * Supports phone, tablet, and TV D-pad.
  */
 @SuppressLint("SetJavaScriptEnabled")
@@ -298,8 +301,10 @@ fun PpabangInlinePlayer(
         }
     }
 
+    val playerSide = if (isTelevision) 160.dp else 216.dp
+    val videoSide = playerSide - 16.dp
     Surface(
-        modifier = modifier.width(216.dp).height(216.dp),
+        modifier = modifier.width(playerSide).height(playerSide),
         color = lerp(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.primary, 0.30f).copy(alpha = backgroundOpacity),
         shape = RoundedCornerShape(12.dp),
         shadowElevation = 4.dp,
@@ -308,7 +313,7 @@ fun PpabangInlinePlayer(
         Box(Modifier.padding(8.dp)) {
             Box(
                 modifier = Modifier
-                    .size(200.dp)
+                    .size(videoSide)
                     .clip(RoundedCornerShape(12.dp))
                     .background(Color.Transparent)
                     .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(12.dp)),
@@ -335,6 +340,12 @@ fun PpabangInlinePlayer(
                             }
                             isLongClickable = false
                             setOnLongClickListener { true }
+                            if (isTelevision) {
+                                // TV remote actions stay on the 빠방 panel, not this display-only video.
+                                isFocusable = false
+                                isFocusableInTouchMode = false
+                                setOnTouchListener { _, _ -> true }
+                            }
 
                             addJavascriptInterface(
                                 PpabangBridge(
@@ -496,17 +507,26 @@ fun PpabangInlinePlayer(
 }
 
 /**
- * Accessible dialog listing all nine categories with TV D-pad focusability.
+ * Accessible dialog listing the server's current categories with TV D-pad focusability.
  */
 @Composable
 fun PpabangCategoryDialog(
     currentCategory: PpabangCategory,
+    categories: List<PpabangCategory>,
     onSelect: (PpabangCategory) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val selectedCategoryFocusRequester = remember { FocusRequester() }
+    LaunchedEffect(currentCategory) {
+        selectedCategoryFocusRequester.requestFocus()
+    }
     Dialog(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false),
+        // A long-press release must not be interpreted as an immediate outside tap.
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            dismissOnClickOutside = false,
+        ),
     ) {
         Surface(
             modifier = Modifier
@@ -552,7 +572,7 @@ fun PpabangCategoryDialog(
                 }
 
                 Text(
-                    text = "원하는 음악 영상 채널을 선택하세요 (총 9개 채널)",
+                    text = "원하는 음악 영상 채널을 선택하세요 (총 ${categories.size}개 채널)",
                     fontSize = 12.sp,
                     color = Color.White.copy(alpha = 0.6f),
                 )
@@ -561,19 +581,37 @@ fun PpabangCategoryDialog(
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                     modifier = Modifier.heightIn(max = 380.dp),
                 ) {
-                    items(PpabangCategory.entries) { category ->
+                    items(categories) { category ->
                         val isSelected = category == currentCategory
+                        var isFocused by remember(category) { mutableStateOf(false) }
                         Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(12.dp))
+                                .then(
+                                    if (isSelected) {
+                                        Modifier.focusRequester(selectedCategoryFocusRequester)
+                                    } else {
+                                        Modifier
+                                    },
+                                )
+                                .onFocusChanged { isFocused = it.isFocused }
                                 .clickable { onSelect(category) }
                                 .standFocusable(shape = RoundedCornerShape(12.dp))
                                 .semantics {
                                     role = Role.Button
                                     contentDescription = "${category.title} 채널 ${if (isSelected) "선택됨" else "선택"}"
                                 },
-                            color = if (isSelected) Color(0xFFFF5722).copy(alpha = 0.25f) else Color.White.copy(alpha = 0.05f),
+                            color = when {
+                                isFocused -> Color(0xFFFF5722).copy(alpha = 0.48f)
+                                isSelected -> Color(0xFFFF5722).copy(alpha = 0.25f)
+                                else -> Color.White.copy(alpha = 0.05f)
+                            },
+                            border = if (isFocused) {
+                                androidx.compose.foundation.BorderStroke(2.5.dp, Color(0xFFFFB27A))
+                            } else {
+                                null
+                            },
                             shape = RoundedCornerShape(12.dp),
                         ) {
                             Row(

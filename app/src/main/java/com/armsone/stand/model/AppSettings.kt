@@ -60,7 +60,7 @@ data class AppSettings(
     val brightnessModeThreshold: Float = 0.4f,
     val holdDurationSeconds: Float = 5f,
     val fadeDurationSeconds: Float = 30f,
-    val automaticDimmingEnabled: Boolean = false,
+    val automaticDimmingEnabled: Boolean = true,
     val soundThresholdDB: Float = -36f,
     val recordingEnabled: Boolean = true,
     val orientationPreference: OrientationPreference = OrientationPreference.AUTOMATIC,
@@ -143,7 +143,7 @@ object CurrentExperienceMigration {
         landscapeLayout = StandScreenLayout.Landscape,
         brightnessModeThreshold = 0.4f,
         holdDurationSeconds = 5f,
-        automaticDimmingEnabled = false,
+        automaticDimmingEnabled = true,
         orientationPreference = OrientationPreference.AUTOMATIC,
         torchEnabled = true,
     ).normalized()

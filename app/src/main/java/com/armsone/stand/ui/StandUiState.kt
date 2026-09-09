@@ -60,6 +60,7 @@ data class StandUiState(
     val externalMusicPlaybackState: ExternalMusicPlaybackState = ExternalMusicPlaybackState.IDLE,
     val externalMusicMessage: String? = null,
     val ppabangCategory: PpabangCategory = PpabangCategory.DEFAULT,
+    val ppabangCategories: List<PpabangCategory> = PpabangCategory.fallbackCategories,
     val ppabangPlaybackState: PpabangPlaybackState = PpabangPlaybackState.IDLE,
     val isPpabangPlayerVisible: Boolean = false,
     val ppabangMessage: String? = null,

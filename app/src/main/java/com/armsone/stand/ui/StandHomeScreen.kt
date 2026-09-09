@@ -75,6 +75,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -95,6 +96,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -208,6 +210,7 @@ fun StandHomeScreen(
     onStartPpabang: (PpabangCategory) -> Unit = {},
     onSelectPpabangCategory: (PpabangCategory) -> Unit = {},
     onCyclePpabangCategory: () -> Unit = {},
+    onRefreshPpabangCategories: () -> Unit = {},
     onClosePpabang: () -> Unit = {},
     onPpabangStateChanged: (PpabangPlaybackState, String?) -> Unit = { _, _ -> },
     onCheckUpdate: () -> Unit = {},
@@ -281,11 +284,7 @@ fun StandHomeScreen(
             // Keeping that 75% diagonal ratio makes the glow cover phones and tablets alike.
             hypot(maxWidth.toPx(), maxHeight.toPx()) * 0.75f
         }
-        val contentAlpha = if (state.isFaceDown || state.isDisplayDark) {
-            state.settings.silhouetteIntensity.coerceIn(0.005f, 0.2f)
-        } else {
-            (0.28f + visibleIntensity * 0.72f).coerceIn(0.28f, 1f)
-        }
+        val contentAlpha = visibleIntensity.coerceIn(0f, 1f)
         val gradientColors = lampGradientColors(state.settings.displayTheme, visibleIntensity)
         val handleBrightnessLevelChanged: (Float) -> Unit = { value ->
             onBrightnessLevelChanged(value)
@@ -422,6 +421,7 @@ fun StandHomeScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
+                    .graphicsLayer { alpha = visibleIntensity.coerceIn(0f, 1f) }
                     .padding(WindowInsets.safeDrawing.asPaddingValues())
                     .padding(
                         start = (if (isPortrait) 16.dp else 28.dp) + tvSafePaddingHorizontal,
@@ -460,7 +460,10 @@ fun StandHomeScreen(
                             onStopPpabang = onStopPpabang,
                             onNextPpabang = onNextPpabang,
                             onCyclePpabangCategory = onCyclePpabangCategory,
-                            onOpenPpabangCategoryDialog = { showPpabangCategoryDialog = true },
+                            onOpenPpabangCategoryDialog = {
+                                onRefreshPpabangCategories()
+                                showPpabangCategoryDialog = true
+                            },
                             modifier = Modifier.weight(1f),
                         )
                         PhoneLandscapeSideControls(
@@ -490,7 +493,10 @@ fun StandHomeScreen(
                         onStopPpabang = onStopPpabang,
                         onNextPpabang = onNextPpabang,
                         onCyclePpabangCategory = onCyclePpabangCategory,
-                        onOpenPpabangCategoryDialog = { showPpabangCategoryDialog = true },
+                        onOpenPpabangCategoryDialog = {
+                            onRefreshPpabangCategories()
+                            showPpabangCategoryDialog = true
+                        },
                         modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                     )
                 }
@@ -554,9 +560,9 @@ fun StandHomeScreen(
 
             Text(
                 text = "${BuildConfig.VERSION_NAME} · 밝기 " +
-                    "${(state.displayBrightness.coerceIn(0f, 1f) * 100f).roundToInt()}%",
+                    "${(visibleIntensity.coerceIn(0f, 1f) * 100f).roundToInt()}%",
                 color = Color.White.copy(
-                    alpha = if (state.isDisplayDark) 0f else 0.28f,
+                    alpha = visibleIntensity.coerceIn(0f, 1f) * 0.28f,
                 ),
                 fontFamily = FontFamily.Monospace,
                 fontSize = 9.sp,
@@ -569,7 +575,7 @@ fun StandHomeScreen(
                     .semantics {
                         contentDescription =
                             "앱 버전 ${BuildConfig.VERSION_NAME}, 현재 밝기 " +
-                            "${(state.displayBrightness.coerceIn(0f, 1f) * 100f).roundToInt()}퍼센트"
+                            "${(visibleIntensity.coerceIn(0f, 1f) * 100f).roundToInt()}퍼센트"
                     },
             )
         }
@@ -597,7 +603,13 @@ fun StandHomeScreen(
                     PpabangFloatingPlayer(
                         anchorFrame = ppabangCardFrame,
                         onFrameChanged = { ppabangFrame = it },
-                        modifier = Modifier.fillMaxSize().padding(WindowInsets.safeDrawing.asPaddingValues()),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(WindowInsets.safeDrawing.asPaddingValues())
+                            .padding(
+                                start = tvSafePaddingHorizontal,
+                                bottom = tvSafePaddingVertical,
+                            ),
                         state = state,
                         isTelevision = isTelevision,
                         isPortrait = isPortrait,
@@ -624,6 +636,7 @@ fun StandHomeScreen(
             if (showPpabangCategoryDialog) {
                 PpabangCategoryDialog(
                     currentCategory = state.ppabangCategory,
+                    categories = state.ppabangCategories,
                     onSelect = { category ->
                         showPpabangCategoryDialog = false
                         onSelectPpabangCategory(category)
@@ -1478,6 +1491,13 @@ private fun DashboardCanvas(
     modifier: Modifier = Modifier,
     isTelevision: Boolean = false,
 ) {
+    val clockPanelAlpha = if (
+        state.isSessionActive && state.environmentMode == EnvironmentDisplayMode.MATE
+    ) {
+        contentAlpha.coerceAtLeast(0.05f)
+    } else {
+        contentAlpha
+    }
     val rawLayout = if (isPortrait) {
         state.settings.portraitLayout
     } else {
@@ -1513,7 +1533,7 @@ private fun DashboardCanvas(
                 clockFont = state.settings.clockFont,
                 isPortrait = isPortrait,
                 scale = 1f,
-                contentAlpha = contentAlpha,
+                contentAlpha = clockPanelAlpha,
                 fixedNow = catalogNow,
                 modifier = Modifier
                     .align(Alignment.Center)
@@ -1560,7 +1580,7 @@ private fun DashboardCanvas(
             ClockSeconds(
                 clockFont = state.settings.clockFont,
                 isPortrait = isPortrait,
-                contentAlpha = contentAlpha,
+                contentAlpha = clockPanelAlpha,
                 showsBackground = !clockSecondsOverlapsClock(
                     layout = layout,
                     canvasWidthDp = canvasWidth.value,
@@ -1575,7 +1595,7 @@ private fun DashboardCanvas(
 
             ClockDateAndSeconds(
                 hourMode = state.settings.clockHourMode,
-                contentAlpha = contentAlpha,
+                contentAlpha = clockPanelAlpha,
                 fixedNow = catalogNow,
                 modifier = Modifier
                     .align(Alignment.Center)
@@ -1606,12 +1626,12 @@ private fun DashboardCanvas(
                         Icon(
                             imageVector = batteryIcon(state.batteryLevel, state.isCharging),
                             contentDescription = null,
-                            tint = Color.White.copy(alpha = contentAlpha),
+                            tint = Color.White.copy(alpha = clockPanelAlpha),
                             modifier = Modifier.size(15.dp),
                         )
                         Text(
                             text = "배터리 ${state.batteryText}",
-                            color = Color.White.copy(alpha = contentAlpha),
+                            color = Color.White.copy(alpha = clockPanelAlpha),
                             style = MaterialTheme.typography.labelMedium,
                         )
                     }
@@ -1624,7 +1644,7 @@ private fun DashboardCanvas(
                 layout = layout,
                 isPortrait = isPortrait,
                 isExpanded = isExpanded,
-                contentAlpha = contentAlpha,
+                contentAlpha = clockPanelAlpha,
                 canvasWidthDp = canvasWidth.value,
                 canvasHeightDp = canvasHeight.value,
             )
@@ -2097,7 +2117,7 @@ internal fun PpabangPanel(
     val category = state.ppabangCategory
     val title = "빠방 · ${category.title}"
     val detail = when (state.ppabangPlaybackState) {
-        PpabangPlaybackState.IDLE -> if (state.isPpabangPlayerVisible) "대기" else "9개 채널"
+        PpabangPlaybackState.IDLE -> if (state.isPpabangPlayerVisible) "대기" else "${state.ppabangCategories.size}개 채널"
         PpabangPlaybackState.LOADING -> "연결 중"
         PpabangPlaybackState.PLAYING -> "재생 중"
         PpabangPlaybackState.PAUSED -> "일시 정지"
@@ -2106,38 +2126,13 @@ internal fun PpabangPanel(
         PpabangPlaybackState.FAILED -> "연결 실패"
     }
     val visibleAlpha = contentAlpha * if (isTelevision) 0.48f else 1f
-    val tvInteractionSource = remember { MutableInteractionSource() }
+    val tvCategoryFocusRequester = remember { FocusRequester() }
+    val categoryDialogScope = rememberCoroutineScope()
+    var tvCategoryLongPressHandled by remember { mutableStateOf(false) }
     Surface(
         modifier = modifier
             .width(width)
             .height(if (isTelevision) 44.dp else 60.dp)
-            .then(
-                if (isTelevision) {
-                    Modifier
-                        .standFocusable(shape = RoundedCornerShape(13.dp))
-                        .onPreviewKeyEvent { event ->
-                            if (event.type == KeyEventType.KeyUp && event.key == Key.DirectionRight) {
-                                onSecondaryClick()
-                                true
-                            } else {
-                                false
-                            }
-                        }
-                        .combinedClickable(
-                            interactionSource = tvInteractionSource,
-                            indication = null,
-                            onClick = onPrimaryClick,
-                            onLongClick = onLongClick,
-                        )
-                } else {
-                    Modifier
-                },
-            )
-            .semantics(mergeDescendants = true) {
-                contentDescription = "$title, $detail. 재생 또는 카테고리 전환"
-                stateDescription = detail
-                role = Role.Button
-            }
             .then(
                 if (drawsSurface) {
                     Modifier.standPanelSurface(
@@ -2166,37 +2161,79 @@ internal fun PpabangPanel(
                 detailAlpha = 0.58f,
                 isTelevision = isTelevision,
             )
-            if (!isTelevision) {
-                Row(modifier = Modifier.fillMaxSize()) {
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
-                            .combinedClickable(
-                                onClick = onPrimaryClick,
-                                onLongClick = onLongClick,
-                            )
-                            .semantics {
-                                contentDescription = "$title, 재생 또는 정지"
-                                stateDescription = detail
-                                role = Role.Button
+            Row(modifier = Modifier.fillMaxSize()) {
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .then(
+                            if (isTelevision) {
+                                Modifier.focusProperties { right = tvCategoryFocusRequester }
+                            } else {
+                                Modifier
                             },
-                    )
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
-                            .combinedClickable(
-                                onClick = onSecondaryClick,
-                                onLongClick = onLongClick,
-                            )
-                            .semantics {
-                                contentDescription = "$title, 다음 카테고리 전환"
-                                stateDescription = detail
-                                role = Role.Button
+                        )
+                        .then(
+                            if (isTelevision) Modifier.standFocusable(RoundedCornerShape(13.dp))
+                            else Modifier,
+                        )
+                        .combinedClickable(onClick = onPrimaryClick)
+                        .semantics {
+                            contentDescription = "$title, 재생 또는 정지"
+                            stateDescription = detail
+                            role = Role.Button
+                        },
+                )
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .then(
+                            if (isTelevision) Modifier.focusRequester(tvCategoryFocusRequester)
+                            else Modifier,
+                        )
+                        .then(
+                            if (isTelevision) Modifier.standFocusable(RoundedCornerShape(13.dp))
+                            else Modifier,
+                        )
+                        .onPreviewKeyEvent { event ->
+                            if (!isTelevision || event.key != Key.DirectionCenter) {
+                                false
+                            } else if (
+                                event.type == KeyEventType.KeyDown &&
+                                (event.nativeKeyEvent.isLongPress || event.nativeKeyEvent.repeatCount > 0)
+                            ) {
+                                if (!tvCategoryLongPressHandled) {
+                                    tvCategoryLongPressHandled = true
+                                }
+                                true
+                            } else if (
+                                event.type == KeyEventType.KeyUp && tvCategoryLongPressHandled
+                            ) {
+                                tvCategoryLongPressHandled = false
+                                onLongClick()
+                                true
+                            } else {
+                                false
+                            }
+                        }
+                        .combinedClickable(
+                            onClick = onSecondaryClick,
+                            onLongClick = {
+                                if (!tvCategoryLongPressHandled) {
+                                    categoryDialogScope.launch {
+                                        delay(180)
+                                        onLongClick()
+                                    }
+                                }
                             },
-                    )
-                }
+                        )
+                        .semantics {
+                            contentDescription = "$title, 다음 곡. 길게 누르면 카테고리 선택"
+                            stateDescription = detail
+                            role = Role.Button
+                        },
+                )
             }
         }
     }
