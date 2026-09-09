@@ -126,83 +126,22 @@ fun PpabangFloatingPlayer(
     modifier: Modifier = Modifier,
     onFrameChanged: (Rect) -> Unit = {},
 ) {
-    val context = LocalContext.current
-    val preferences = remember(context) { context.getSharedPreferences("ppabang_player_ui", Context.MODE_PRIVATE) }
-    var backgroundPercent by remember { mutableStateOf(preferences.getInt("background_percent", 100).coerceIn(10, 100)) }
-    fun advanceBackground() {
-        backgroundPercent = listOf(10, 35, 60, 85, 100).firstOrNull { it > backgroundPercent } ?: 10
-        preferences.edit().putInt("background_percent", backgroundPercent).apply()
-    }
-    var containerOrigin by remember { mutableStateOf(Offset.Zero) }
-    BoxWithConstraints(modifier.onGloballyPositioned { containerOrigin = it.boundsInWindow().topLeft }) {
+    BoxWithConstraints(modifier) {
         val density = LocalDensity.current
-        val width = 272.dp
+        val width = 216.dp
         val maxX = with(density) { (maxWidth - width).toPx().coerceAtLeast(0f) }
         val maxY = with(density) { (maxHeight - 216.dp).toPx().coerceAtLeast(0f) }
-        var position by remember { mutableStateOf<Offset?>(null) }
-        val savedX = remember { preferences.getFloat("position_x", -1f) }
-        val savedY = remember { preferences.getFloat("position_y", -1f) }
-        val initialPosition = if (savedX >= 0f && savedY >= 0f) {
-            Offset(savedX * maxX, savedY * maxY)
-        } else if (anchorFrame != Rect.Zero) {
-            Offset(anchorFrame.left, anchorFrame.bottom + with(density) { 8.dp.toPx() }) - containerOrigin
-        } else Offset(0f, with(density) { 88.dp.toPx() })
-        val base = position ?: initialPosition
-        val actual = Offset(base.x.coerceIn(0f, maxX), base.y.coerceIn(0f, maxY))
-        val currentPosition by rememberUpdatedState(actual)
-        var dragStart by remember { mutableStateOf(Offset.Zero) }
-        var dragOrigin by remember { mutableStateOf(Offset.Zero) }
-        var dragMoved by remember { mutableStateOf(false) }
-        val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
         DisposableEffect(Unit) { onDispose { onFrameChanged(Rect.Zero) } }
         PpabangInlinePlayer(
             state, isTelevision, isPortrait, commandFlow, onPlay, onStop, onNext,
             onSelectCategory, onClose, onPlaybackStateChanged,
-            modifier = Modifier.offset { IntOffset(actual.x.roundToInt(), actual.y.roundToInt()) }
+            modifier = Modifier.offset {
+                IntOffset(
+                    (if (isTelevision) maxX / 2 else maxX).roundToInt(),
+                    (if (isTelevision) maxY / 2 else maxY).roundToInt(),
+                )
+            }
                 .width(width).onGloballyPositioned { onFrameChanged(it.boundsInWindow()) },
-            backgroundOpacity = backgroundPercent / 100f,
-            dragHandle = {
-                Box(
-                    Modifier.size(48.dp, 32.dp)
-                         .semantics {
-                            contentDescription = "플레이어 이동, 배경 진하기 ${backgroundPercent}퍼센트"
-                            role = Role.Button
-                            onClick(label = "배경 진하기 변경") { advanceBackground(); true }
-                        }
-                        .pointerInteropFilter { event ->
-                            when (event.actionMasked) {
-                                MotionEvent.ACTION_DOWN -> {
-                                    dragStart = Offset(event.rawX, event.rawY)
-                                    dragOrigin = currentPosition
-                                    dragMoved = false
-                                }
-                                MotionEvent.ACTION_MOVE -> {
-                                    val delta = Offset(event.rawX, event.rawY) - dragStart
-                                    if (delta.getDistance() > touchSlop) dragMoved = true
-                                    if (dragMoved) position = Offset(
-                                        (dragOrigin.x + delta.x).coerceIn(0f, maxX),
-                                        (dragOrigin.y + delta.y).coerceIn(0f, maxY),
-                                    )
-                                }
-                                MotionEvent.ACTION_UP -> {
-                                    if (!dragMoved) advanceBackground()
-                                    else position?.let { finalPosition ->
-                                        preferences.edit()
-                                            .putFloat("position_x", if (maxX > 0f) finalPosition.x / maxX else 0f)
-                                            .putFloat("position_y", if (maxY > 0f) finalPosition.y / maxY else 0f)
-                                            .apply()
-                                    }
-                                }
-                            }
-                            true
-                        }, contentAlignment = Alignment.Center,
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("✥", color = Color.White, fontSize = 12.sp, lineHeight = 13.sp)
-                        Text("${backgroundPercent}%", color = Color.White, fontSize = 8.sp, lineHeight = 9.sp)
-                    }
-                }
-            },
         )
     }
 }
@@ -360,13 +299,13 @@ fun PpabangInlinePlayer(
     }
 
     Surface(
-        modifier = modifier.width(272.dp).height(216.dp),
+        modifier = modifier.width(216.dp).height(216.dp),
         color = lerp(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.primary, 0.30f).copy(alpha = backgroundOpacity),
         shape = RoundedCornerShape(12.dp),
         shadowElevation = 4.dp,
         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.6f * backgroundOpacity)),
     ) {
-        Row(Modifier.padding(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Box(Modifier.padding(8.dp)) {
             Box(
                 modifier = Modifier
                     .size(200.dp)
@@ -550,23 +489,6 @@ fun PpabangInlinePlayer(
                 )
 
             }
-            Column(
-                Modifier.width(48.dp).height(200.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                dragHandle()
-                CompactPpabangButton("정지", onStop, backgroundOpacity = backgroundOpacity)
-                CompactPpabangButton("다음", onNext, state.ppabangPlaybackState != PpabangPlaybackState.LOADING, backgroundOpacity)
-                FilledTonalButton(
-                    onClick = onClose, modifier = Modifier.size(48.dp),
-                    contentPadding = PaddingValues(0.dp), shape = RoundedCornerShape(9.dp),
-                    colors = ButtonDefaults.filledTonalButtonColors(
-                        containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f * backgroundOpacity),
-                        contentColor = MaterialTheme.colorScheme.onSurface,
-                    ),
-                ) { Icon(Icons.Default.Close, "플레이어 닫기 및 정지", modifier = Modifier.size(21.dp)) }
-            }
         }
     }
 
@@ -576,20 +498,6 @@ fun PpabangInlinePlayer(
 /**
  * Accessible dialog listing all nine categories with TV D-pad focusability.
  */
-@Composable
-private fun CompactPpabangButton(title: String, onClick: () -> Unit, enabled: Boolean = true, backgroundOpacity: Float = 1f) {
-    FilledTonalButton(
-        onClick = onClick, enabled = enabled,
-        modifier = Modifier.size(48.dp),
-        colors = ButtonDefaults.filledTonalButtonColors(
-            containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f * backgroundOpacity),
-            contentColor = MaterialTheme.colorScheme.onSurface,
-        ),
-        contentPadding = PaddingValues(0.dp),
-        shape = RoundedCornerShape(7.dp),
-    ) { Text(title, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1) }
-}
-
 @Composable
 fun PpabangCategoryDialog(
     currentCategory: PpabangCategory,

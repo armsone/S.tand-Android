@@ -458,6 +458,7 @@ fun StandHomeScreen(
                             onEndExternalMusic = onEndExternalMusic,
                             onStartPpabang = onStartPpabang,
                             onStopPpabang = onStopPpabang,
+                            onNextPpabang = onNextPpabang,
                             onCyclePpabangCategory = onCyclePpabangCategory,
                             onOpenPpabangCategoryDialog = { showPpabangCategoryDialog = true },
                             modifier = Modifier.weight(1f),
@@ -487,6 +488,7 @@ fun StandHomeScreen(
                         onEndExternalMusic = onEndExternalMusic,
                         onStartPpabang = onStartPpabang,
                         onStopPpabang = onStopPpabang,
+                        onNextPpabang = onNextPpabang,
                         onCyclePpabangCategory = onCyclePpabangCategory,
                         onOpenPpabangCategoryDialog = { showPpabangCategoryDialog = true },
                         modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
@@ -1614,6 +1616,7 @@ internal fun MusicChannelStrip(
     onEndExternalMusic: () -> Unit,
     onStartPpabang: (PpabangCategory) -> Unit = {},
     onStopPpabang: () -> Unit = {},
+    onNextPpabang: () -> Unit = {},
     onCyclePpabangCategory: () -> Unit = {},
     onOpenPpabangCategoryDialog: () -> Unit = {},
     modifier: Modifier = Modifier,
@@ -1674,6 +1677,7 @@ internal fun MusicChannelStrip(
                         onEndExternalMusic = onEndExternalMusic,
                         onStartPpabang = onStartPpabang,
                         onStopPpabang = onStopPpabang,
+                        onNextPpabang = onNextPpabang,
                         onCyclePpabangCategory = onCyclePpabangCategory,
                         onOpenPpabangCategoryDialog = onOpenPpabangCategoryDialog,
                     )
@@ -1781,6 +1785,7 @@ internal fun MusicPanel(
     onEndExternalMusic: () -> Unit,
     onStartPpabang: (PpabangCategory) -> Unit = {},
     onStopPpabang: () -> Unit = {},
+    onNextPpabang: () -> Unit = {},
     onCyclePpabangCategory: () -> Unit = {},
     onOpenPpabangCategoryDialog: () -> Unit = {},
     onRegisterRadio: () -> Unit = {},
@@ -1801,7 +1806,7 @@ internal fun MusicPanel(
                     onStartPpabang(state.ppabangCategory)
                 }
             },
-            onSecondaryClick = onCyclePpabangCategory,
+            onSecondaryClick = onNextPpabang,
             onLongClick = onOpenPpabangCategoryDialog,
             drawsSurface = drawsSurface,
             modifier = modifier,
@@ -2080,6 +2085,14 @@ internal fun PpabangPanel(
                 if (isTelevision) {
                     Modifier
                         .standFocusable(shape = RoundedCornerShape(13.dp))
+                        .onPreviewKeyEvent { event ->
+                            if (event.type == KeyEventType.KeyUp && event.key == Key.DirectionRight) {
+                                onSecondaryClick()
+                                true
+                            } else {
+                                false
+                            }
+                        }
                         .combinedClickable(
                             interactionSource = tvInteractionSource,
                             indication = null,
@@ -2437,11 +2450,12 @@ private fun HomeControls(
     FlowRow(
         modifier = Modifier
             .fillMaxWidth()
+            .padding(end = if (isPortrait && !isTelevision && state.isPpabangPlayerVisible) 222.dp else 0.dp)
             .graphicsLayer { alpha = bottomControlsAlpha },
-        maxItemsInEachRow = if (isTelevision) 8 else if (isExpanded || !isPortrait) 7 else 4,
+        maxItemsInEachRow = if (isTelevision) 8 else if (isPortrait) 1 else if (isExpanded) 7 else 4,
         horizontalArrangement = Arrangement.spacedBy(
             if (isTelevision) 5.dp else 7.dp,
-            Alignment.CenterHorizontally,
+            if (isPortrait && !isTelevision) Alignment.End else Alignment.CenterHorizontally,
         ),
         verticalArrangement = Arrangement.spacedBy(7.dp),
     ) {
