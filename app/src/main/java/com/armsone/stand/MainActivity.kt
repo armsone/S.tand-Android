@@ -699,7 +699,7 @@ class MainActivity : ComponentActivity() {
                     onEndExternalMusic = standViewModel::endExternalMusicMode,
                     ppabangCommandFlow = standViewModel.ppabangCommands,
                     onPlayPpabang = standViewModel::playPpabang,
-                    onStopPpabang = { standViewModel.stopPpabang(clearVisibility = false) },
+                    onStopPpabang = { standViewModel.stopPpabang(clearVisibility = true) },
                     onNextPpabang = standViewModel::nextPpabang,
                     onStartPpabang = standViewModel::startPpabang,
                     onSelectPpabangCategory = standViewModel::selectPpabangCategory,

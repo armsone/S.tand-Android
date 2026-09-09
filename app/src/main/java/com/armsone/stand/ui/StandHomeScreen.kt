@@ -521,6 +521,33 @@ fun StandHomeScreen(
                         boyisoStatus = boyisoStatus,
                         boyisoCanSendTokTok = boyisoCanSendTokTok,
                         onSendBoyisoTokTok = onSendBoyisoTokTok,
+                        trailingContent = if (
+                            isPortrait && !isTelevision &&
+                            state.isPpabangPlayerVisible && ppabangCommandFlow != null
+                        ) {
+                            {
+                                PpabangFloatingPlayer(
+                                    anchorFrame = ppabangCardFrame,
+                                    onFrameChanged = { ppabangFrame = it },
+                                    modifier = Modifier.size(216.dp),
+                                    state = state,
+                                    isTelevision = false,
+                                    isPortrait = true,
+                                    commandFlow = ppabangCommandFlow,
+                                    onPlay = onPlayPpabang,
+                                    onStop = onStopPpabang,
+                                    onNext = onNextPpabang,
+                                    onSelectCategory = { category ->
+                                        onSelectPpabangCategory(category)
+                                        onStartPpabang(category)
+                                    },
+                                    onClose = onClosePpabang,
+                                    onPlaybackStateChanged = onPpabangStateChanged,
+                                )
+                            }
+                        } else {
+                            null
+                        },
                     )
                 }
             }
@@ -563,7 +590,10 @@ fun StandHomeScreen(
                 )
         }
 
-                if (state.isPpabangPlayerVisible && ppabangCommandFlow != null) {
+                if (
+                    state.isPpabangPlayerVisible && ppabangCommandFlow != null &&
+                    (isTelevision || !isPortrait)
+                ) {
                     PpabangFloatingPlayer(
                         anchorFrame = ppabangCardFrame,
                         onFrameChanged = { ppabangFrame = it },
@@ -2409,6 +2439,7 @@ private fun HomeControls(
     isExpanded: Boolean,
     isTelevision: Boolean = false,
     isRemoteActive: Boolean = true,
+    trailingContent: (@Composable () -> Unit)? = null,
     onToggleTorch: () -> Unit,
     onCycleMode: () -> Unit,
     onToggleSession: () -> Unit,
@@ -2447,11 +2478,15 @@ private fun HomeControls(
         animationSpec = tween(durationMillis = 200),
         label = "tv-bottom-controls-alpha",
     )
-    FlowRow(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(end = if (isPortrait && !isTelevision && state.isPpabangPlayerVisible) 222.dp else 0.dp)
             .graphicsLayer { alpha = bottomControlsAlpha },
+        verticalAlignment = Alignment.Bottom,
+        horizontalArrangement = Arrangement.spacedBy(7.dp, Alignment.End),
+    ) {
+    FlowRow(
+        modifier = Modifier.weight(1f),
         maxItemsInEachRow = if (isTelevision) 8 else if (isPortrait) 1 else if (isExpanded) 7 else 4,
         horizontalArrangement = Arrangement.spacedBy(
             if (isTelevision) 5.dp else 7.dp,
@@ -2546,6 +2581,8 @@ private fun HomeControls(
                 isCompactTelevision = true,
             )
         }
+    }
+        trailingContent?.invoke()
     }
 }
 

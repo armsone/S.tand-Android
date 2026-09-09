@@ -19,7 +19,7 @@ enum class PpabangCategory(
     LOUNGE("lounge", "라운지"),
     BEDROOM("bedroom", "베드룸");
 
-    val url: String get() = "${PpabangPolicy.BASE_URL}?category=$id"
+    val url: String get() = "${PpabangPolicy.BASE_URL}?category=$id&standSession=${System.currentTimeMillis()}"
 
     companion object {
         val DEFAULT = CCM
