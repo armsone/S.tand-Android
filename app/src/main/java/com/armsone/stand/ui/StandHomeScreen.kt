@@ -2219,8 +2219,13 @@ internal fun PpabangPanel(
                         }
                         .combinedClickable(
                             onClick = onSecondaryClick,
-                            onLongClick = {
-                                if (!tvCategoryLongPressHandled) {
+                            // TV remotes are handled above from their D-pad key
+                            // sequence. Letting combinedClickable handle the same
+                            // long press can dispatch the dialog-open action twice.
+                            onLongClick = if (isTelevision) {
+                                null
+                            } else {
+                                {
                                     categoryDialogScope.launch {
                                         delay(180)
                                         onLongClick()

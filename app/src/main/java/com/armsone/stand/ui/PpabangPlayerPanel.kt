@@ -50,6 +50,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -76,6 +77,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -111,6 +113,7 @@ import com.armsone.stand.model.PpabangPolicy
 import com.armsone.stand.ui.components.standFocusable
 import com.armsone.stand.ui.components.standPanelSurface
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.first
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
@@ -517,8 +520,20 @@ fun PpabangCategoryDialog(
     onDismiss: () -> Unit,
 ) {
     val selectedCategoryFocusRequester = remember { FocusRequester() }
-    LaunchedEffect(currentCategory) {
-        selectedCategoryFocusRequester.requestFocus()
+    val selectedCategoryIndex = categories.indexOf(currentCategory)
+    val categoryListState = rememberLazyListState(
+        initialFirstVisibleItemIndex = selectedCategoryIndex.coerceAtLeast(0),
+    )
+    LaunchedEffect(selectedCategoryIndex, categories.size) {
+        if (selectedCategoryIndex >= 0) {
+            // A selected item below LazyColumn's initial viewport has no attached
+            // FocusRequester yet. Make it visible before assigning D-pad focus.
+            categoryListState.scrollToItem(selectedCategoryIndex)
+            snapshotFlow {
+                categoryListState.layoutInfo.visibleItemsInfo.any { it.index == selectedCategoryIndex }
+            }.first { it }
+            selectedCategoryFocusRequester.requestFocus()
+        }
     }
     Dialog(
         onDismissRequest = onDismiss,
@@ -580,6 +595,7 @@ fun PpabangCategoryDialog(
                 LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                     modifier = Modifier.heightIn(max = 380.dp),
+                    state = categoryListState,
                 ) {
                     items(categories) { category ->
                         val isSelected = category == currentCategory
