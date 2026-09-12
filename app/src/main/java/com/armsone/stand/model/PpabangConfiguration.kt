@@ -31,8 +31,8 @@ data class PpabangCategory(val id: String) {
     companion object {
         val DEFAULT = PpabangCategory("ccm")
         val fallbackCategories = listOf(
-            "golfVertical", "golfHorizontal", "camping", "girlgroup", "legends", "ballad",
-            "ccm", "lounge", "bedroom",
+            "ccm", "ballad", "girlgroup", "legends", "golfHorizontal", "golfVertical",
+            "game", "mukbang", "camping", "travel", "lounge", "bedroom",
         ).map(::PpabangCategory)
 
         fun fromId(id: String?): PpabangCategory =
@@ -56,10 +56,15 @@ object PpabangCatalog {
             if (connection.responseCode !in 200..299) return emptyList()
             val categories = JSONObject(connection.inputStream.bufferedReader().use { it.readText() })
                 .optJSONObject("categories") ?: return emptyList()
+            val websiteOrder = PpabangCategory.fallbackCategories
+                .mapIndexed { index, category -> category.id to index }.toMap()
             categories.keys().asSequence()
                 .filter { id -> (categories.optJSONObject(id)?.optInt("count", 0) ?: 0) > 0 }
                 .map(::PpabangCategory)
-                .sortedBy { it.title }
+                .sortedWith(
+                    compareBy<PpabangCategory> { websiteOrder[it.id] ?: Int.MAX_VALUE }
+                        .thenBy { it.id },
+                )
                 .toList()
         } finally {
             connection.disconnect()

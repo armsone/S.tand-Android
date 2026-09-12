@@ -37,6 +37,7 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 data class CurrentWeather(
@@ -61,6 +62,11 @@ enum class WeatherAvailability {
     FAILED,
     CLOSED,
 }
+
+private data class WeatherCoordinate(
+    val latitude: Double,
+    val longitude: Double,
+)
 
 /**
  * Foreground-only weather source. Runtime permission ownership deliberately stays with the caller.
@@ -96,13 +102,84 @@ class WeatherService(context: Context) : Closeable {
     private val isLocationEnabled = AtomicBoolean(true)
     private val requestGeneration = AtomicLong(0L)
     private val activeConnection = AtomicReference<HttpURLConnection?>(null)
-    private val resourceLock = Any()
+    private val resourceLock: Any = this
+
+    private var isForeground = false
+    private var hasLocationPermission = false
+    private var lastSuccessCoordinate: WeatherCoordinate? = null
+    private var lastAttemptRealtimeMillis: Long? = null
+    private var lastFailureRealtimeMillis: Long? = null
+    private var pendingMovementRefresh = false
+    private var pendingMovementLocation: Location? = null
+    private var pendingForceRefresh = false
+    private var movementUpdateFailed = false
+    private var continuousLocationListener: LocationListener? = null
+    private var tickerJob: Job? = null
 
     private var pendingLocationRequestId: Long? = null
     private var pendingCancellationSignal: CancellationSignal? = null
     private var pendingLocationListener: LocationListener? = null
     private var locationTimeoutJob: Job? = null
     private var refreshJob: Job? = null
+
+    @Synchronized
+    fun onAppForeground(hasPermission: Boolean) {
+        if (isClosed.get()) return
+        isForeground = true
+        hasLocationPermission = hasPermission
+
+        if (!isLocationEnabled.get()) {
+            mutableAvailability.value = WeatherAvailability.IDLE
+            return
+        }
+
+        if (!hasLocationPermission) {
+            mutableAvailability.value = WeatherAvailability.LOCATION_DENIED
+            return
+        }
+
+        startContinuousLocationObserverLocked()
+        startTickerLocked()
+        checkAndTriggerDueRefreshLocked()
+    }
+
+    @Synchronized
+    fun onAppBackground() {
+        if (isClosed.get()) return
+        isForeground = false
+        pendingMovementLocation = null
+        stopContinuousLocationObserverLocked()
+        stopTickerLocked()
+        invalidateAndCancelActiveWork()
+        if (mutableAvailability.value in IN_FLIGHT_AVAILABILITIES) {
+            mutableAvailability.value = if (mutableWeather.value == null) {
+                WeatherAvailability.IDLE
+            } else {
+                WeatherAvailability.AVAILABLE
+            }
+        }
+    }
+
+    @Synchronized
+    fun updatePermissions(hasPermission: Boolean) {
+        if (isClosed.get()) return
+        val changed = hasLocationPermission != hasPermission
+        hasLocationPermission = hasPermission
+
+        if (!hasLocationPermission) {
+            stopContinuousLocationObserverLocked()
+            stopTickerLocked()
+            invalidateAndCancelActiveWork()
+            mutableAvailability.value = WeatherAvailability.LOCATION_DENIED
+            return
+        }
+
+        if (changed && isForeground && isLocationEnabled.get()) {
+            startContinuousLocationObserverLocked()
+            startTickerLocked()
+            checkAndTriggerDueRefreshLocked()
+        }
+    }
 
     /**
      * Refreshes stale weather without requesting permissions itself.
@@ -117,8 +194,11 @@ class WeatherService(context: Context) : Closeable {
         force: Boolean = false,
     ) {
         if (isClosed.get()) return
+        this.hasLocationPermission = hasLocationPermission
 
         if (!isLocationEnabled.get()) {
+            stopContinuousLocationObserverLocked()
+            stopTickerLocked()
             invalidateAndCancelActiveWork()
             clearCachedWeather()
             mutableAvailability.value = WeatherAvailability.IDLE
@@ -126,30 +206,54 @@ class WeatherService(context: Context) : Closeable {
         }
 
         if (!hasLocationPermission) {
+            stopContinuousLocationObserverLocked()
+            stopTickerLocked()
             invalidateAndCancelActiveWork()
             mutableAvailability.value = WeatherAvailability.LOCATION_DENIED
             return
         }
 
-        if (!force && WeatherCachePolicy.isFresh(mutableLastUpdated.value, Instant.now())) {
-            mutableAvailability.value = WeatherAvailability.AVAILABLE
+        if (force) {
+            pendingForceRefresh = true
+            checkAndTriggerDueRefreshLocked()
             return
         }
 
-        if (!force && mutableAvailability.value in IN_FLIGHT_AVAILABILITIES) return
+        val isStale = mutableLastUpdated.value == null || !WeatherCachePolicy.isFresh(
+            mutableLastUpdated.value,
+            Instant.now(),
+        )
 
-        val requestId = beginRequest()
-        mutableAvailability.value = WeatherAvailability.REQUESTING_LOCATION
-        requestCoarseLocation(requestId)
+        if (!isStale && !pendingMovementRefresh && !movementUpdateFailed) {
+            if (mutableAvailability.value !in IN_FLIGHT_AVAILABILITIES) {
+                mutableAvailability.value = WeatherAvailability.AVAILABLE
+            }
+            return
+        }
+
+        checkAndTriggerDueRefreshLocked()
     }
 
     @Synchronized
     fun setLocationEnabled(enabled: Boolean) {
         if (isClosed.get() || isLocationEnabled.getAndSet(enabled) == enabled) return
         if (!enabled) {
+            stopContinuousLocationObserverLocked()
+            stopTickerLocked()
             invalidateAndCancelActiveWork()
             clearCachedWeather()
+            lastSuccessCoordinate = null
+            lastFailureRealtimeMillis = null
+            pendingMovementRefresh = false
+            pendingMovementLocation = null
+            pendingForceRefresh = false
+            movementUpdateFailed = false
             mutableAvailability.value = WeatherAvailability.IDLE
+        } else if (isForeground && hasLocationPermission) {
+            startContinuousLocationObserverLocked()
+            startTickerLocked()
+            pendingForceRefresh = true
+            checkAndTriggerDueRefreshLocked()
         }
     }
 
@@ -157,10 +261,236 @@ class WeatherService(context: Context) : Closeable {
     override fun close() {
         if (!isClosed.compareAndSet(false, true)) return
 
+        isForeground = false
+        pendingMovementLocation = null
+        stopContinuousLocationObserverLocked()
+        stopTickerLocked()
         requestGeneration.incrementAndGet()
         cancelActiveWork()
         scope.cancel()
         mutableAvailability.value = WeatherAvailability.CLOSED
+    }
+
+    private fun startContinuousLocationObserverLocked() {
+        if (continuousLocationListener != null) return
+        if (!hasLocationPermission || !isLocationEnabled.get() || isClosed.get() || !isForeground) return
+
+        val providerAvailable = runCatching {
+            locationManager.allProviders.contains(LocationManager.NETWORK_PROVIDER) &&
+                locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+        }.getOrDefault(false)
+
+        if (!providerAvailable) return
+
+        val listener = object : LocationListener {
+            override fun onLocationChanged(location: Location) {
+                onContinuousLocationUpdated(location)
+            }
+
+            override fun onProviderDisabled(provider: String) {
+                if (provider == LocationManager.NETWORK_PROVIDER) {
+                    synchronized(resourceLock) {
+                        stopContinuousLocationObserverLocked()
+                    }
+                }
+            }
+
+            override fun onProviderEnabled(provider: String) = Unit
+        }
+
+        val registered = runCatching {
+            locationManager.requestLocationUpdates(
+                LocationManager.NETWORK_PROVIDER,
+                CONTINUOUS_LOCATION_MIN_TIME_MILLIS,
+                CONTINUOUS_LOCATION_MIN_DISTANCE_METERS,
+                listener,
+                Looper.getMainLooper(),
+            )
+            true
+        }.getOrDefault(false)
+
+        if (registered) {
+            continuousLocationListener = listener
+        }
+    }
+
+    private fun stopContinuousLocationObserverLocked() {
+        continuousLocationListener?.let { listener ->
+            runCatching { locationManager.removeUpdates(listener) }
+        }
+        continuousLocationListener = null
+    }
+
+    private fun onContinuousLocationUpdated(location: Location) {
+        synchronized(resourceLock) {
+            if (!isForeground || !isLocationEnabled.get() || !hasLocationPermission || isClosed.get()) {
+                return
+            }
+
+            if (!WeatherLocationPolicy.isUsable(
+                    latitude = location.latitude,
+                    longitude = location.longitude,
+                    locationElapsedRealtimeNanos = location.elapsedRealtimeNanos,
+                    nowElapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos(),
+                )
+            ) return
+            if (pendingMovementRefresh) pendingMovementLocation = Location(location)
+            val lastCoord = lastSuccessCoordinate
+            if (lastCoord == null) {
+                if (mutableWeather.value == null) {
+                    pendingMovementRefresh = true
+                    pendingMovementLocation = Location(location)
+                    checkAndTriggerDueRefreshLocked()
+                }
+                return
+            }
+
+            val results = FloatArray(1)
+            Location.distanceBetween(
+                lastCoord.latitude,
+                lastCoord.longitude,
+                location.latitude,
+                location.longitude,
+                results,
+            )
+            val displacement = results[0]
+            if (displacement >= DISPLACEMENT_THRESHOLD_METERS) {
+                pendingMovementRefresh = true
+                pendingMovementLocation = Location(location)
+                checkAndTriggerDueRefreshLocked()
+            }
+        }
+    }
+
+    private fun startTickerLocked() {
+        if (tickerJob != null || isClosed.get() || !isForeground) return
+        tickerJob = scope.launch(CoroutineName("WeatherTicker")) {
+            while (isActive) {
+                delay(TICKER_INTERVAL_MILLIS)
+                synchronized(resourceLock) {
+                    if (isClosed.get() || !isForeground) return@launch
+                    checkAndTriggerDueRefreshLocked()
+                }
+            }
+        }
+    }
+
+    private fun stopTickerLocked() {
+        tickerJob?.cancel()
+        tickerJob = null
+    }
+
+    private fun checkAndTriggerDueRefreshLocked() {
+        if (isClosed.get() || !isForeground || !isLocationEnabled.get() || !hasLocationPermission) {
+            return
+        }
+
+        if (mutableAvailability.value in IN_FLIGHT_AVAILABILITIES) {
+            return
+        }
+
+        val nowRealtime = SystemClock.elapsedRealtime()
+        val nowInstant = Instant.now()
+        startContinuousLocationObserverLocked()
+        val lastAttempt = lastAttemptRealtimeMillis
+        val spacingMet = lastAttempt == null || (nowRealtime - lastAttempt) >= MIN_REQUEST_SPACING_MILLIS
+        val lastFailure = lastFailureRealtimeMillis
+        if (lastFailure != null && nowRealtime - lastFailure < FAILURE_RETRY_DELAY_MILLIS) return
+
+        // 1. Movement refresh requested (displacement >= 3000m)
+        if (pendingMovementRefresh) {
+            val loc = pendingMovementLocation
+            val lastCoord = lastSuccessCoordinate
+            if (loc != null && lastCoord != null) {
+                val results = FloatArray(1)
+                Location.distanceBetween(
+                    lastCoord.latitude,
+                    lastCoord.longitude,
+                    loc.latitude,
+                    loc.longitude,
+                    results,
+                )
+                if (results[0] < DISPLACEMENT_THRESHOLD_METERS) {
+                    pendingMovementRefresh = false
+                    pendingMovementLocation = null
+                }
+            }
+            if (pendingMovementRefresh) {
+                if (!spacingMet) return
+                pendingMovementRefresh = false
+                pendingMovementLocation = null
+                pendingForceRefresh = false
+                triggerRefreshLocked(
+                    isMovement = true,
+                    locationOverride = loc,
+                )
+                return
+            }
+        }
+
+        // 2. Force refresh requested
+        if (pendingForceRefresh) {
+            if (!spacingMet) return
+            pendingForceRefresh = false
+            triggerRefreshLocked(isMovement = false)
+            return
+        }
+
+        // 3. Failure retry due (5 minutes after failure)
+        if (lastFailure != null) {
+            val failureAge = nowRealtime - lastFailure
+            if (failureAge >= FAILURE_RETRY_DELAY_MILLIS) {
+                if (!spacingMet) return
+                val wasMovement = movementUpdateFailed
+                triggerRefreshLocked(
+                    isMovement = wasMovement,
+                )
+            }
+            return
+        }
+
+        // 4. Periodic or resume refresh due (cache stale >= 15 min or no weather)
+        val lastUpdated = mutableLastUpdated.value
+        val isStale = lastUpdated == null || !WeatherCachePolicy.isFresh(
+            lastUpdated,
+            nowInstant,
+        )
+
+        if (isStale) {
+            if (!spacingMet) return
+            triggerRefreshLocked(isMovement = false)
+        }
+    }
+
+    private fun triggerRefreshLocked(
+        isMovement: Boolean,
+        locationOverride: Location? = null,
+    ) {
+        val nowRealtime = SystemClock.elapsedRealtime()
+        lastAttemptRealtimeMillis = nowRealtime
+        if (lastFailureRealtimeMillis != null) {
+            lastFailureRealtimeMillis = nowRealtime
+        }
+
+        val requestId = beginRequest()
+        mutableAvailability.value = WeatherAvailability.REQUESTING_LOCATION
+
+        if (locationOverride != null &&
+            WeatherLocationPolicy.isUsable(
+                latitude = locationOverride.latitude,
+                longitude = locationOverride.longitude,
+                locationElapsedRealtimeNanos = locationOverride.elapsedRealtimeNanos,
+                nowElapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos(),
+            )
+        ) {
+            loadWeather(requestId, locationOverride, isMovement)
+            return
+        }
+
+        requestCoarseLocation(
+            requestId = requestId,
+            isMovement = isMovement,
+        )
     }
 
     private fun beginRequest(): Long {
@@ -181,38 +511,16 @@ class WeatherService(context: Context) : Closeable {
     }
 
     @SuppressLint("MissingPermission")
-    private fun requestCoarseLocation(requestId: Long) {
-        val cachedLocation = try {
-            locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
-        } catch (_: SecurityException) {
-            if (isCurrentRequest(requestId)) {
-                mutableAvailability.value = WeatherAvailability.LOCATION_DENIED
-            }
-            return
-        } catch (_: RuntimeException) {
-            // A broken or temporarily unavailable cache must not block a fresh request.
-            null
-        }
-
-        if (
-            cachedLocation != null &&
-            WeatherLocationPolicy.isUsable(
-                latitude = cachedLocation.latitude,
-                longitude = cachedLocation.longitude,
-                locationElapsedRealtimeNanos = cachedLocation.elapsedRealtimeNanos,
-                nowElapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos(),
-            )
-        ) {
-            loadWeather(requestId, cachedLocation)
-            return
-        }
-
+    private fun requestCoarseLocation(
+        requestId: Long,
+        isMovement: Boolean,
+    ) {
         val providerAvailable = try {
             locationManager.allProviders.contains(LocationManager.NETWORK_PROVIDER) &&
                 locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
         } catch (_: SecurityException) {
             if (isCurrentRequest(requestId)) {
-                mutableAvailability.value = WeatherAvailability.LOCATION_DENIED
+                handleFailure(requestId, WeatherAvailability.LOCATION_DENIED, isMovement)
             }
             return
         } catch (_: RuntimeException) {
@@ -221,26 +529,27 @@ class WeatherService(context: Context) : Closeable {
 
         if (!providerAvailable) {
             if (isCurrentRequest(requestId)) {
-                mutableAvailability.value = WeatherAvailability.PROVIDER_UNAVAILABLE
+                handleFailure(requestId, WeatherAvailability.PROVIDER_UNAVAILABLE, isMovement)
             }
             return
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            requestCurrentLocation(requestId)
+            requestCurrentLocation(requestId, isMovement)
         } else {
-            requestSingleLocationUpdate(requestId)
+            requestSingleLocationUpdate(requestId, isMovement)
         }
     }
 
     @SuppressLint("MissingPermission")
     @RequiresApi(Build.VERSION_CODES.R)
-    private fun requestCurrentLocation(requestId: Long) {
+    private fun requestCurrentLocation(requestId: Long, isMovement: Boolean) {
         val cancellationSignal = CancellationSignal()
         registerLocationRequest(
             requestId = requestId,
             cancellationSignal = cancellationSignal,
             listener = null,
+            isMovement = isMovement,
         )
 
         try {
@@ -249,37 +558,37 @@ class WeatherService(context: Context) : Closeable {
                 cancellationSignal,
                 callbackExecutor,
             ) { location ->
-                handleLocationResult(requestId, location)
+                handleLocationResult(requestId, location, isMovement)
             }
         } catch (_: SecurityException) {
             clearLocationRequest(requestId)
             if (isCurrentRequest(requestId)) {
-                mutableAvailability.value = WeatherAvailability.LOCATION_DENIED
+                handleFailure(requestId, WeatherAvailability.LOCATION_DENIED, isMovement)
             }
         } catch (_: IllegalArgumentException) {
             clearLocationRequest(requestId)
             if (isCurrentRequest(requestId)) {
-                mutableAvailability.value = WeatherAvailability.PROVIDER_UNAVAILABLE
+                handleFailure(requestId, WeatherAvailability.PROVIDER_UNAVAILABLE, isMovement)
             }
         } catch (_: RuntimeException) {
             clearLocationRequest(requestId)
             if (isCurrentRequest(requestId)) {
-                mutableAvailability.value = WeatherAvailability.FAILED
+                handleFailure(requestId, WeatherAvailability.FAILED, isMovement)
             }
         }
     }
 
     @SuppressLint("MissingPermission")
     @Suppress("DEPRECATION")
-    private fun requestSingleLocationUpdate(requestId: Long) {
+    private fun requestSingleLocationUpdate(requestId: Long, isMovement: Boolean) {
         val listener = object : LocationListener {
             override fun onLocationChanged(location: Location) {
-                handleLocationResult(requestId, location)
+                handleLocationResult(requestId, location, isMovement)
             }
 
             override fun onProviderDisabled(provider: String) {
                 if (provider == LocationManager.NETWORK_PROVIDER) {
-                    handleLocationResult(requestId, null)
+                    handleLocationResult(requestId, null, isMovement)
                 }
             }
         }
@@ -288,6 +597,7 @@ class WeatherService(context: Context) : Closeable {
             requestId = requestId,
             cancellationSignal = null,
             listener = listener,
+            isMovement = isMovement,
         )
 
         try {
@@ -299,17 +609,17 @@ class WeatherService(context: Context) : Closeable {
         } catch (_: SecurityException) {
             clearLocationRequest(requestId)
             if (isCurrentRequest(requestId)) {
-                mutableAvailability.value = WeatherAvailability.LOCATION_DENIED
+                handleFailure(requestId, WeatherAvailability.LOCATION_DENIED, isMovement)
             }
         } catch (_: IllegalArgumentException) {
             clearLocationRequest(requestId)
             if (isCurrentRequest(requestId)) {
-                mutableAvailability.value = WeatherAvailability.PROVIDER_UNAVAILABLE
+                handleFailure(requestId, WeatherAvailability.PROVIDER_UNAVAILABLE, isMovement)
             }
         } catch (_: RuntimeException) {
             clearLocationRequest(requestId)
             if (isCurrentRequest(requestId)) {
-                mutableAvailability.value = WeatherAvailability.FAILED
+                handleFailure(requestId, WeatherAvailability.FAILED, isMovement)
             }
         }
     }
@@ -318,10 +628,11 @@ class WeatherService(context: Context) : Closeable {
         requestId: Long,
         cancellationSignal: CancellationSignal?,
         listener: LocationListener?,
+        isMovement: Boolean,
     ) {
         val timeoutJob = scope.launch(CoroutineName("WeatherLocationTimeout")) {
             delay(LOCATION_TIMEOUT_MILLIS)
-            handleLocationTimeout(requestId)
+            handleLocationTimeout(requestId, isMovement)
         }
 
         val accepted = synchronized(resourceLock) {
@@ -343,28 +654,58 @@ class WeatherService(context: Context) : Closeable {
         }
     }
 
-    private fun handleLocationTimeout(requestId: Long) {
+    @Synchronized
+    private fun handleLocationTimeout(requestId: Long, isMovement: Boolean) {
         if (!requestGeneration.compareAndSet(requestId, requestId + 1L)) return
 
         clearLocationRequest(requestId)
         if (!isClosed.get()) {
-            mutableAvailability.value = WeatherAvailability.PROVIDER_UNAVAILABLE
+            synchronized(resourceLock) {
+                lastFailureRealtimeMillis = SystemClock.elapsedRealtime()
+                if (isMovement) {
+                    movementUpdateFailed = true
+                }
+                mutableAvailability.value = WeatherAvailability.PROVIDER_UNAVAILABLE
+            }
         }
     }
 
-    private fun handleLocationResult(requestId: Long, location: Location?) {
+    @Synchronized
+    private fun handleLocationResult(requestId: Long, location: Location?, isMovement: Boolean) {
         if (!isCurrentRequest(requestId)) return
 
         clearLocationRequest(requestId)
-        if (location == null) {
-            mutableAvailability.value = WeatherAvailability.PROVIDER_UNAVAILABLE
+        if (location == null || !WeatherLocationPolicy.isUsable(
+                latitude = location.latitude,
+                longitude = location.longitude,
+                locationElapsedRealtimeNanos = location.elapsedRealtimeNanos,
+                nowElapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos(),
+            )
+        ) {
+            handleFailure(requestId, WeatherAvailability.PROVIDER_UNAVAILABLE, isMovement)
             return
         }
 
-        loadWeather(requestId, location)
+        loadWeather(requestId, location, isMovement)
     }
 
-    private fun loadWeather(requestId: Long, location: Location) {
+    private fun handleFailure(
+        requestId: Long,
+        availability: WeatherAvailability,
+        isMovement: Boolean,
+    ) {
+        synchronized(resourceLock) {
+            if (!isCurrentRequest(requestId)) return
+            lastFailureRealtimeMillis = SystemClock.elapsedRealtime()
+            if (isMovement) {
+                movementUpdateFailed = true
+            }
+            reportFailure(requestId, availability)
+        }
+    }
+
+    @Synchronized
+    private fun loadWeather(requestId: Long, location: Location, isMovement: Boolean) {
         if (!isCurrentRequest(requestId)) return
         mutableAvailability.value = WeatherAvailability.LOADING
 
@@ -374,28 +715,40 @@ class WeatherService(context: Context) : Closeable {
                 coroutineContext.ensureActive()
                 if (!isCurrentRequest(requestId)) return@launch
 
-                mutableWeather.value = currentWeather
-                mutableLocationName.value = null
-                mutableLastUpdated.value = Instant.now()
-                mutableAvailability.value = WeatherAvailability.AVAILABLE
+                val nowInstant = Instant.now()
+                synchronized(resourceLock) {
+                    if (!isCurrentRequest(requestId)) return@launch
+                    mutableWeather.value = currentWeather
+                    mutableLocationName.value = null
+                    mutableLastUpdated.value = nowInstant
+                    lastSuccessCoordinate = WeatherCoordinate(
+                        latitude = location.latitude,
+                        longitude = location.longitude,
+                    )
+                    lastFailureRealtimeMillis = null
+                    movementUpdateFailed = false
+                    mutableAvailability.value = WeatherAvailability.AVAILABLE
+                }
 
                 val resolvedLocationName = resolveLocationName(location)
                 coroutineContext.ensureActive()
-                if (isCurrentRequest(requestId)) {
-                    mutableLocationName.value = resolvedLocationName
+                synchronized(resourceLock) {
+                    if (isCurrentRequest(requestId)) {
+                        mutableLocationName.value = resolvedLocationName
+                    }
                 }
             } catch (error: CancellationException) {
                 throw error
             } catch (_: WeatherHttpException) {
-                reportFailure(requestId, WeatherAvailability.FAILED)
+                handleFailure(requestId, WeatherAvailability.FAILED, isMovement)
             } catch (_: WeatherDecodingException) {
-                reportFailure(requestId, WeatherAvailability.FAILED)
+                handleFailure(requestId, WeatherAvailability.FAILED, isMovement)
             } catch (_: IOException) {
-                reportFailure(requestId, WeatherAvailability.OFFLINE)
+                handleFailure(requestId, WeatherAvailability.OFFLINE, isMovement)
             } catch (_: SecurityException) {
-                reportFailure(requestId, WeatherAvailability.FAILED)
+                handleFailure(requestId, WeatherAvailability.FAILED, isMovement)
             } catch (_: RuntimeException) {
-                reportFailure(requestId, WeatherAvailability.FAILED)
+                handleFailure(requestId, WeatherAvailability.FAILED, isMovement)
             }
         }
 
@@ -530,6 +883,12 @@ class WeatherService(context: Context) : Closeable {
         )
         const val LOCATION_TIMEOUT_MILLIS = 15_000L
         const val NETWORK_TIMEOUT_MILLIS = 10_000
+        const val MIN_REQUEST_SPACING_MILLIS = 60_000L
+        const val FAILURE_RETRY_DELAY_MILLIS = 5 * 60_000L
+        const val DISPLACEMENT_THRESHOLD_METERS = 3000f
+        const val TICKER_INTERVAL_MILLIS = 5_000L
+        const val CONTINUOUS_LOCATION_MIN_TIME_MILLIS = 30_000L
+        const val CONTINUOUS_LOCATION_MIN_DISTANCE_METERS = 100f
     }
 }
 
@@ -661,7 +1020,7 @@ internal object WmoKoreanSummary {
 }
 
 internal object WeatherCachePolicy {
-    private val MAX_AGE: Duration = Duration.ofMinutes(30)
+    private val MAX_AGE: Duration = Duration.ofMinutes(15)
 
     fun isFresh(lastUpdated: Instant?, now: Instant): Boolean {
         if (lastUpdated == null) return false
@@ -671,7 +1030,7 @@ internal object WeatherCachePolicy {
 }
 
 internal object WeatherLocationPolicy {
-    private const val MAX_AGE_NANOS = 30L * 60L * 1_000_000_000L
+    private const val MAX_AGE_NANOS = 60L * 1_000_000_000L
 
     fun isUsable(
         latitude: Double,

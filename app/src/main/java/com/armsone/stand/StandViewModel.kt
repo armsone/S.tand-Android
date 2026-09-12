@@ -368,12 +368,13 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
             syncSleepCareMonitoring()
             activateLamp(triggeredByMovement = false)
         }
-        weatherService.refreshIfNeeded(locationPermissionGranted)
+        weatherService.onAppForeground(hasPermission = locationPermissionGranted)
         syncAmbientCameraSampling()
         updateMonitoringStatus()
     }
 
     fun onAppBackground(): Boolean {
+        weatherService.onAppBackground()
         val state = mutableUiState.value
         val targetMode = StandBackgroundLifecyclePolicy.targetModeOnBackground(
             preference = state.settings.modePreference,
@@ -466,9 +467,7 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
         }
         syncSleepCareMonitoring()
         syncTorch()
-        if (foreground.get()) {
-            weatherService.refreshIfNeeded(locationPermissionGranted)
-        }
+        weatherService.updatePermissions(hasPermission = locationPermissionGranted)
         ambientCamera.setEnabled(
             enabled = mutableUiState.value.settings.cameraAmbientSensingEnabled,
             hasPermission = cameraPermissionGranted,

@@ -12,6 +12,10 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.ColorMatrix
+import android.graphics.ColorMatrixColorFilter
+import android.graphics.Paint
+import android.view.View
 import android.net.http.SslError
 import android.view.ViewGroup
 import android.webkit.ClientCertRequest
@@ -110,6 +114,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.armsone.stand.model.PpabangCategory
 import com.armsone.stand.model.PpabangPlaybackState
 import com.armsone.stand.model.PpabangPolicy
+import com.armsone.stand.model.StandDisplayTheme
 import com.armsone.stand.ui.components.standFocusable
 import com.armsone.stand.ui.components.standPanelSurface
 import kotlinx.coroutines.flow.SharedFlow
@@ -225,6 +230,11 @@ fun PpabangInlinePlayer(
     backgroundOpacity: Float = 1f,
 ) {
     val lifecycleOwner = LocalLifecycleOwner.current
+    val grayscalePaint = remember {
+        Paint().apply {
+            colorFilter = ColorMatrixColorFilter(ColorMatrix().apply { setSaturation(0f) })
+        }
+    }
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
     var loadedCategory by remember { mutableStateOf<PpabangCategory?>(null) }
     val currentState by rememberUpdatedState(state)
@@ -583,6 +593,13 @@ fun PpabangInlinePlayer(
                         }
                     },
                     modifier = Modifier.fillMaxSize(),
+                    update = { view ->
+                        val isGrayscale = state.settings.displayTheme == StandDisplayTheme.GRAYSCALE
+                        view.setLayerType(
+                            if (isGrayscale) View.LAYER_TYPE_HARDWARE else View.LAYER_TYPE_NONE,
+                            if (isGrayscale) grayscalePaint else null,
+                        )
+                    },
                     onRelease = { releasedView ->
                         if (webViewRef === releasedView) webViewRef = null
                         releasedView.removeJavascriptInterface(PpabangPolicy.JS_BRIDGE_NAME)
