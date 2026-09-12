@@ -218,6 +218,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        standViewModel.resumePpabangIfEligible()
         val pendingFile = pendingUpdateInstallFile ?: return
         if (canRequestPackageInstalls()) {
             window.decorView.post { requestUpdateInstall(pendingFile) }
@@ -265,8 +266,13 @@ class MainActivity : ComponentActivity() {
         applyOrientationPreference(state.settings.orientationPreference)
     }
 
+    override fun onPause() {
+        standViewModel.pausePpabangForAppSwitch()
+        super.onPause()
+    }
+
     override fun onStop() {
-        standViewModel.stopPpabang()
+        standViewModel.pausePpabangForAppSwitch()
         stopRadioTransferReceiver()
         BoyisoManager.isAppVisible = false
         stopObservingSystemBrightness()
@@ -282,6 +288,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        standViewModel.onActivityDestroyed()
         stopRadioTransferReceiver()
         appUpdateService.close()
         if (boyisoManagerDelegate.isInitialized()) boyisoManager.close()

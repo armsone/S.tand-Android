@@ -63,6 +63,7 @@ data class StandUiState(
     val ppabangCategories: List<PpabangCategory> = PpabangCategory.fallbackCategories,
     val ppabangPlaybackState: PpabangPlaybackState = PpabangPlaybackState.IDLE,
     val isPpabangPlayerVisible: Boolean = false,
+    val isPpabangRetainedForAppSwitch: Boolean = false,
     val ppabangMessage: String? = null,
     val monitoringStatus: MateMonitoringStatus? = null,
 ) {
@@ -71,7 +72,10 @@ data class StandUiState(
     val isExternalMusicModeActive: Boolean
         get() = externalMusicService != null
     val isPpabangActive: Boolean
-        get() = isPpabangPlayerVisible || ppabangPlaybackState == PpabangPlaybackState.PLAYING || ppabangPlaybackState == PpabangPlaybackState.LOADING
+        get() = isPpabangPlayerVisible ||
+            ppabangPlaybackState == PpabangPlaybackState.PLAYING ||
+            ppabangPlaybackState == PpabangPlaybackState.LOADING ||
+            isPpabangRetainedForAppSwitch
     val isDisplayDark: Boolean
         get() = isSessionActive && lampPhase == LampPhase.OFF && !controlsVisible
 

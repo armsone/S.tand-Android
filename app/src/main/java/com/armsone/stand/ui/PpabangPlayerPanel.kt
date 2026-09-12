@@ -167,6 +167,41 @@ private class PpabangBridge(
     }
 }
 
+private const val JS_PAUSE_COMMAND = """
+    (function() {
+        try {
+            document.querySelectorAll('video,audio').forEach(function(m) { m.pause(); });
+        } catch (_) {}
+        var iframe = document.querySelector('iframe#player') || document.querySelector('iframe[src*="youtube.com"]');
+        if (iframe && iframe.contentWindow && iframe.src) {
+            try {
+                var origin = new URL(iframe.src).origin;
+                iframe.contentWindow.postMessage(JSON.stringify({
+                    event: 'command',
+                    func: 'pauseVideo',
+                    args: []
+                }), origin);
+            } catch (_) {}
+        }
+    })();
+"""
+
+private const val JS_RESUME_COMMAND = """
+    (function() {
+        var iframe = document.querySelector('iframe#player') || document.querySelector('iframe[src*="youtube.com"]');
+        if (iframe && iframe.contentWindow && iframe.src) {
+            try {
+                var origin = new URL(iframe.src).origin;
+                iframe.contentWindow.postMessage(JSON.stringify({
+                    event: 'command',
+                    func: 'playVideo',
+                    args: []
+                }), origin);
+            } catch (_) {}
+        }
+    })();
+"""
+
 /**
  * Inline visible video player for Ppabang, adjacent to clock/home music area.
  * Keeps phone/tablet YouTube controls usable; TV uses a smaller display-only preview.
@@ -194,9 +229,16 @@ fun PpabangInlinePlayer(
     var loadedCategory by remember { mutableStateOf<PpabangCategory?>(null) }
     val currentState by rememberUpdatedState(state)
     val reportState by rememberUpdatedState(onPlaybackStateChanged)
-    var documentStopped by remember { mutableStateOf(false) }
-    var pendingCommand by remember { mutableStateOf<PpabangCommand?>(PpabangCommand.PLAY) }
+    var documentStopped by remember {
+        mutableStateOf(state.ppabangPlaybackState == PpabangPlaybackState.STOPPED)
+    }
+    var pendingCommand by remember {
+        mutableStateOf<PpabangCommand?>(
+            if (state.ppabangPlaybackState == PpabangPlaybackState.LOADING) PpabangCommand.PLAY else null,
+        )
+    }
     var pageGeneration by remember { mutableStateOf(0) }
+    var isLocallyPausedForAppSwitch by remember { mutableStateOf(false) }
 
     fun isTrustedPage(view: WebView): Boolean {
         val uri = android.net.Uri.parse(view.url ?: return false)
@@ -205,6 +247,7 @@ fun PpabangInlinePlayer(
 
     fun stopDocument() {
         documentStopped = true
+        isLocallyPausedForAppSwitch = false
         pendingCommand = null
         pageGeneration += 1
         webViewRef?.let { view ->
@@ -215,21 +258,37 @@ fun PpabangInlinePlayer(
     }
 
     fun executeJs(js: String) {
-        webViewRef?.post {
-            webViewRef?.takeIf { isTrustedPage(it) && !documentStopped }
-                ?.evaluateJavascript(js, null)
-        }
+        webViewRef?.takeIf { isTrustedPage(it) && !documentStopped }
+            ?.evaluateJavascript(js, null)
+    }
+
+    fun pausePlayback() {
+        if (documentStopped) return
+        isLocallyPausedForAppSwitch = true
+        pendingCommand = null
+        executeJs(JS_PAUSE_COMMAND)
+        webViewRef?.onPause()
     }
 
     fun deliverPendingCommand(view: WebView, generation: Int, attempt: Int = 0) {
         if (webViewRef !== view || documentStopped || generation != pageGeneration || !isTrustedPage(view)) return
+        if (!lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) || isLocallyPausedForAppSwitch) {
+            return
+        }
         val command = pendingCommand ?: return
-        val script = if (command == PpabangCommand.NEXT) PpabangPolicy.JS_NEXT_COMMAND else PpabangPolicy.JS_PLAY_COMMAND
+        val script = when (command) {
+            PpabangCommand.NEXT -> PpabangPolicy.JS_NEXT_COMMAND
+            PpabangCommand.RESUME -> JS_RESUME_COMMAND
+            else -> PpabangPolicy.JS_PLAY_COMMAND
+        }
         view.evaluateJavascript(
             "(function(){if(!document.querySelector('#queueList button') || !document.querySelector('iframe#player')) return false; " +
                 script + "; return true;})()",
         ) { ready ->
             if (webViewRef !== view || documentStopped || generation != pageGeneration) return@evaluateJavascript
+            if (!lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) || isLocallyPausedForAppSwitch) {
+                return@evaluateJavascript
+            }
             if (ready == "true") {
                 pendingCommand = null
             } else if (attempt < 60) {
@@ -245,6 +304,7 @@ fun PpabangInlinePlayer(
         commandFlow.collect { command ->
             when (command) {
                 PpabangCommand.PLAY -> {
+                    isLocallyPausedForAppSwitch = false
                     if (documentStopped) {
                         documentStopped = false
                         pendingCommand = PpabangCommand.PLAY
@@ -258,12 +318,23 @@ fun PpabangInlinePlayer(
                     stopDocument()
                 }
                 PpabangCommand.NEXT -> {
+                    isLocallyPausedForAppSwitch = false
                     if (documentStopped) {
                         documentStopped = false
                         pendingCommand = PpabangCommand.NEXT
                         webViewRef?.loadUrl(currentState.ppabangCategory.url)
                     } else {
                         pendingCommand = PpabangCommand.NEXT
+                        webViewRef?.let { deliverPendingCommand(it, pageGeneration) }
+                    }
+                }
+                PpabangCommand.PAUSE -> {
+                    pausePlayback()
+                }
+                PpabangCommand.RESUME -> {
+                    if (!documentStopped) {
+                        isLocallyPausedForAppSwitch = false
+                        pendingCommand = PpabangCommand.RESUME
                         webViewRef?.let { deliverPendingCommand(it, pageGeneration) }
                     }
                 }
@@ -276,6 +347,7 @@ fun PpabangInlinePlayer(
         if (loadedCategory != target) {
             loadedCategory = target
             documentStopped = false
+            isLocallyPausedForAppSwitch = false
             pendingCommand = PpabangCommand.PLAY
             webViewRef?.let { wv ->
                 onPlaybackStateChanged(PpabangPlaybackState.LOADING, null)
@@ -288,12 +360,17 @@ fun PpabangInlinePlayer(
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_RESUME -> {
+                    isLocallyPausedForAppSwitch = false
                     webViewRef?.onResume()
+                    if (pendingCommand != null && !documentStopped && !isLocallyPausedForAppSwitch) {
+                        webViewRef?.let { deliverPendingCommand(it, pageGeneration) }
+                    }
                 }
-                Lifecycle.Event.ON_PAUSE,
+                Lifecycle.Event.ON_PAUSE -> {
+                    pausePlayback()
+                }
                 Lifecycle.Event.ON_STOP -> {
-                    stopDocument()
-                    webViewRef?.onPause()
+                    pausePlayback()
                 }
                 else -> Unit
             }
@@ -354,37 +431,45 @@ fun PpabangInlinePlayer(
                                 PpabangBridge(
                                     onState = { playerState ->
                                         post {
-                                        if (webViewRef !== this || !isTrustedPage(this) || documentStopped ||
-                                            !lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return@post
-                                        val newState = when (playerState) {
-                                            1 -> PpabangPlaybackState.PLAYING
-                                            2 -> PpabangPlaybackState.PAUSED
-                                            3 -> PpabangPlaybackState.LOADING
-                                            else -> null
-                                        }
-                                        if (newState != null) {
-                                            reportState(newState, null)
-                                        }
+                                            if (webViewRef !== this || !isTrustedPage(this) || documentStopped) return@post
+                                            val isForeground = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+                                            if (!isForeground || isLocallyPausedForAppSwitch) {
+                                                if (playerState == 1) {
+                                                    executeJs(JS_PAUSE_COMMAND)
+                                                }
+                                                return@post
+                                            }
+                                            val newState = when (playerState) {
+                                                1 -> PpabangPlaybackState.PLAYING
+                                                2 -> PpabangPlaybackState.PAUSED
+                                                3 -> PpabangPlaybackState.LOADING
+                                                else -> null
+                                            }
+                                            if (newState != null) {
+                                                reportState(newState, null)
+                                            }
                                         }
                                     },
                                     onCover = { coverStatus ->
                                         post {
-                                        if (webViewRef !== this || !isTrustedPage(this) || documentStopped) return@post
-                                        when (coverStatus) {
-                                            "BLOCKED" -> onPlaybackStateChanged(
-                                                PpabangPlaybackState.AUTOPLAY_BLOCKED,
-                                                "화면을 터치하여 재생을 시작하세요",
-                                            )
-                                            "EMPTY" -> onPlaybackStateChanged(
-                                                PpabangPlaybackState.FAILED,
-                                                "재생 가능한 영상이 없습니다",
-                                            )
-                                            "START_COVER" -> {
-                                                if (currentState.ppabangPlaybackState != PpabangPlaybackState.PLAYING) {
-                                                    reportState(PpabangPlaybackState.IDLE, null)
+                                            if (webViewRef !== this || !isTrustedPage(this) || documentStopped) return@post
+                                            val isForeground = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+                                            if (!isForeground || isLocallyPausedForAppSwitch) return@post
+                                            when (coverStatus) {
+                                                "BLOCKED" -> onPlaybackStateChanged(
+                                                    PpabangPlaybackState.AUTOPLAY_BLOCKED,
+                                                    "화면을 터치하여 재생을 시작하세요",
+                                                )
+                                                "EMPTY" -> onPlaybackStateChanged(
+                                                    PpabangPlaybackState.FAILED,
+                                                    "재생 가능한 영상이 없습니다",
+                                                )
+                                                "START_COVER" -> {
+                                                    if (currentState.ppabangPlaybackState != PpabangPlaybackState.PLAYING) {
+                                                        reportState(PpabangPlaybackState.IDLE, null)
+                                                    }
                                                 }
                                             }
-                                        }
                                         }
                                     },
                                 ),
@@ -404,14 +489,17 @@ fun PpabangInlinePlayer(
 
                                 override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
                                     pageGeneration += 1
-                                    if (!documentStopped) reportState(PpabangPlaybackState.LOADING, null)
+                                    if (!documentStopped && lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) &&
+                                        !isLocallyPausedForAppSwitch) reportState(PpabangPlaybackState.LOADING, null)
                                 }
 
                                 override fun onPageFinished(view: WebView, url: String?) {
                                     if (isTrustedPage(view) && !documentStopped) {
                                         val generation = pageGeneration
                                         view.evaluateJavascript(PpabangPolicy.INJECTED_SETUP_JS) {
-                                            deliverPendingCommand(view, generation)
+                                            if (lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) && !isLocallyPausedForAppSwitch) {
+                                                deliverPendingCommand(view, generation)
+                                            }
                                         }
                                     }
                                 }
@@ -487,7 +575,11 @@ fun PpabangInlinePlayer(
 
                             webViewRef = this
                             loadedCategory = state.ppabangCategory
-                            loadUrl(state.ppabangCategory.url)
+                            if (state.ppabangPlaybackState != PpabangPlaybackState.STOPPED) {
+                                loadUrl(state.ppabangCategory.url)
+                            } else {
+                                loadUrl("about:blank")
+                            }
                         }
                     },
                     modifier = Modifier.fillMaxSize(),
@@ -664,4 +756,6 @@ enum class PpabangCommand {
     PLAY,
     STOP,
     NEXT,
+    PAUSE,
+    RESUME,
 }
