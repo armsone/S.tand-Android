@@ -751,9 +751,64 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
         syncSleepCareMonitoring()
     }
 
+    fun togglePpabangPanel() {
+        if (mutableUiState.value.isPpabangPanelOpen || mutableUiState.value.isPpabangPlayerVisible) {
+            stopPpabang(clearVisibility = true)
+        } else {
+            startPpabang()
+        }
+    }
+
+    fun toggleMiniPpabangPlayback() {
+        val state = mutableUiState.value
+        if (!state.isPpabangPlayerVisible && !state.isPpabangPanelOpen) {
+            startPpabang()
+            return
+        }
+        val isCurrentlyPlaying = state.ppabangPlaybackState == PpabangPlaybackState.PLAYING ||
+            state.ppabangPlaybackState == PpabangPlaybackState.LOADING ||
+            state.ppabangPlaybackState == PpabangPlaybackState.REQUESTED ||
+            state.ppabangPlaybackState == PpabangPlaybackState.BUFFERING
+        if (isCurrentlyPlaying) {
+            pausePpabang()
+        } else {
+            requestPpabangPlay()
+        }
+    }
+
+    fun requestPpabangPlay() {
+        cancelPpabangGrace(stopIfRetained = false)
+        internetRadioPlayer.stop()
+        endExternalMusicMode()
+        mutableUiState.update { current ->
+            current.copy(
+                isPpabangPlayerVisible = true,
+                isPpabangPanelOpen = true,
+                ppabangPlaybackState = PpabangPlaybackState.REQUESTED,
+                ppabangMessage = null,
+                isPpabangRetainedForAppSwitch = false,
+            )
+        }
+        mutablePpabangCommands.tryEmit(PpabangCommand.PLAY)
+        audioMonitor.stop()
+        syncSleepCareMonitoring()
+    }
+
+    fun pausePpabang() {
+        cancelPpabangGrace(stopIfRetained = false)
+        mutablePpabangCommands.tryEmit(PpabangCommand.PAUSE)
+        mutableUiState.update { current ->
+            current.copy(
+                ppabangPlaybackState = PpabangPlaybackState.PAUSED,
+                isPpabangRetainedForAppSwitch = false,
+            )
+        }
+        syncSleepCareMonitoring()
+    }
+
     fun startPpabang(category: PpabangCategory = mutableUiState.value.ppabangCategory) {
         cancelPpabangGrace(stopIfRetained = false)
-        val resumesCurrentPlayer = mutableUiState.value.isPpabangPlayerVisible &&
+        val resumesCurrentPlayer = (mutableUiState.value.isPpabangPlayerVisible || mutableUiState.value.isPpabangPanelOpen) &&
             mutableUiState.value.ppabangCategory == category
         internetRadioPlayer.stop()
         endExternalMusicMode()
@@ -761,8 +816,10 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
         mutableUiState.update { current ->
             current.copy(
                 isPpabangPlayerVisible = true,
+                isPpabangPanelOpen = true,
                 ppabangCategory = category,
                 ppabangPlaybackState = PpabangPlaybackState.LOADING,
+                ppabangTrackTitle = null,
                 ppabangMessage = null,
                 isPpabangRetainedForAppSwitch = false,
             )
@@ -786,7 +843,7 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
             mutableUiState.value.ppabangCategories,
         )
         selectPpabangCategory(next)
-        if (mutableUiState.value.isPpabangPlayerVisible) {
+        if (mutableUiState.value.isPpabangPlayerVisible || mutableUiState.value.isPpabangPanelOpen) {
             startPpabang(next)
         }
     }
@@ -807,10 +864,10 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
         cancelPpabangGrace(stopIfRetained = false)
         internetRadioPlayer.stop()
         endExternalMusicMode()
-        if (!mutableUiState.value.isPpabangPlayerVisible) {
+        if (!mutableUiState.value.isPpabangPlayerVisible && !mutableUiState.value.isPpabangPanelOpen) {
             startPpabang()
         } else {
-            mutablePpabangCommands.tryEmit(PpabangCommand.PLAY)
+            requestPpabangPlay()
         }
     }
 
@@ -819,9 +876,11 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
         mutablePpabangCommands.tryEmit(PpabangCommand.STOP)
         mutableUiState.update { current ->
             current.copy(
-                ppabangPlaybackState = PpabangPlaybackState.STOPPED,
+                ppabangPlaybackState = PpabangPlaybackState.IDLE,
                 isPpabangPlayerVisible = if (clearVisibility) false else current.isPpabangPlayerVisible,
+                isPpabangPanelOpen = if (clearVisibility) false else current.isPpabangPanelOpen,
                 isPpabangRetainedForAppSwitch = false,
+                ppabangTrackTitle = null,
             )
         }
         syncSleepCareMonitoring()
@@ -830,16 +889,18 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
     fun pausePpabangForAppSwitch() {
         if (ppabangGraceJob != null) return
         val state = mutableUiState.value
-        if (!state.isPpabangPlayerVisible || state.ppabangPlaybackState == PpabangPlaybackState.STOPPED) return
+        if ((!state.isPpabangPlayerVisible && !state.isPpabangPanelOpen) || state.ppabangPlaybackState == PpabangPlaybackState.IDLE) return
         val wasPlaying = state.ppabangPlaybackState == PpabangPlaybackState.PLAYING ||
-            state.ppabangPlaybackState == PpabangPlaybackState.LOADING
+            state.ppabangPlaybackState == PpabangPlaybackState.LOADING ||
+            state.ppabangPlaybackState == PpabangPlaybackState.REQUESTED ||
+            state.ppabangPlaybackState == PpabangPlaybackState.BUFFERING
         ppabangWasPlayingBeforePause = wasPlaying
         ppabangGraceStartedElapsedRealtime = SystemClock.elapsedRealtime()
 
         mutablePpabangCommands.tryEmit(PpabangCommand.PAUSE)
         mutableUiState.update { current ->
             current.copy(
-                ppabangPlaybackState = if (wasPlaying || current.ppabangPlaybackState == PpabangPlaybackState.LOADING) {
+                ppabangPlaybackState = if (wasPlaying) {
                     PpabangPlaybackState.PAUSED
                 } else current.ppabangPlaybackState,
                 isPpabangRetainedForAppSwitch = true,
@@ -853,7 +914,7 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
             ppabangWasPlayingBeforePause = false
             ppabangGraceStartedElapsedRealtime = null
             mutableUiState.update { it.copy(isPpabangRetainedForAppSwitch = false) }
-            stopPpabang(clearVisibility = false)
+            stopPpabang(clearVisibility = true)
         }
     }
 
@@ -872,19 +933,12 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
         mutableUiState.update { it.copy(isPpabangRetainedForAppSwitch = false) }
 
         if (elapsed >= PPABANG_APP_SWITCH_GRACE_MILLIS) {
-            stopPpabang(clearVisibility = false)
+            stopPpabang(clearVisibility = true)
             return
         }
 
-        if (wasPlaying && mutableUiState.value.isPpabangPlayerVisible) {
-            mutableUiState.update { current ->
-                current.copy(
-                    ppabangPlaybackState = PpabangPlaybackState.LOADING,
-                    ppabangMessage = null,
-                )
-            }
-            mutablePpabangCommands.tryEmit(PpabangCommand.RESUME)
-            syncSleepCareMonitoring()
+        if (wasPlaying && (mutableUiState.value.isPpabangPlayerVisible || mutableUiState.value.isPpabangPanelOpen)) {
+            requestPpabangPlay()
         }
     }
 
@@ -901,7 +955,7 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun onActivityDestroyed() {
-        if (mutableUiState.value.isPpabangPlayerVisible) stopPpabang()
+        if (mutableUiState.value.isPpabangPlayerVisible || mutableUiState.value.isPpabangPanelOpen) stopPpabang(clearVisibility = true)
     }
 
     fun nextPpabang() {
@@ -911,6 +965,10 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
 
     fun closePpabangPlayer() {
         stopPpabang(clearVisibility = true)
+    }
+
+    fun onPpabangTrackTitleChanged(title: String?) {
+        mutableUiState.update { it.copy(ppabangTrackTitle = title) }
     }
 
     fun onPpabangStateChanged(state: PpabangPlaybackState, message: String? = null) {

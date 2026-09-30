@@ -705,6 +705,9 @@ class MainActivity : ComponentActivity() {
                     onOpenExternalMusic = ::openExternalMusic,
                     onEndExternalMusic = standViewModel::endExternalMusicMode,
                     ppabangCommandFlow = standViewModel.ppabangCommands,
+                    onTogglePpabangPanel = standViewModel::togglePpabangPanel,
+                    onToggleMiniPpabangPlayback = standViewModel::toggleMiniPpabangPlayback,
+                    onPausePpabang = standViewModel::pausePpabang,
                     onPlayPpabang = standViewModel::playPpabang,
                     onStopPpabang = { standViewModel.stopPpabang(clearVisibility = true) },
                     onNextPpabang = standViewModel::nextPpabang,
@@ -714,6 +717,7 @@ class MainActivity : ComponentActivity() {
                     onRefreshPpabangCategories = standViewModel::refreshPpabangCategories,
                     onClosePpabang = standViewModel::closePpabangPlayer,
                     onPpabangStateChanged = standViewModel::onPpabangStateChanged,
+                    onPpabangTrackTitleChanged = standViewModel::onPpabangTrackTitleChanged,
                     onEditRadio = { channelID ->
                         radioEditorChannelID = channelID
                         secondaryReturnDestination = AppDestination.HOME
@@ -1259,10 +1263,18 @@ class MainActivity : ComponentActivity() {
             .recoverCatching { startActivity(webIntent) }
     }
 
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        applyOrientationPreference(standViewModel.uiState.value.settings.orientationPreference)
+    }
+
     private fun applyOrientationPreference(preference: OrientationPreference) {
-        val isTelevision = TvUiModePolicy.isTelevision(resources.configuration)
+        val configuration = resources.configuration
+        val isTelevision = TvUiModePolicy.isTelevision(configuration)
+        val isCompactPhone = !isTelevision && configuration.smallestScreenWidthDp < 600
         val orientation = when {
             isTelevision -> ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+            isCompactPhone -> ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
             preference == OrientationPreference.AUTOMATIC -> ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
             preference == OrientationPreference.PORTRAIT -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
             preference == OrientationPreference.LANDSCAPE -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE

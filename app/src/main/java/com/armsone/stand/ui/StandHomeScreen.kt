@@ -204,6 +204,9 @@ fun StandHomeScreen(
     onOpenExternalMusic: (ExternalMusicService) -> Unit = {},
     onEndExternalMusic: () -> Unit = {},
     ppabangCommandFlow: SharedFlow<PpabangCommand>? = null,
+    onTogglePpabangPanel: () -> Unit = {},
+    onToggleMiniPpabangPlayback: () -> Unit = {},
+    onPausePpabang: () -> Unit = {},
     onPlayPpabang: () -> Unit = {},
     onStopPpabang: () -> Unit = {},
     onNextPpabang: () -> Unit = {},
@@ -213,6 +216,7 @@ fun StandHomeScreen(
     onRefreshPpabangCategories: () -> Unit = {},
     onClosePpabang: () -> Unit = {},
     onPpabangStateChanged: (PpabangPlaybackState, String?) -> Unit = { _, _ -> },
+    onPpabangTrackTitleChanged: (String?) -> Unit = {},
     onCheckUpdate: () -> Unit = {},
     modifier: Modifier = Modifier,
     catalogNow: LocalDateTime? = null,
@@ -220,6 +224,7 @@ fun StandHomeScreen(
     val burnInOffset = rememberBurnInOffset()
     val configuration = LocalConfiguration.current
     val isTelevision = TvUiModePolicy.isTelevision(configuration)
+    val webViewHolder = rememberPpabangWebViewHolder()
     var showTvFocusIndicator by remember { mutableStateOf(false) }
     var focusInteractionCount by remember { mutableStateOf(0L) }
     var adjustmentFeedback by remember { mutableStateOf<HomeAdjustmentFeedback?>(null) }
@@ -227,6 +232,12 @@ fun StandHomeScreen(
     var ppabangFrame by remember { mutableStateOf(Rect.Zero) }
     var musicStripFrame by remember { mutableStateOf(Rect.Zero) }
     var ppabangCardFrame by remember { mutableStateOf(Rect.Zero) }
+
+    LaunchedEffect(state.isPpabangPlayerVisible) {
+        if (!state.isPpabangPlayerVisible) {
+            ppabangFrame = Rect.Zero
+        }
+    }
 
     LaunchedEffect(isTelevision, showTvFocusIndicator, focusInteractionCount) {
         if (isTelevision && showTvFocusIndicator) {
@@ -464,22 +475,25 @@ fun StandHomeScreen(
                                 onRefreshPpabangCategories()
                                 showPpabangCategoryDialog = true
                             },
+                            onTogglePpabang = onTogglePpabangPanel,
                             modifier = Modifier.weight(1f),
                         )
-                        PhoneLandscapeSideControls(
-                            state = state,
-                            onOpenRecordings = onOpenRecordings,
-                            onOpenSettings = onOpenSettings,
-                            onOpenBoyiso = onOpenBoyiso,
-                            boyisoStatus = boyisoStatus,
-                            boyisoCanSendTokTok = boyisoCanSendTokTok,
-                            onSendBoyisoTokTok = onSendBoyisoTokTok,
-                        )
+                        if (!state.isPpabangPlayerVisible) {
+                            PhoneLandscapeSideControls(
+                                state = state,
+                                onOpenRecordings = onOpenRecordings,
+                                onOpenSettings = onOpenSettings,
+                                onOpenBoyiso = onOpenBoyiso,
+                                boyisoStatus = boyisoStatus,
+                                boyisoCanSendTokTok = boyisoCanSendTokTok,
+                                onSendBoyisoTokTok = onSendBoyisoTokTok,
+                            )
+                        }
                     }
                 } else {
                     MusicChannelStrip(
                         onFrameChanged = { musicStripFrame = it },
-                            onPpabangFrameChanged = { ppabangCardFrame = it },
+                        onPpabangFrameChanged = { ppabangCardFrame = it },
                         state = state,
                         contentAlpha = contentAlpha,
                         isPhoneLandscape = false,
@@ -497,6 +511,7 @@ fun StandHomeScreen(
                             onRefreshPpabangCategories()
                             showPpabangCategoryDialog = true
                         },
+                        onTogglePpabang = onTogglePpabangPanel,
                         modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                     )
                 }
@@ -505,56 +520,62 @@ fun StandHomeScreen(
                 Spacer(Modifier.weight(1f))
 
                 if (!usesPhoneLandscapeSideControls) {
-                    HomeControls(
-                        state = state,
-                        isPortrait = isPortrait,
-                        isExpanded = isExpanded,
-                        isTelevision = isTelevision,
-                        isRemoteActive = showTvFocusIndicator,
-                        onToggleTorch = onToggleTorch,
-                        onCycleMode = onCycleMode,
-                        onToggleSession = onToggleSession,
-                        onToggleOrientation = onToggleOrientation,
-                        onOpenRecordings = onOpenRecordings,
-                        onOpenAiShot = onOpenAiShot,
-                        onOpenSettings = onOpenSettings,
-                        onOpenBoyiso = onOpenBoyiso,
-                        onToggleTheme = onToggleTheme,
-                        onBrightnessAdjustmentStarted = onBrightnessAdjustmentStarted,
-                        onBrightnessLevelChanged = handleBrightnessLevelChanged,
-                        onBrightnessAdjustmentFinished = handleBrightnessAdjustmentFinished,
-                        onClockScaleChanged = handleClockScaleChanged,
-                        boyisoStatus = boyisoStatus,
-                        boyisoCanSendTokTok = boyisoCanSendTokTok,
-                        onSendBoyisoTokTok = onSendBoyisoTokTok,
-                        trailingContent = if (
-                            isPortrait && !isTelevision &&
-                            state.isPpabangPlayerVisible && ppabangCommandFlow != null
+                    if (isPortrait && !isTelevision && state.isPpabangPlayerVisible && ppabangCommandFlow != null) {
+                        Box(
+                            modifier = Modifier.fillMaxWidth(),
+                            contentAlignment = Alignment.Center,
                         ) {
-                            {
-                                PpabangFloatingPlayer(
-                                    anchorFrame = ppabangCardFrame,
-                                    onFrameChanged = { ppabangFrame = it },
-                                    modifier = Modifier.size(216.dp),
-                                    state = state,
-                                    isTelevision = false,
-                                    isPortrait = true,
-                                    commandFlow = ppabangCommandFlow,
-                                    onPlay = onPlayPpabang,
-                                    onStop = onStopPpabang,
-                                    onNext = onNextPpabang,
-                                    onSelectCategory = { category ->
-                                        onSelectPpabangCategory(category)
-                                        onStartPpabang(category)
-                                    },
-                                    onClose = onClosePpabang,
-                                    onPlaybackStateChanged = onPpabangStateChanged,
-                                )
-                            }
-                        } else {
-                            null
-                        },
-                    )
+                            PpabangInlinePlayer(
+                                state = state,
+                                isTelevision = false,
+                                isPortrait = true,
+                                commandFlow = ppabangCommandFlow,
+                                onPlay = onPlayPpabang,
+                                onStop = onStopPpabang,
+                                onNext = onNextPpabang,
+                                onSelectCategory = { category ->
+                                    onSelectPpabangCategory(category)
+                                    onStartPpabang(category)
+                                },
+                                onClose = onClosePpabang,
+                                onPlaybackStateChanged = onPpabangStateChanged,
+                                webViewHolder = webViewHolder,
+                                onPause = onPausePpabang,
+                                onOpenCategoryPicker = {
+                                    onRefreshPpabangCategories()
+                                    showPpabangCategoryDialog = true
+                                },
+                                showControls = true,
+                                modifier = Modifier.onGloballyPositioned {
+                                    ppabangFrame = it.boundsInWindow()
+                                },
+                            )
+                        }
+                    } else if (!(state.isPpabangPlayerVisible && !isTelevision && !isPortrait)) {
+                        HomeControls(
+                            state = state,
+                            isPortrait = isPortrait,
+                            isExpanded = isExpanded,
+                            isTelevision = isTelevision,
+                            isRemoteActive = showTvFocusIndicator,
+                            onToggleTorch = onToggleTorch,
+                            onCycleMode = onCycleMode,
+                            onToggleSession = onToggleSession,
+                            onToggleOrientation = onToggleOrientation,
+                            onOpenRecordings = onOpenRecordings,
+                            onOpenAiShot = onOpenAiShot,
+                            onOpenSettings = onOpenSettings,
+                            onOpenBoyiso = onOpenBoyiso,
+                            onToggleTheme = onToggleTheme,
+                            onBrightnessAdjustmentStarted = onBrightnessAdjustmentStarted,
+                            onBrightnessLevelChanged = handleBrightnessLevelChanged,
+                            onBrightnessAdjustmentFinished = handleBrightnessAdjustmentFinished,
+                            onClockScaleChanged = handleClockScaleChanged,
+                            boyisoStatus = boyisoStatus,
+                            boyisoCanSendTokTok = boyisoCanSendTokTok,
+                            onSendBoyisoTokTok = onSendBoyisoTokTok,
+                        )
+                    }
                 }
             }
 
@@ -623,6 +644,13 @@ fun StandHomeScreen(
                         },
                         onClose = onClosePpabang,
                         onPlaybackStateChanged = onPpabangStateChanged,
+                        webViewHolder = webViewHolder,
+                        onPause = onPausePpabang,
+                        onOpenCategoryPicker = {
+                            onRefreshPpabangCategories()
+                            showPpabangCategoryDialog = true
+                        },
+                        showControls = true,
                     )
                 }
 
@@ -1101,7 +1129,7 @@ private fun HomeGestureLayer(
                         requireUnconsumed = false,
                         pass = PointerEventPass.Initial,
                     )
-                    if (latestExcludedFrames.any { it.contains(down.position + layerOrigin) }) {
+                    if (latestExcludedFrames.any { !it.isEmpty && it.contains(down.position + layerOrigin) }) {
                         waitForUpOrCancellation(pass = PointerEventPass.Final)
                         return@awaitEachGesture
                     }
@@ -1152,7 +1180,7 @@ private fun HomeGestureLayer(
                             requireUnconsumed = true,
                             pass = PointerEventPass.Final,
                         )
-                    if (latestExcludedFrames.any { it.contains(down.position + layerOrigin) }) {
+                    if (latestExcludedFrames.any { !it.isEmpty && it.contains(down.position + layerOrigin) }) {
                         waitForUpOrCancellation(pass = PointerEventPass.Final)
                         return@awaitEachGesture
                     }
@@ -1244,7 +1272,7 @@ private fun HomeGestureLayer(
                         requireUnconsumed = true,
                         pass = PointerEventPass.Final,
                     )
-                    if (latestExcludedFrames.any { it.contains(down.position + layerOrigin) }) {
+                    if (latestExcludedFrames.any { !it.isEmpty && it.contains(down.position + layerOrigin) }) {
                         waitForUpOrCancellation(pass = PointerEventPass.Final)
                         return@awaitEachGesture
                     }
@@ -1669,11 +1697,17 @@ internal fun MusicChannelStrip(
     onNextPpabang: () -> Unit = {},
     onCyclePpabangCategory: () -> Unit = {},
     onOpenPpabangCategoryDialog: () -> Unit = {},
+    onTogglePpabang: () -> Unit = {},
     modifier: Modifier = Modifier,
     onFrameChanged: (Rect) -> Unit = {},
     onPpabangFrameChanged: (Rect) -> Unit = {},
 ) {
-    val channels = state.settings.homeMusicChannels.sortedBy { it.kind != HomeMusicChannelKind.PPABANG }
+    val ppabangSelection = state.settings.homeMusicChannels.firstOrNull { it.kind == HomeMusicChannelKind.PPABANG }
+        ?: HomeMusicChannelSelection.Ppabang
+    val radioSelection = state.settings.homeMusicChannels.firstOrNull { it.kind == HomeMusicChannelKind.INTERNET_RADIO }
+        ?: state.settings.internetRadioChannels.firstOrNull()?.let { HomeMusicChannelSelection.radio(it.id, slot = 0) }
+        ?: HomeMusicChannelSelection.emptyRadio(slot = 0)
+    val channels = listOf(ppabangSelection, radioSelection)
     val scrollState = rememberScrollState()
 
     BoxWithConstraints(
@@ -1730,6 +1764,7 @@ internal fun MusicChannelStrip(
                         onNextPpabang = onNextPpabang,
                         onCyclePpabangCategory = onCyclePpabangCategory,
                         onOpenPpabangCategoryDialog = onOpenPpabangCategoryDialog,
+                        onTogglePpabang = onTogglePpabang,
                     )
                 }
             }
@@ -1785,7 +1820,7 @@ internal fun PhoneLandscapeSideControls(
     onSendBoyisoTokTok: () -> Unit,
 ) {
     val controlOrder = state.settings.landscapeLayout.controlOrder.filter {
-        it in StandControlKind.DefaultOrder
+        it in listOf(StandControlKind.RECORDINGS, StandControlKind.SETTINGS)
     }
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         controlOrder.forEach { kind ->
@@ -1839,6 +1874,7 @@ internal fun MusicPanel(
     onCyclePpabangCategory: () -> Unit = {},
     onOpenPpabangCategoryDialog: () -> Unit = {},
     onRegisterRadio: () -> Unit = {},
+    onTogglePpabang: () -> Unit = {},
     width: androidx.compose.ui.unit.Dp = 144.dp,
     drawsSurface: Boolean = true,
     modifier: Modifier = Modifier,
@@ -1849,15 +1885,7 @@ internal fun MusicPanel(
             contentAlpha = contentAlpha,
             isTelevision = isTelevision,
             width = width,
-            onPrimaryClick = {
-                if (state.isPpabangPlayerVisible && state.ppabangPlaybackState == PpabangPlaybackState.PLAYING) {
-                    onStopPpabang()
-                } else {
-                    onStartPpabang(state.ppabangCategory)
-                }
-            },
-            onSecondaryClick = onNextPpabang,
-            onLongClick = onOpenPpabangCategoryDialog,
+            onToggle = onTogglePpabang,
             drawsSurface = drawsSurface,
             modifier = modifier,
         )
@@ -2106,29 +2134,29 @@ internal fun PpabangPanel(
     state: StandUiState,
     contentAlpha: Float,
     isTelevision: Boolean = false,
-    onPrimaryClick: () -> Unit,
-    onSecondaryClick: () -> Unit,
-    onLongClick: () -> Unit,
+    onToggle: () -> Unit = {},
+    onPrimaryClick: () -> Unit = onToggle,
+    onSecondaryClick: () -> Unit = {},
+    onLongClick: () -> Unit = {},
     width: androidx.compose.ui.unit.Dp = 144.dp,
     drawsSurface: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
-    val isPlaying = state.isPpabangPlayerVisible && state.ppabangPlaybackState == PpabangPlaybackState.PLAYING
+    val isPanelOpen = state.isPpabangPlayerVisible
     val category = state.ppabangCategory
     val title = "빠방 · ${category.title}"
     val detail = when (state.ppabangPlaybackState) {
         PpabangPlaybackState.IDLE -> if (state.isPpabangPlayerVisible) "대기" else "${state.ppabangCategories.size}개 채널"
         PpabangPlaybackState.LOADING -> "연결 중"
+        PpabangPlaybackState.READY -> state.ppabangPlaybackState.displayText
+        PpabangPlaybackState.REQUESTED -> state.ppabangPlaybackState.displayText
         PpabangPlaybackState.PLAYING -> "재생 중"
         PpabangPlaybackState.PAUSED -> "일시 정지"
-        PpabangPlaybackState.STOPPED -> "정지"
+        PpabangPlaybackState.BUFFERING -> state.ppabangPlaybackState.displayText
         PpabangPlaybackState.AUTOPLAY_BLOCKED -> "터치 필요"
         PpabangPlaybackState.FAILED -> "연결 실패"
     }
     val visibleAlpha = contentAlpha * if (isTelevision) 0.48f else 1f
-    val tvCategoryFocusRequester = remember { FocusRequester() }
-    val categoryDialogScope = rememberCoroutineScope()
-    var tvCategoryLongPressHandled by remember { mutableStateOf(false) }
     Surface(
         modifier = modifier
             .width(width)
@@ -2143,14 +2171,24 @@ internal fun PpabangPanel(
                 } else {
                     Modifier
                 },
-            ),
+            )
+            .then(
+                if (isTelevision) Modifier.standFocusable(RoundedCornerShape(13.dp))
+                else Modifier,
+            )
+            .clickable(onClick = onToggle)
+            .semantics {
+                contentDescription = "$title, 빠방 플레이어 열기 또는 닫기"
+                stateDescription = detail
+                role = Role.Button
+            },
         color = Color.Transparent,
         shape = RoundedCornerShape(13.dp),
         shadowElevation = 0.dp,
     ) {
         Box {
             MusicPanelTileContent(
-                icon = if (isPlaying) {
+                icon = if (isPanelOpen) {
                     Icons.Default.StopCircle
                 } else {
                     Icons.Default.PlayArrow
@@ -2161,85 +2199,6 @@ internal fun PpabangPanel(
                 detailAlpha = 0.58f,
                 isTelevision = isTelevision,
             )
-            Row(modifier = Modifier.fillMaxSize()) {
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                        .then(
-                            if (isTelevision) {
-                                Modifier.focusProperties { right = tvCategoryFocusRequester }
-                            } else {
-                                Modifier
-                            },
-                        )
-                        .then(
-                            if (isTelevision) Modifier.standFocusable(RoundedCornerShape(13.dp))
-                            else Modifier,
-                        )
-                        .combinedClickable(onClick = onPrimaryClick)
-                        .semantics {
-                            contentDescription = "$title, 재생 또는 정지"
-                            stateDescription = detail
-                            role = Role.Button
-                        },
-                )
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                        .then(
-                            if (isTelevision) Modifier.focusRequester(tvCategoryFocusRequester)
-                            else Modifier,
-                        )
-                        .then(
-                            if (isTelevision) Modifier.standFocusable(RoundedCornerShape(13.dp))
-                            else Modifier,
-                        )
-                        .onPreviewKeyEvent { event ->
-                            if (!isTelevision || event.key != Key.DirectionCenter) {
-                                false
-                            } else if (
-                                event.type == KeyEventType.KeyDown &&
-                                (event.nativeKeyEvent.isLongPress || event.nativeKeyEvent.repeatCount > 0)
-                            ) {
-                                if (!tvCategoryLongPressHandled) {
-                                    tvCategoryLongPressHandled = true
-                                }
-                                true
-                            } else if (
-                                event.type == KeyEventType.KeyUp && tvCategoryLongPressHandled
-                            ) {
-                                tvCategoryLongPressHandled = false
-                                onLongClick()
-                                true
-                            } else {
-                                false
-                            }
-                        }
-                        .combinedClickable(
-                            onClick = onSecondaryClick,
-                            // TV remotes are handled above from their D-pad key
-                            // sequence. Letting combinedClickable handle the same
-                            // long press can dispatch the dialog-open action twice.
-                            onLongClick = if (isTelevision) {
-                                null
-                            } else {
-                                {
-                                    categoryDialogScope.launch {
-                                        delay(180)
-                                        onLongClick()
-                                    }
-                                }
-                            },
-                        )
-                        .semantics {
-                            contentDescription = "$title, 다음 곡. 길게 누르면 카테고리 선택"
-                            stateDescription = detail
-                            role = Role.Button
-                        },
-                )
-            }
         }
     }
 }
@@ -2505,7 +2464,14 @@ private fun HomeControls(
     } else {
         state.settings.landscapeLayout.controlOrder
     }
-    val controlOrder = TvUiModePolicy.allowedControls(isTelevision, rawControlOrder)
+    val controlOrder = if (isTelevision) {
+        TvUiModePolicy.allowedControls(isTelevision, rawControlOrder)
+    } else {
+        rawControlOrder.filter {
+            it in listOf(StandControlKind.RECORDINGS, StandControlKind.SETTINGS) ||
+                (it == StandControlKind.ORIENTATION && isExpanded)
+        }
+    }
     LaunchedEffect(isTelevision, state.isSessionActive) {
         if (isTelevision && state.isSessionActive) {
             initialFocusRequester.requestFocus()

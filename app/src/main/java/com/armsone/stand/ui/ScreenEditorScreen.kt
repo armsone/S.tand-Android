@@ -1211,6 +1211,9 @@ private fun ControlOrderEditor(
                     (maxWidth.value + spacing.value) /
                         (tileWidth.value + spacing.value)
                 ).toInt().coerceIn(1, 7)
+                val visibleOrder = remember(order, isExpanded) {
+                    if (isExpanded) order else order.filter { it != StandControlKind.ORIENTATION }
+                }
                 FlowRow(
                     modifier = Modifier.fillMaxWidth().semantics {
                         contentDescription = "하단 버튼 순서 편집"
@@ -1221,7 +1224,7 @@ private fun ControlOrderEditor(
                     ),
                     verticalArrangement = Arrangement.spacedBy(spacing),
                 ) {
-                    order.forEachIndexed { index, kind ->
+                    visibleOrder.forEachIndexed { index, kind ->
                         val controlWidth = if (kind == StandControlKind.STOP_DETECTION) {
                             tileWidth * 2 + spacing
                         } else {
@@ -1232,21 +1235,27 @@ private fun ControlOrderEditor(
                             kind = kind,
                             presentation = kind.presentation(state),
                             index = index,
-                            itemCount = order.size,
+                            itemCount = visibleOrder.size,
                             columns = columns,
                             width = controlWidth,
                             dragImmediately = isExpanded,
                             onPositioned = { center -> tileCenters[kind] = center },
                             resolveTarget = { dragOffset ->
                                 nearestControlIndex(
-                                    order = order,
+                                    order = visibleOrder,
                                     centers = tileCenters,
                                     movingKind = kind,
                                     dragOffset = dragOffset,
                                 )
                             },
                             onMove = { from, to ->
-                                onOrderChange(order.moved(from, to))
+                                val movedKind = visibleOrder.getOrNull(from)
+                                val targetKind = visibleOrder.getOrNull(to)
+                                val fullFrom = movedKind?.let(order::indexOf) ?: -1
+                                val fullTo = targetKind?.let(order::indexOf) ?: -1
+                                if (fullFrom >= 0 && fullTo >= 0) {
+                                    onOrderChange(order.moved(fullFrom, fullTo))
+                                }
                             },
                             onDragStateChange = { isDragging ->
                                 draggingKind = when {
