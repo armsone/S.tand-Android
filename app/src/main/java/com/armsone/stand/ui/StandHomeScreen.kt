@@ -476,6 +476,8 @@ fun StandHomeScreen(
                                 showPpabangCategoryDialog = true
                             },
                             onTogglePpabang = onTogglePpabangPanel,
+                            onPlayPpabang = onPlayPpabang,
+                            onPausePpabang = onPausePpabang,
                             modifier = Modifier.weight(1f),
                         )
                         if (!state.isPpabangPlayerVisible) {
@@ -512,6 +514,8 @@ fun StandHomeScreen(
                             showPpabangCategoryDialog = true
                         },
                         onTogglePpabang = onTogglePpabangPanel,
+                        onPlayPpabang = onPlayPpabang,
+                        onPausePpabang = onPausePpabang,
                         modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                     )
                 }
@@ -650,7 +654,7 @@ fun StandHomeScreen(
                             onRefreshPpabangCategories()
                             showPpabangCategoryDialog = true
                         },
-                        showControls = true,
+                        showControls = !isTelevision,
                     )
                 }
 
@@ -673,6 +677,7 @@ fun StandHomeScreen(
                         }
                     },
                     onDismiss = { showPpabangCategoryDialog = false },
+                    isTelevision = isTelevision,
                 )
             }
         }
@@ -1698,6 +1703,8 @@ internal fun MusicChannelStrip(
     onCyclePpabangCategory: () -> Unit = {},
     onOpenPpabangCategoryDialog: () -> Unit = {},
     onTogglePpabang: () -> Unit = {},
+    onPlayPpabang: () -> Unit = {},
+    onPausePpabang: () -> Unit = {},
     modifier: Modifier = Modifier,
     onFrameChanged: (Rect) -> Unit = {},
     onPpabangFrameChanged: (Rect) -> Unit = {},
@@ -1745,6 +1752,16 @@ internal fun MusicChannelStrip(
                 ),
             ) {
                 channels.forEach { selection ->
+                    if (isTelevision && selection.kind == HomeMusicChannelKind.PPABANG && state.isPpabangPlayerVisible) {
+                        PpabangCompactControlCards(
+                            playbackState = state.ppabangPlaybackState,
+                            currentCategory = state.ppabangCategory,
+                            onPlay = onPlayPpabang,
+                            onNext = onNextPpabang,
+                            onCategoryClick = onOpenPpabangCategoryDialog,
+                            onPause = onPausePpabang,
+                        )
+                    }
                     MusicPanel(
                         modifier = if (selection.kind == HomeMusicChannelKind.PPABANG) {
                             Modifier.onGloballyPositioned { onPpabangFrameChanged(it.boundsInWindow()) }

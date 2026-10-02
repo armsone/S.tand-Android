@@ -773,6 +773,135 @@ fun PpabangControlCards(
 }
 
 /**
+ * Compact horizontal row (44dp height) for TV: playpause 44x44, next 44x44,
+ * category emoji+label in a 60dp-wide cell. Same glass/flip style as PpabangPanel's
+ * 44dp TV music card (standPanelSurface, 13dp corner radius).
+ */
+@Composable
+fun PpabangCompactControlCards(
+    playbackState: PpabangPlaybackState,
+    currentCategory: PpabangCategory,
+    onPlay: () -> Unit,
+    onNext: () -> Unit,
+    onCategoryClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    onPause: (() -> Unit)? = null,
+) {
+    val isPlaying = playbackState == PpabangPlaybackState.PLAYING
+    Row(
+        modifier = modifier.height(44.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+    ) {
+        Surface(
+            modifier = Modifier
+                .size(44.dp)
+                .standFocusable(shape = RoundedCornerShape(13.dp))
+                .standPanelSurface(
+                    isDimmed = false,
+                    cornerRadius = 13.dp,
+                    splitGap = 2.dp,
+                )
+                .clickable {
+                    if (isPlaying) {
+                        onPause?.invoke()
+                    } else {
+                        onPlay()
+                    }
+                }
+                .semantics {
+                    role = Role.Button
+                    contentDescription = if (isPlaying) "일시정지" else "재생"
+                },
+            color = Color.Transparent,
+            shape = RoundedCornerShape(13.dp),
+            shadowElevation = 0.dp,
+        ) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        }
+
+        Surface(
+            modifier = Modifier
+                .size(44.dp)
+                .standFocusable(shape = RoundedCornerShape(13.dp))
+                .standPanelSurface(
+                    isDimmed = false,
+                    cornerRadius = 13.dp,
+                    splitGap = 2.dp,
+                )
+                .clickable { onNext() }
+                .semantics {
+                    role = Role.Button
+                    contentDescription = "다음 영상"
+                },
+            color = Color.Transparent,
+            shape = RoundedCornerShape(13.dp),
+            shadowElevation = 0.dp,
+        ) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = Icons.Default.SkipNext,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        }
+
+        Surface(
+            modifier = Modifier
+                .width(60.dp)
+                .height(44.dp)
+                .standFocusable(shape = RoundedCornerShape(13.dp))
+                .standPanelSurface(
+                    isDimmed = false,
+                    cornerRadius = 13.dp,
+                    splitGap = 2.dp,
+                )
+                .clickable { onCategoryClick() }
+                .semantics {
+                    role = Role.Button
+                    contentDescription = "${currentCategory.title} 카테고리 선택"
+                },
+            color = Color.Transparent,
+            shape = RoundedCornerShape(13.dp),
+            shadowElevation = 0.dp,
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(3.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = getExactCategoryEmoji(currentCategory),
+                    fontSize = 12.sp,
+                    lineHeight = 14.sp,
+                )
+                Text(
+                    text = currentCategory.title,
+                    fontSize = 9.sp,
+                    lineHeight = 10.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center,
+                )
+            }
+        }
+    }
+}
+
+/**
  * Reusable composable control helper for caller wiring.
  */
 @Composable
@@ -1161,9 +1290,10 @@ fun PpabangInlinePlayer(
 
 /**
  * 3-column cards category picker dialog:
- * minHeight 82, gap 10, radius 16, padding 20, emoji 18, label 12 semibold.
+ * Non-TV minHeight 82 (vertical emoji+label layout); TV minHeight 44 (horizontal layout).
+ * gap 10, radius 16, padding 20.
  * Header 50 / section 16: "빠방 재생목록" / "원하는 음악과 영상을 골라 주세요."
- * Height: 50 + 16 + rows * 82 + max(0, rows - 1) * 10 + 40 with scroll.
+ * Height: 50 + 16 + rows * cardHeight + max(0, rows - 1) * 10 + 40 with scroll.
  * Selected: full color accent, others grayscale/dim with semantics and D-pad.
  */
 @Composable
@@ -1172,11 +1302,14 @@ fun PpabangCategoryDialog(
     categories: List<PpabangCategory>,
     onSelect: (PpabangCategory) -> Unit,
     onDismiss: () -> Unit,
+    isTelevision: Boolean = false,
 ) {
     val selectedCategoryFocusRequester = remember { FocusRequester() }
     val selectedCategoryIndex = categories.indexOf(currentCategory)
     val rows = (categories.size + 2) / 3
-    val calculatedContentHeight = 50.dp + 16.dp + (rows * 82).dp + (maxOf(0, rows - 1) * 10).dp + 40.dp
+    val cardHeight = if (isTelevision) 44 else 82
+    val calculatedContentHeight = 50.dp + 16.dp + (if (isTelevision) 10.dp else 0.dp) +
+        (rows * cardHeight).dp + (maxOf(0, rows - 1) * 10).dp + 40.dp
     val scrollState = rememberScrollState()
 
     LaunchedEffect(selectedCategoryIndex) {
@@ -1275,7 +1408,7 @@ fun PpabangCategoryDialog(
                                 Surface(
                                     modifier = Modifier
                                         .weight(1f)
-                                        .heightIn(min = 82.dp)
+                                        .heightIn(min = cardHeight.dp)
                                         .clip(RoundedCornerShape(16.dp))
                                         .then(
                                             if (isSelected) {
@@ -1304,28 +1437,53 @@ fun PpabangCategoryDialog(
                                     },
                                     shape = RoundedCornerShape(16.dp),
                                 ) {
-                                    Column(
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .padding(horizontal = 6.dp, vertical = 10.dp),
-                                        horizontalAlignment = Alignment.CenterHorizontally,
-                                        verticalArrangement = Arrangement.Center,
-                                    ) {
-                                        Text(
-                                            text = emoji,
-                                            fontSize = 18.sp,
-                                            lineHeight = 22.sp,
-                                        )
-                                        Spacer(modifier = Modifier.height(4.dp))
-                                        Text(
-                                            text = category.title,
-                                            color = if (isSelected) Color.White else Color.White.copy(alpha = 0.45f),
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                            textAlign = TextAlign.Center,
-                                        )
+                                    if (isTelevision) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .padding(horizontal = 6.dp, vertical = 6.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                        ) {
+                                            Text(
+                                                text = emoji,
+                                                fontSize = 14.sp,
+                                                lineHeight = 16.sp,
+                                            )
+                                            Text(
+                                                text = category.title,
+                                                color = if (isSelected) Color.White else Color.White.copy(alpha = 0.45f),
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                textAlign = TextAlign.Center,
+                                            )
+                                        }
+                                    } else {
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .padding(horizontal = 6.dp, vertical = 10.dp),
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                            verticalArrangement = Arrangement.Center,
+                                        ) {
+                                            Text(
+                                                text = emoji,
+                                                fontSize = 18.sp,
+                                                lineHeight = 22.sp,
+                                            )
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Text(
+                                                text = category.title,
+                                                color = if (isSelected) Color.White else Color.White.copy(alpha = 0.45f),
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                textAlign = TextAlign.Center,
+                                            )
+                                        }
                                     }
                                 }
                             }
