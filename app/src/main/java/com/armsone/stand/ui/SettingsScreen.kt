@@ -928,8 +928,9 @@ fun SettingsScreen(
                             title = "위치 정보 사용",
                             detail = when {
                                 !settings.weatherLocationEnabled -> "사용하지 않음"
-                                state.hasApproximateLocationPermission -> "현재 위치의 날씨를 표시할 때만 사용"
-                                else -> "위치 권한 필요"
+                                !state.hasApproximateLocationPermission -> "위치 권한 필요"
+                                isTelevision -> "TV 위치 미확인 시 IP로 지역 추정 · ipwho.is에 접속 IP 전달"
+                                else -> "현재 위치의 날씨를 표시할 때만 사용"
                             },
                             checked = settings.weatherLocationEnabled &&
                                 state.hasApproximateLocationPermission,

@@ -12,6 +12,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import androidx.annotation.RequiresApi
+import com.armsone.stand.model.TvUiModePolicy
 import java.io.Closeable
 import java.io.IOException
 import java.net.HttpURLConnection
@@ -22,6 +23,8 @@ import java.time.Instant
 import java.util.Locale
 import java.util.concurrent.Executor
 import java.util.concurrent.atomic.AtomicBoolean
+import org.json.JSONException
+import org.json.JSONObject
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.coroutines.coroutineContext
@@ -76,6 +79,7 @@ private data class WeatherCoordinate(
  */
 class WeatherService(context: Context) : Closeable {
     private val applicationContext = context.applicationContext
+    private val isTelevision = TvUiModePolicy.isTelevision(applicationContext.resources.configuration)
     private val locationManager = applicationContext.getSystemService(
         Context.LOCATION_SERVICE,
     ) as LocationManager
@@ -515,19 +519,17 @@ class WeatherService(context: Context) : Closeable {
         requestId: Long,
         isMovement: Boolean,
     ) {
-        val providerAvailable = try {
-            locationManager.allProviders.contains(LocationManager.NETWORK_PROVIDER) &&
-                locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+        val providerToUse = try {
+            resolveCoarseProviderToUse()
         } catch (_: SecurityException) {
-            if (isCurrentRequest(requestId)) {
-                handleFailure(requestId, WeatherAvailability.LOCATION_DENIED, isMovement)
-            }
+            handleFailure(requestId, WeatherAvailability.LOCATION_DENIED, isMovement)
             return
-        } catch (_: RuntimeException) {
-            false
         }
 
-        if (!providerAvailable) {
+        if (providerToUse == null) {
+            if (isTelevision && tryTvFallback(requestId, isMovement)) {
+                return
+            }
             if (isCurrentRequest(requestId)) {
                 handleFailure(requestId, WeatherAvailability.PROVIDER_UNAVAILABLE, isMovement)
             }
@@ -535,15 +537,95 @@ class WeatherService(context: Context) : Closeable {
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            requestCurrentLocation(requestId, isMovement)
+            requestCurrentLocation(requestId, providerToUse, isMovement)
         } else {
-            requestSingleLocationUpdate(requestId, isMovement)
+            requestSingleLocationUpdate(requestId, providerToUse, isMovement)
+        }
+    }
+
+    private fun resolveCoarseProviderToUse(): String? {
+        val networkAvailable = isProviderUsable(LocationManager.NETWORK_PROVIDER)
+        if (networkAvailable) return LocationManager.NETWORK_PROVIDER
+
+        if (isTelevision && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val fusedAvailable = isProviderUsable(LocationManager.FUSED_PROVIDER)
+            if (fusedAvailable) return LocationManager.FUSED_PROVIDER
+        }
+
+        return null
+    }
+
+    private fun isProviderUsable(provider: String): Boolean {
+        return try {
+            locationManager.allProviders.contains(provider) &&
+                locationManager.isProviderEnabled(provider)
+        } catch (error: SecurityException) {
+            throw error
+        } catch (_: RuntimeException) {
+            false
         }
     }
 
     @SuppressLint("MissingPermission")
+    private fun tryTvStaticFallback(requestId: Long, isMovement: Boolean): Boolean {
+        if (!isTelevision) return false
+        val staticLocation = try {
+            locationManager.getLastKnownLocation("static")
+        } catch (_: SecurityException) {
+            handleFailure(requestId, WeatherAvailability.LOCATION_DENIED, isMovement)
+            return true
+        } catch (_: IllegalArgumentException) {
+            null
+        } catch (_: RuntimeException) {
+            null
+        } ?: return false
+
+        if (!WeatherLocationPolicy.isUsableForTvStatic(
+                latitude = staticLocation.latitude,
+                longitude = staticLocation.longitude,
+            )
+        ) {
+            return false
+        }
+
+        if (!isCurrentRequest(requestId)) return false
+        loadWeather(requestId = requestId, location = staticLocation, isMovement = isMovement)
+        return true
+    }
+
+    @Synchronized
+    private fun tryTvFallback(requestId: Long, isMovement: Boolean): Boolean {
+        if (!isTelevision || !isCurrentRequest(requestId)) return false
+        if (!isForeground || !isLocationEnabled.get() || !hasLocationPermission) return false
+        if (applicationContext.checkSelfPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION) !=
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            handleFailure(requestId, WeatherAvailability.LOCATION_DENIED, isMovement)
+            return true
+        }
+        // Claim once so late system callbacks cannot start a second fallback.
+        if (!requestGeneration.compareAndSet(requestId, requestId + 1L)) return false
+        clearLocationRequest(requestId)
+        val fallbackId = requestId + 1L
+        if (tryTvStaticFallback(fallbackId, isMovement)) return true
+        return tryTvIpFallback(fallbackId, isMovement)
+    }
+
+    private fun tryTvIpFallback(requestId: Long, isMovement: Boolean): Boolean {
+        if (!isTelevision) return false
+        if (!isCurrentRequest(requestId)) return false
+
+        loadWeatherViaTvIp(requestId, isMovement)
+        return true
+    }
+
+    @SuppressLint("MissingPermission")
     @RequiresApi(Build.VERSION_CODES.R)
-    private fun requestCurrentLocation(requestId: Long, isMovement: Boolean) {
+    private fun requestCurrentLocation(
+        requestId: Long,
+        provider: String,
+        isMovement: Boolean,
+    ) {
         val cancellationSignal = CancellationSignal()
         registerLocationRequest(
             requestId = requestId,
@@ -554,7 +636,7 @@ class WeatherService(context: Context) : Closeable {
 
         try {
             locationManager.getCurrentLocation(
-                LocationManager.NETWORK_PROVIDER,
+                provider,
                 cancellationSignal,
                 callbackExecutor,
             ) { location ->
@@ -567,11 +649,17 @@ class WeatherService(context: Context) : Closeable {
             }
         } catch (_: IllegalArgumentException) {
             clearLocationRequest(requestId)
+            if (isTelevision && tryTvFallback(requestId, isMovement)) {
+                return
+            }
             if (isCurrentRequest(requestId)) {
                 handleFailure(requestId, WeatherAvailability.PROVIDER_UNAVAILABLE, isMovement)
             }
         } catch (_: RuntimeException) {
             clearLocationRequest(requestId)
+            if (isTelevision && tryTvFallback(requestId, isMovement)) {
+                return
+            }
             if (isCurrentRequest(requestId)) {
                 handleFailure(requestId, WeatherAvailability.FAILED, isMovement)
             }
@@ -580,14 +668,18 @@ class WeatherService(context: Context) : Closeable {
 
     @SuppressLint("MissingPermission")
     @Suppress("DEPRECATION")
-    private fun requestSingleLocationUpdate(requestId: Long, isMovement: Boolean) {
+    private fun requestSingleLocationUpdate(
+        requestId: Long,
+        provider: String,
+        isMovement: Boolean,
+    ) {
         val listener = object : LocationListener {
             override fun onLocationChanged(location: Location) {
                 handleLocationResult(requestId, location, isMovement)
             }
 
-            override fun onProviderDisabled(provider: String) {
-                if (provider == LocationManager.NETWORK_PROVIDER) {
+            override fun onProviderDisabled(disabledProvider: String) {
+                if (disabledProvider == provider) {
                     handleLocationResult(requestId, null, isMovement)
                 }
             }
@@ -602,7 +694,7 @@ class WeatherService(context: Context) : Closeable {
 
         try {
             locationManager.requestSingleUpdate(
-                LocationManager.NETWORK_PROVIDER,
+                provider,
                 listener,
                 Looper.getMainLooper(),
             )
@@ -613,11 +705,17 @@ class WeatherService(context: Context) : Closeable {
             }
         } catch (_: IllegalArgumentException) {
             clearLocationRequest(requestId)
+            if (isTelevision && tryTvFallback(requestId, isMovement)) {
+                return
+            }
             if (isCurrentRequest(requestId)) {
                 handleFailure(requestId, WeatherAvailability.PROVIDER_UNAVAILABLE, isMovement)
             }
         } catch (_: RuntimeException) {
             clearLocationRequest(requestId)
+            if (isTelevision && tryTvFallback(requestId, isMovement)) {
+                return
+            }
             if (isCurrentRequest(requestId)) {
                 handleFailure(requestId, WeatherAvailability.FAILED, isMovement)
             }
@@ -660,6 +758,9 @@ class WeatherService(context: Context) : Closeable {
 
         clearLocationRequest(requestId)
         if (!isClosed.get()) {
+            if (isTelevision && tryTvFallback(requestId + 1L, isMovement)) {
+                return
+            }
             synchronized(resourceLock) {
                 lastFailureRealtimeMillis = SystemClock.elapsedRealtime()
                 if (isMovement) {
@@ -682,11 +783,14 @@ class WeatherService(context: Context) : Closeable {
                 nowElapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos(),
             )
         ) {
+            if (isTelevision && tryTvFallback(requestId, isMovement)) {
+                return
+            }
             handleFailure(requestId, WeatherAvailability.PROVIDER_UNAVAILABLE, isMovement)
             return
         }
 
-        loadWeather(requestId, location, isMovement)
+        loadWeather(requestId = requestId, location = location, isMovement = isMovement)
     }
 
     private fun handleFailure(
@@ -705,13 +809,17 @@ class WeatherService(context: Context) : Closeable {
     }
 
     @Synchronized
-    private fun loadWeather(requestId: Long, location: Location, isMovement: Boolean) {
+    private fun loadWeather(
+        requestId: Long,
+        location: Location,
+        isMovement: Boolean,
+    ) {
         if (!isCurrentRequest(requestId)) return
         mutableAvailability.value = WeatherAvailability.LOADING
 
         val job = scope.launch(CoroutineName("WeatherRefresh")) {
             try {
-                val currentWeather = fetchWeather(requestId, location)
+                val currentWeather = fetchWeather(requestId, location.latitude, location.longitude)
                 coroutineContext.ensureActive()
                 if (!isCurrentRequest(requestId)) return@launch
 
@@ -763,18 +871,144 @@ class WeatherService(context: Context) : Closeable {
         if (!accepted) job.cancel()
     }
 
-    private suspend fun fetchWeather(requestId: Long, location: Location): CurrentWeather {
-        coroutineContext.ensureActive()
-        val url = OpenMeteoRequest.url(
-            latitude = location.latitude,
-            longitude = location.longitude,
-        )
-        val connection = url.openConnection() as HttpURLConnection
-        activeConnection.set(connection)
+    @Synchronized
+    private fun loadWeatherViaTvIp(requestId: Long, isMovement: Boolean) {
+        if (!isCurrentRequest(requestId)) return
+        mutableAvailability.value = WeatherAvailability.LOADING
 
+        val job = scope.launch(CoroutineName("WeatherRefreshTvIp")) {
+            try {
+                val ipLocation = fetchTvIpLocation(requestId)
+                coroutineContext.ensureActive()
+                if (!isCurrentRequest(requestId)) return@launch
+
+                if (ipLocation == null) {
+                    handleFailure(requestId, WeatherAvailability.PROVIDER_UNAVAILABLE, isMovement)
+                    return@launch
+                }
+
+                val currentWeather = fetchWeather(
+                    requestId = requestId,
+                    latitude = ipLocation.latitude,
+                    longitude = ipLocation.longitude,
+                )
+                coroutineContext.ensureActive()
+                if (!isCurrentRequest(requestId)) return@launch
+
+                val displayName = formatTvIpLocationDisplayName(ipLocation.regionName)
+                val nowInstant = Instant.now()
+                synchronized(resourceLock) {
+                    if (!isCurrentRequest(requestId)) return@launch
+                    mutableWeather.value = currentWeather
+                    mutableLocationName.value = displayName
+                    mutableLastUpdated.value = nowInstant
+                    lastSuccessCoordinate = WeatherCoordinate(
+                        latitude = ipLocation.latitude,
+                        longitude = ipLocation.longitude,
+                    )
+                    lastFailureRealtimeMillis = null
+                    movementUpdateFailed = false
+                    mutableAvailability.value = WeatherAvailability.AVAILABLE
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: WeatherHttpException) {
+                handleFailure(requestId, WeatherAvailability.FAILED, isMovement)
+            } catch (_: WeatherDecodingException) {
+                handleFailure(requestId, WeatherAvailability.FAILED, isMovement)
+            } catch (_: IOException) {
+                handleFailure(requestId, WeatherAvailability.OFFLINE, isMovement)
+            } catch (_: SecurityException) {
+                handleFailure(requestId, WeatherAvailability.FAILED, isMovement)
+            } catch (_: RuntimeException) {
+                handleFailure(requestId, WeatherAvailability.FAILED, isMovement)
+            }
+        }
+
+        val accepted = synchronized(resourceLock) {
+            if (!isCurrentRequest(requestId)) {
+                false
+            } else {
+                refreshJob = job
+                true
+            }
+        }
+        if (!accepted) job.cancel()
+    }
+
+    private fun formatTvIpLocationDisplayName(regionName: String?): String {
+        val baseName = regionName?.trim().orEmpty()
+        return if (baseName.isNotEmpty()) {
+            "$baseName · IP 추정"
+        } else {
+            "IP 추정"
+        }
+    }
+
+    private suspend fun fetchTvIpLocation(requestId: Long): TvIpLocationResult? {
+        coroutineContext.ensureActive()
+        val url = URL(IP_WHOIS_URL)
+        val connection = url.openConnection() as HttpURLConnection
         try {
             coroutineContext.ensureActive()
+            synchronized(resourceLock) {
+                if (!isCurrentRequest(requestId)) throw CancellationException()
+                activeConnection.set(connection)
+            }
+
+            connection.requestMethod = "GET"
+            connection.connectTimeout = NETWORK_TIMEOUT_MILLIS
+            connection.readTimeout = NETWORK_TIMEOUT_MILLIS
+            connection.setRequestProperty("Accept", "application/json")
+            connection.instanceFollowRedirects = false
+            connection.useCaches = false
+            connection.doInput = true
+
+            val statusCode = connection.responseCode
+            if (statusCode !in 200..299) {
+                return null
+            }
+
+            val payload = connection.inputStream.use { stream ->
+                val buffer = ByteArray(MAX_IP_RESPONSE_BYTES + 1)
+                var totalRead = 0
+                while (totalRead < buffer.size) {
+                    coroutineContext.ensureActive()
+                    val read = stream.read(buffer, totalRead, buffer.size - totalRead)
+                    if (read == -1) break
+                    totalRead += read
+                }
+                if (totalRead > MAX_IP_RESPONSE_BYTES) return null
+                String(buffer, 0, totalRead, Charsets.UTF_8)
+            }
+
+            coroutineContext.ensureActive()
             if (!isCurrentRequest(requestId)) throw CancellationException()
+
+            return IpWhoisJsonDecoder.decode(payload)
+        } finally {
+            activeConnection.compareAndSet(connection, null)
+            connection.disconnect()
+        }
+    }
+
+    private suspend fun fetchWeather(
+        requestId: Long,
+        latitude: Double,
+        longitude: Double,
+    ): CurrentWeather {
+        coroutineContext.ensureActive()
+        val url = OpenMeteoRequest.url(
+            latitude = latitude,
+            longitude = longitude,
+        )
+        val connection = url.openConnection() as HttpURLConnection
+        try {
+            coroutineContext.ensureActive()
+            synchronized(resourceLock) {
+                if (!isCurrentRequest(requestId)) throw CancellationException()
+                activeConnection.set(connection)
+            }
 
             connection.requestMethod = "GET"
             connection.connectTimeout = NETWORK_TIMEOUT_MILLIS
@@ -889,6 +1123,9 @@ class WeatherService(context: Context) : Closeable {
         const val TICKER_INTERVAL_MILLIS = 5_000L
         const val CONTINUOUS_LOCATION_MIN_TIME_MILLIS = 30_000L
         const val CONTINUOUS_LOCATION_MIN_DISTANCE_METERS = 100f
+        const val IP_WHOIS_URL =
+            "https://ipwho.is/?fields=success,latitude,longitude,city,region,country"
+        const val MAX_IP_RESPONSE_BYTES = 16 * 1024
     }
 }
 
@@ -1044,6 +1281,68 @@ internal object WeatherLocationPolicy {
         if (locationElapsedRealtimeNanos > nowElapsedRealtimeNanos) return false
 
         return nowElapsedRealtimeNanos - locationElapsedRealtimeNanos < MAX_AGE_NANOS
+    }
+
+    fun isUsableForTvStatic(
+        latitude: Double,
+        longitude: Double,
+    ): Boolean {
+        if (!latitude.isFinite() || latitude !in -90.0..90.0) return false
+        if (!longitude.isFinite() || longitude !in -180.0..180.0) return false
+        return true
+    }
+
+    fun isUsableForTvIp(
+        latitude: Double,
+        longitude: Double,
+    ): Boolean {
+        if (!latitude.isFinite() || latitude !in -90.0..90.0) return false
+        if (!longitude.isFinite() || longitude !in -180.0..180.0) return false
+        return true
+    }
+}
+
+internal data class TvIpLocationResult(
+    val latitude: Double,
+    val longitude: Double,
+    val regionName: String?,
+)
+
+internal object IpWhoisJsonDecoder {
+    fun decode(payload: String): TvIpLocationResult? {
+        val root = try {
+            JSONObject(payload)
+        } catch (_: JSONException) {
+            return null
+        }
+
+        if (root.opt("success") != true) {
+            return null
+        }
+
+        val latitude = (root.opt("latitude") as? Number)?.toDouble() ?: return null
+        val longitude = (root.opt("longitude") as? Number)?.toDouble() ?: return null
+        if (!WeatherLocationPolicy.isUsableForTvIp(latitude, longitude)) {
+            return null
+        }
+
+        val city = (root.opt("city") as? String)?.trim()?.takeIf { it.isNotEmpty() }
+        val region = (root.opt("region") as? String)?.trim()?.takeIf { it.isNotEmpty() }
+        val country = (root.opt("country") as? String)?.trim()?.takeIf { it.isNotEmpty() }
+
+        val formattedName = LocationNameFormatter.format(
+            administrativeArea = region,
+            locality = city,
+            subAdministrativeArea = null,
+            subLocality = null,
+            country = country,
+        )
+
+        return TvIpLocationResult(
+            latitude = latitude,
+            longitude = longitude,
+            regionName = formattedName,
+        )
     }
 }
 
