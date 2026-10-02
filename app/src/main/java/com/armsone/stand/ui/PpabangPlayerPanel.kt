@@ -774,7 +774,7 @@ fun PpabangControlCards(
 
 /**
  * Compact horizontal row (44dp height) for TV: playpause 44x44, next 44x44,
- * category emoji+label in a 60dp-wide cell. Same glass/flip style as PpabangPanel's
+ * category emoji+label in a 96dp-wide cell. Same glass/flip style as PpabangPanel's
  * 44dp TV music card (standPanelSurface, 13dp corner radius).
  */
 @Composable
@@ -857,7 +857,7 @@ fun PpabangCompactControlCards(
 
         Surface(
             modifier = Modifier
-                .width(60.dp)
+                .width(96.dp)
                 .height(44.dp)
                 .standFocusable(shape = RoundedCornerShape(13.dp))
                 .standPanelSurface(
@@ -878,7 +878,7 @@ fun PpabangCompactControlCards(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(horizontal = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(3.dp),
+                horizontalArrangement = Arrangement.spacedBy(3.dp, Alignment.CenterHorizontally),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(

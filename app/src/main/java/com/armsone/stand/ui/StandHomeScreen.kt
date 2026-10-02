@@ -1729,6 +1729,7 @@ internal fun MusicChannelStrip(
         } else {
             MusicChannelStripLayoutPolicy.cardWidth(viewportWidthDp, isPhoneLandscape)
         }
+        val ppabangCardWidthDp = if (isTelevision) 176f else cardWidthDp
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -1770,7 +1771,11 @@ internal fun MusicChannelStrip(
                         selection = selection,
                         contentAlpha = contentAlpha,
                         isTelevision = isTelevision,
-                        width = cardWidthDp.dp,
+                        width = if (selection.kind == HomeMusicChannelKind.PPABANG) {
+                            ppabangCardWidthDp.dp
+                        } else {
+                            cardWidthDp.dp
+                        },
                         onToggleRadio = onToggleRadio,
                         onEditRadio = onEditRadio,
                         onRegisterRadio = onRegisterRadio,
