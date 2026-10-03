@@ -1157,6 +1157,14 @@ fun PpabangInlinePlayer(
             ),
         ) {
             Box(Modifier.padding(8.dp)) {
+                val isInitialStopped = (currentState.ppabangPlaybackState == PpabangPlaybackState.IDLE || holder.documentStopped) &&
+                    currentState.ppabangPlaybackState != PpabangPlaybackState.PLAYING &&
+                    currentState.ppabangPlaybackState != PpabangPlaybackState.PAUSED &&
+                    currentState.ppabangPlaybackState != PpabangPlaybackState.REQUESTED &&
+                    currentState.ppabangPlaybackState != PpabangPlaybackState.LOADING &&
+                    currentState.ppabangPlaybackState != PpabangPlaybackState.BUFFERING &&
+                    currentState.ppabangPlaybackState != PpabangPlaybackState.FAILED
+
                 Box(
                     modifier = Modifier
                         .size(videoSide)
@@ -1164,8 +1172,9 @@ fun PpabangInlinePlayer(
                         .background(Color.Transparent)
                         .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(12.dp))
                         .clickable {
-                            // Touch emptyState to retry if in empty state or autoplay blocked
-                            if (currentState.ppabangPlaybackState == PpabangPlaybackState.AUTOPLAY_BLOCKED) {
+                            if (isInitialStopped) {
+                                onPlay()
+                            } else if (currentState.ppabangPlaybackState == PpabangPlaybackState.AUTOPLAY_BLOCKED) {
                                 holder.executeJs(PpabangPolicy.JS_PLAY_COMMAND)
                             } else if (currentState.ppabangPlaybackState == PpabangPlaybackState.FAILED) {
                                 holder.executeJs("var es = document.getElementById('emptyState'); if (es) es.click();")
@@ -1250,6 +1259,37 @@ fun PpabangInlinePlayer(
                             }
                         },
                     )
+
+                    if (isInitialStopped) {
+                        Surface(
+                            modifier = Modifier.fillMaxSize(),
+                            color = Color(0xFF141416),
+                            shape = RoundedCornerShape(12.dp),
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(8.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.PlayArrow,
+                                    contentDescription = null,
+                                    tint = Color.White.copy(alpha = 0.85f),
+                                    modifier = Modifier.size(36.dp),
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "재생 대기 중",
+                                    color = Color.White.copy(alpha = 0.80f),
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    textAlign = TextAlign.Center,
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }

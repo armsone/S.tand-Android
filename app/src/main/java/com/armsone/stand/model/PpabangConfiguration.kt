@@ -135,7 +135,7 @@ object PpabangPolicy {
         .brand-mark img,.start-cover img,.empty-state img{display:none!important;}
         .empty-state{cursor:pointer!important;padding:16px!important;}
         .empty-state strong{font-size:17px!important;}
-        .shorts-shell,.stage,#playerFrame,.video-surface{margin:0!important;padding:0!important;width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;min-width:200px!important;min-height:200px!important;box-sizing:border-box!important;}
+        .shorts-shell,.stage,#playerFrame,.video-surface{margin:0!important;padding:0!important;width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;min-width:0!important;min-height:0!important;box-sizing:border-box!important;}
         .shorts-shell,.stage{display:block!important;}
         #playerFrame{border-radius:0!important;aspect-ratio:auto!important;}
         .stage{position:relative!important;top:0!important;inset:0!important;min-height:0!important;}
@@ -143,7 +143,7 @@ object PpabangPolicy {
         .video-surface{position:absolute!important;inset:0!important;flex:none!important;aspect-ratio:auto!important;}
         .player-toolbar{display:none!important;}
         #playerFrame,.video-surface{background:transparent!important;}
-        #player{width:100%!important;height:100%!important;min-width:200px!important;min-height:200px!important;}
+        #player{width:100%!important;height:100%!important;min-width:0!important;min-height:0!important;}
     """.trimIndent()
 
     /**
