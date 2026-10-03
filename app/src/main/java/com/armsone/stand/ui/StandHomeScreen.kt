@@ -1745,11 +1745,13 @@ internal fun MusicChannelStrip(
                 modifier = if (isTelevision) {
                     Modifier.width(viewportWidth)
                 } else {
-                    Modifier.padding(horizontal = MusicChannelStripLayoutPolicy.SIDE_INSET.dp)
+                    Modifier
+                        .widthIn(min = viewportWidth)
+                        .padding(horizontal = MusicChannelStripLayoutPolicy.SIDE_INSET.dp)
                 },
                 horizontalArrangement = Arrangement.spacedBy(
                     MusicChannelStripLayoutPolicy.SPACING.dp,
-                    if (isTelevision) Alignment.CenterHorizontally else Alignment.Start,
+                    Alignment.CenterHorizontally,
                 ),
             ) {
                 channels.forEach { selection ->
