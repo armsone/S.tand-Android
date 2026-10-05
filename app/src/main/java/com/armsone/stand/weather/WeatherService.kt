@@ -536,11 +536,49 @@ class WeatherService(context: Context) : Closeable {
             return
         }
 
+        if (!isMovement && tryUseCachedWeatherLocation(requestId, providerToUse, isMovement)) {
+            return
+        }
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             requestCurrentLocation(requestId, providerToUse, isMovement)
         } else {
             requestSingleLocationUpdate(requestId, providerToUse, isMovement)
         }
+    }
+
+    /**
+     * API 29 coarse-location privacy throttling can hold network fixes to one per ~10 minutes,
+     * so a fresh request can time out even though the system already has a recent, usable fix.
+     * Non-movement weather requests use that cache directly instead of waiting on the throttle.
+     */
+    @SuppressLint("MissingPermission")
+    private fun tryUseCachedWeatherLocation(
+        requestId: Long,
+        provider: String,
+        isMovement: Boolean,
+    ): Boolean {
+        val cached = try {
+            locationManager.getLastKnownLocation(provider)
+        } catch (_: SecurityException) {
+            return false
+        } catch (_: RuntimeException) {
+            null
+        } ?: return false
+
+        if (!WeatherLocationPolicy.isUsableForWeather(
+                latitude = cached.latitude,
+                longitude = cached.longitude,
+                locationElapsedRealtimeNanos = cached.elapsedRealtimeNanos,
+                nowElapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos(),
+            )
+        ) {
+            return false
+        }
+
+        if (!isCurrentRequest(requestId)) return false
+        loadWeather(requestId = requestId, location = cached, isMovement = isMovement)
+        return true
     }
 
     private fun resolveCoarseProviderToUse(): String? {
@@ -776,7 +814,7 @@ class WeatherService(context: Context) : Closeable {
         if (!isCurrentRequest(requestId)) return
 
         clearLocationRequest(requestId)
-        if (location == null || !WeatherLocationPolicy.isUsable(
+        if (location == null || !WeatherLocationPolicy.isUsableForWeather(
                 latitude = location.latitude,
                 longitude = location.longitude,
                 locationElapsedRealtimeNanos = location.elapsedRealtimeNanos,
@@ -1268,19 +1306,51 @@ internal object WeatherCachePolicy {
 
 internal object WeatherLocationPolicy {
     private const val MAX_AGE_NANOS = 60L * 1_000_000_000L
+    private const val MAX_WEATHER_AGE_NANOS = 15L * 60L * 1_000_000_000L
 
     fun isUsable(
         latitude: Double,
         longitude: Double,
         locationElapsedRealtimeNanos: Long,
         nowElapsedRealtimeNanos: Long,
+    ): Boolean = isUsableWithinAge(
+        latitude = latitude,
+        longitude = longitude,
+        locationElapsedRealtimeNanos = locationElapsedRealtimeNanos,
+        nowElapsedRealtimeNanos = nowElapsedRealtimeNanos,
+        maxAgeNanos = MAX_AGE_NANOS,
+    )
+
+    /**
+     * Coarse network fixes on throttled devices (e.g. API 29 10-minute privacy throttling) can be
+     * minutes old yet still the best available signal for weather, which tolerates a 15-minute cache.
+     */
+    fun isUsableForWeather(
+        latitude: Double,
+        longitude: Double,
+        locationElapsedRealtimeNanos: Long,
+        nowElapsedRealtimeNanos: Long,
+    ): Boolean = isUsableWithinAge(
+        latitude = latitude,
+        longitude = longitude,
+        locationElapsedRealtimeNanos = locationElapsedRealtimeNanos,
+        nowElapsedRealtimeNanos = nowElapsedRealtimeNanos,
+        maxAgeNanos = MAX_WEATHER_AGE_NANOS,
+    )
+
+    private fun isUsableWithinAge(
+        latitude: Double,
+        longitude: Double,
+        locationElapsedRealtimeNanos: Long,
+        nowElapsedRealtimeNanos: Long,
+        maxAgeNanos: Long,
     ): Boolean {
         if (!latitude.isFinite() || latitude !in -90.0..90.0) return false
         if (!longitude.isFinite() || longitude !in -180.0..180.0) return false
         if (locationElapsedRealtimeNanos < 0L || nowElapsedRealtimeNanos < 0L) return false
         if (locationElapsedRealtimeNanos > nowElapsedRealtimeNanos) return false
 
-        return nowElapsedRealtimeNanos - locationElapsedRealtimeNanos < MAX_AGE_NANOS
+        return nowElapsedRealtimeNanos - locationElapsedRealtimeNanos < maxAgeNanos
     }
 
     fun isUsableForTvStatic(
