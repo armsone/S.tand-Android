@@ -18,6 +18,7 @@ data class PpabangCategory(val id: String) {
             "legends" -> "경연"
             "crossEdit", "cross-edit", "cross_edit" -> "교차편집"
             "ballad" -> "가요톱텐"
+            "hiphop" -> "힙합"
             "game" -> "게임"
             "mukbang" -> "먹방"
             "travel" -> "여행"
@@ -51,8 +52,9 @@ data class PpabangCategory(val id: String) {
     companion object {
         val DEFAULT = PpabangCategory("ccm")
         val fallbackCategories = listOf(
-            "ccm", "ballad", "girlgroup", "legends", "crossEdit", "golfHorizontal", "golfVertical",
-            "game", "mukbang", "camping", "travel", "lounge", "bedroom",
+            "ccm", "ballad", "girlgroup", "legends", "crossEdit", "hiphop",
+            "golfHorizontal", "golfVertical", "game", "mukbang", "camping",
+            "travel", "lounge", "bedroom", "amv",
         ).map(::PpabangCategory)
 
         fun fromId(id: String?): PpabangCategory =

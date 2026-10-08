@@ -94,8 +94,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlin.math.max
 
-private const val PPABANG_APP_SWITCH_GRACE_MILLIS = 60_000L
-
 class StandViewModel(application: Application) : AndroidViewModel(application) {
     private val isTelevision = TvUiModePolicy.isTelevision(application.resources.configuration)
     private val settingsRepository = SettingsRepository(application)
@@ -159,9 +157,6 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
     private var brightnessAdjustmentActive = false
     private var brightnessPreference = StandModePreference.AUTOMATIC
     private var suppressNextSettingsEnvironmentRefresh = false
-    private var ppabangGraceJob: Job? = null
-    private var ppabangGraceStartedElapsedRealtime: Long? = null
-    private var ppabangWasPlayingBeforePause: Boolean = false
 
     private var lampJob: Job? = null
     private var brightnessTapJob: Job? = null
@@ -887,15 +882,13 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun pausePpabangForAppSwitch() {
-        if (ppabangGraceJob != null) return
+        if (mutableUiState.value.isPpabangRetainedForAppSwitch) return
         val state = mutableUiState.value
         if ((!state.isPpabangPlayerVisible && !state.isPpabangPanelOpen) || state.ppabangPlaybackState == PpabangPlaybackState.IDLE) return
         val wasPlaying = state.ppabangPlaybackState == PpabangPlaybackState.PLAYING ||
             state.ppabangPlaybackState == PpabangPlaybackState.LOADING ||
             state.ppabangPlaybackState == PpabangPlaybackState.REQUESTED ||
             state.ppabangPlaybackState == PpabangPlaybackState.BUFFERING
-        ppabangWasPlayingBeforePause = wasPlaying
-        ppabangGraceStartedElapsedRealtime = SystemClock.elapsedRealtime()
 
         mutablePpabangCommands.tryEmit(PpabangCommand.PAUSE)
         mutableUiState.update { current ->
@@ -907,47 +900,15 @@ class StandViewModel(application: Application) : AndroidViewModel(application) {
             )
         }
         syncSleepCareMonitoring()
-
-        ppabangGraceJob = viewModelScope.launch {
-            delay(PPABANG_APP_SWITCH_GRACE_MILLIS)
-            ppabangGraceJob = null
-            ppabangWasPlayingBeforePause = false
-            ppabangGraceStartedElapsedRealtime = null
-            mutableUiState.update { it.copy(isPpabangRetainedForAppSwitch = false) }
-            stopPpabang(clearVisibility = true)
-        }
     }
 
     fun resumePpabangIfEligible() {
-        val job = ppabangGraceJob
-        val startTime = ppabangGraceStartedElapsedRealtime
-        ppabangGraceJob?.cancel()
-        ppabangGraceJob = null
-        ppabangGraceStartedElapsedRealtime = null
-
-        if (job == null || startTime == null) return
-
-        val elapsed = SystemClock.elapsedRealtime() - startTime
-        val wasPlaying = ppabangWasPlayingBeforePause
-        ppabangWasPlayingBeforePause = false
+        if (!mutableUiState.value.isPpabangRetainedForAppSwitch) return
         mutableUiState.update { it.copy(isPpabangRetainedForAppSwitch = false) }
-
-        if (elapsed >= PPABANG_APP_SWITCH_GRACE_MILLIS) {
-            stopPpabang(clearVisibility = true)
-            return
-        }
-
-        if (wasPlaying && (mutableUiState.value.isPpabangPlayerVisible || mutableUiState.value.isPpabangPanelOpen)) {
-            requestPpabangPlay()
-        }
     }
 
     private fun cancelPpabangGrace(stopIfRetained: Boolean = false) {
-        val hadGrace = ppabangGraceJob != null
-        ppabangGraceJob?.cancel()
-        ppabangGraceJob = null
-        ppabangGraceStartedElapsedRealtime = null
-        ppabangWasPlayingBeforePause = false
+        val hadGrace = mutableUiState.value.isPpabangRetainedForAppSwitch
         mutableUiState.update { it.copy(isPpabangRetainedForAppSwitch = false) }
         if (hadGrace && stopIfRetained) {
             stopPpabang(clearVisibility = false)
