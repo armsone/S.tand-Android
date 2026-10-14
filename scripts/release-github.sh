@@ -29,18 +29,25 @@ fi
 mkdir -p "$release_dir"
 cp "$apk_path" "$release_apk"
 
+metadata_path="$release_dir/release.json"
+metadata_helper="${HANSTREE_RELEASE_METADATA_HELPER:-$root_dir/../NasFinder.com/build/release-metadata.mjs}"
+node "$metadata_helper" --version "$version_name" --build "$build_number" --version-code "$version_code" \
+  --artifact "S.tand-Android=$release_apk" --output "$metadata_path"
+
 tag="android-v${version_name}"
 commit=$(git rev-parse HEAD)
 notes=$'S.tand '"$version_name"$'\n\nAndroid-Version-Code: '"$version_code"$'\nBuild-Number: '"$build_number"
 
 if gh release view "$tag" --repo armsone/S.tand-Android >/dev/null 2>&1; then
-  gh release upload "$tag" "$release_apk" --repo armsone/S.tand-Android --clobber
+  gh release upload "$tag" "$release_apk" "$metadata_path" --repo armsone/S.tand-Android --clobber
 else
-  gh release create "$tag" "$release_apk" \
+  gh release create "$tag" "$release_apk" "$metadata_path" \
     --repo armsone/S.tand-Android \
     --target "$commit" \
     --title "S.tand Android ${version_name}" \
-    --notes "$notes"
+    --notes "$notes" \
+    --draft
+  gh release edit "$tag" --repo armsone/S.tand-Android --draft=false --latest
 fi
 
 gh release view "$tag" --repo armsone/S.tand-Android --json url,assets,targetCommitish
