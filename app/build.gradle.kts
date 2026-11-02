@@ -11,10 +11,10 @@ android {
         applicationId = "com.armsone.stand"
         minSdk = 26
         targetSdk = 37
-        versionCode = 404284
-        versionName = "2.6.7"
+        versionCode = 429774
+        versionName = "2.6.8"
 
-        buildConfigField("String", "BUILD_NUMBER", "\"202610081804\"")
+        buildConfigField("String", "BUILD_NUMBER", "\"202610261054\"")
         buildConfigField(
             "String",
             "BOYISO_RELAY_URL",
@@ -22,6 +22,15 @@ android {
         )
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    buildTypes {
+        release {
+            isDebuggable = false
+            isMinifyEnabled = false
+            // 기존 설치본과 서명 계보를 유지하기 위해 기존 debug keystore 서명 설정을 그대로 쓴다.
+            signingConfig = signingConfigs.getByName("debug")
+        }
     }
 
     buildFeatures {
